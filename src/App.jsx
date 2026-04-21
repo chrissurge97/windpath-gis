@@ -5,7 +5,13 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
-// Add page imports here
+import AppLayout from '@/components/layout/AppLayout';
+import Dashboard from '@/pages/Dashboard';
+import Learn from '@/pages/Learn';
+import GISMap from '@/pages/GISMap';
+import WindAnalysis from '@/pages/WindAnalysis';
+import EnergyYield from '@/pages/EnergyYield';
+import Progress from '@/pages/Progress';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -33,7 +39,14 @@ const AuthenticatedApp = () => {
   // Render the main app
   return (
     <Routes>
-      {/* Add your page Route elements here */}
+      <Route element={<AppLayout />}>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/learn" element={<Learn />} />
+        <Route path="/map" element={<GISMap />} />
+        <Route path="/wind-analysis" element={<WindAnalysis />} />
+        <Route path="/energy" element={<EnergyYield />} />
+        <Route path="/progress" element={<Progress />} />
+      </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

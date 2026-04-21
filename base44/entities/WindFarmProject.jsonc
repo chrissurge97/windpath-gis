@@ -1,0 +1,88 @@
+{
+  "name": "WindFarmProject",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Project name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Project description"
+    },
+    "center_lat": {
+      "type": "number",
+      "description": "Map center latitude"
+    },
+    "center_lng": {
+      "type": "number",
+      "description": "Map center longitude"
+    },
+    "zoom": {
+      "type": "number",
+      "description": "Map zoom level"
+    },
+    "turbines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "hub_height": {
+            "type": "number"
+          },
+          "rotor_diameter": {
+            "type": "number"
+          },
+          "rated_power": {
+            "type": "number"
+          }
+        }
+      },
+      "description": "Placed turbines"
+    },
+    "site_boundary": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          }
+        }
+      },
+      "description": "Site boundary polygon coordinates"
+    },
+    "total_aep": {
+      "type": "number",
+      "description": "Total Annual Energy Production in MWh"
+    },
+    "avg_capacity_factor": {
+      "type": "number",
+      "description": "Average capacity factor percentage"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "in_progress",
+        "completed"
+      ],
+      "default": "draft"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

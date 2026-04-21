@@ -1,0 +1,50 @@
+{
+  "name": "UserProgress",
+  "type": "object",
+  "properties": {
+    "xp": {
+      "type": "number",
+      "default": 0,
+      "description": "Total experience points"
+    },
+    "level": {
+      "type": "number",
+      "default": 1,
+      "description": "Current level"
+    },
+    "completed_modules": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "List of completed module IDs"
+    },
+    "completed_quizzes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "List of completed quiz IDs"
+    },
+    "badges": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Earned badge IDs"
+    },
+    "quiz_scores": {
+      "type": "object",
+      "description": "Map of quiz ID to score"
+    },
+    "current_module": {
+      "type": "string",
+      "default": "gis_basics",
+      "description": "Currently active module ID"
+    }
+  },
+  "required": []
+}
