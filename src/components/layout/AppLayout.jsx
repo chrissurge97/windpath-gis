@@ -39,7 +39,7 @@ export default function AppLayout() {
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-20 lg:hidden"
+          className="fixed inset-0 bg-black/60 z-[25] lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -121,10 +121,10 @@ export default function AppLayout() {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Mobile header */}
-        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-slate-900 border-b border-slate-800">
+        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-slate-900 border-b border-slate-800 relative z-10">
           <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-slate-400 hover:text-white"
+            onClick={(e) => { e.stopPropagation(); setSidebarOpen(true); }}
+            className="text-slate-400 hover:text-white p-1"
           >
             <Menu className="w-5 h-5" />
           </button>
