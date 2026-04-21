@@ -1,16 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon, useMapEvents, LayersControl } from 'react-leaflet';
-import { base44 } from '@/api/base44Client';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { cn } from '@/lib/utils';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  MapContainer, TileLayer, Marker, Popup, Circle, Polygon, Polyline,
+  useMapEvents, LayersControl, GeoJSON
+} from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { cn } from '@/lib/utils';
 import {
-  Wind, Plus, Trash2, Save, Layers, Map, ZoomIn, ZoomOut,
-  Eye, EyeOff, Info, AlertTriangle, CircleDot
+  Map, Save, Download, ChevronLeft, ChevronRight, Settings,
+  MousePointer, Pentagon, Trash2, Wind, Layers, AlertTriangle, Info
 } from 'lucide-react';
 
-// Fix leaflet default icon
+import LayerPanel from '@/components/gis/LayerPanel';
+import LayerStyleEditor from '@/components/gis/LayerStyleEditor';
+import SchemaEditor from '@/components/gis/SchemaEditor';
+import FeaturePanel from '@/components/gis/FeaturePanel';
+import PowerCurveEditor from '@/components/gis/PowerCurveEditor';
+import AddLayerDialog from '@/components/gis/AddLayerDialog';
+import WindResourceRenderer from '@/components/gis/WindResourceLayer';
+import { createLayer, createFeature, geoJSONToLayer, downloadJSON, layersToGeoJSON, DEFAULT_POWER_CURVE, sampleWindSpeed, windAtHubHeight } from '@/lib/gisUtils';
+
+// ── Leaflet icon fix ──────────────────────────────────────────────────────
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -18,267 +28,447 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-const turbineIcon = L.divIcon({
-  html: `<div style="width:20px;height:20px;background:#10b981;border:2px solid #059669;border-radius:50%;display:flex;align-items:center;justify-content:center;">
-    <div style="width:6px;height:6px;background:white;border-radius:50%;"></div>
+const turbineIcon = (color = '#10b981') => L.divIcon({
+  html: `<div style="width:22px;height:22px;background:${color};border:2px solid rgba(255,255,255,0.6);border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 6px ${color}88">
+    <div style="width:2px;height:12px;background:white;position:absolute;"></div>
+    <div style="width:10px;height:2px;background:white;position:absolute;transform:rotate(60deg);transform-origin:left center;left:50%;margin-top:-4px;"></div>
+    <div style="width:10px;height:2px;background:white;position:absolute;transform:rotate(-60deg);transform-origin:left center;left:50%;margin-top:4px;"></div>
   </div>`,
   className: '',
-  iconSize: [20, 20],
-  iconAnchor: [10, 10],
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
 });
 
-const CONSTRAINT_LAYERS = [
-  { id: 'wind_resource', label: 'Wind Resource', color: '#06b6d4', opacity: 0.3 },
-  { id: 'protected_areas', label: 'Protected Areas', color: '#ef4444', opacity: 0.4 },
-  { id: 'setback_zones', label: 'Setback Zones', color: '#f97316', opacity: 0.25 },
-];
+const pointIcon = (color = '#06b6d4') => L.divIcon({
+  html: `<div style="width:12px;height:12px;background:${color};border:2px solid rgba(255,255,255,0.7);border-radius:50%;"></div>`,
+  className: '',
+  iconSize: [12, 12],
+  iconAnchor: [6, 6],
+});
 
-// Simulated constraint data
-const MOCK_PROTECTED_AREAS = [
-  [[52.05, -1.6], [52.05, -1.4], [51.95, -1.4], [51.95, -1.6]],
-  [[52.15, -1.3], [52.15, -1.15], [52.05, -1.15], [52.05, -1.3]],
-];
-
-const MOCK_SETBACK_CIRCLES = [
-  { lat: 52.02, lng: -1.52, radius: 600 },
-  { lat: 52.08, lng: -1.35, radius: 500 },
-  { lat: 51.98, lng: -1.4, radius: 550 },
-];
-
-function MapClickHandler({ onMapClick }) {
-  useMapEvents({ click: (e) => onMapClick(e.latlng) });
+// ── Drawing handler ───────────────────────────────────────────────────────
+function MapInteraction({ mode, onAddPoint, onFinishPolygon, drawingPoints }) {
+  useMapEvents({
+    click(e) {
+      if (mode === 'draw_polygon' || mode === 'draw_point' || mode === 'place_turbine') {
+        onAddPoint(e.latlng);
+      }
+    },
+    dblclick(e) {
+      if (mode === 'draw_polygon') {
+        e.originalEvent.preventDefault();
+        onFinishPolygon();
+      }
+    },
+  });
   return null;
 }
 
-function LayerPanel({ layers, onToggle }) {
-  return (
-    <div className="absolute top-4 right-4 z-[1000] bg-slate-900/95 backdrop-blur-sm border border-slate-700 rounded-xl p-3 w-48">
-      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-        <Layers className="w-3 h-3" /> Layers
-      </p>
-      <div className="space-y-2">
-        {CONSTRAINT_LAYERS.map(layer => (
-          <button
-            key={layer.id}
-            onClick={() => onToggle(layer.id)}
-            className="w-full flex items-center gap-2 text-xs text-left hover:text-white transition-colors"
-          >
-            <div className={cn(
-              "w-5 h-5 rounded border flex items-center justify-center transition-all",
-              layers[layer.id] ? "border-transparent" : "border-slate-600 bg-transparent"
-            )} style={layers[layer.id] ? { background: layer.color } : {}}>
-              {layers[layer.id] && <Eye className="w-2.5 h-2.5 text-white" />}
-            </div>
-            <span className={layers[layer.id] ? "text-slate-200" : "text-slate-500"}>{layer.label}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
+const STORAGE_KEY = 'gis_layers_v2';
+
+function saveLayers(layers) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(layers)); } catch {}
 }
-
-function InfoPanel({ turbines, onClear }) {
-  const spacing = turbines.length > 1 ? 'Place turbines 7-10 rotor diameters apart' : null;
-
-  return (
-    <div className="absolute bottom-4 left-4 z-[1000] bg-slate-900/95 backdrop-blur-sm border border-slate-700 rounded-xl p-3 w-52">
-      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-        <Info className="w-3 h-3" /> Site Info
-      </p>
-      <div className="space-y-1.5 text-xs">
-        <div className="flex justify-between">
-          <span className="text-slate-500">Turbines placed</span>
-          <span className="text-emerald-400 font-medium">{turbines.length}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-slate-500">Est. capacity</span>
-          <span className="text-white font-medium">{(turbines.length * 3.5).toFixed(1)} MW</span>
-        </div>
-        {spacing && (
-          <div className="mt-2 flex items-start gap-1.5 text-yellow-400/80 bg-yellow-500/10 rounded-lg p-2">
-            <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
-            <span>{spacing}</span>
-          </div>
-        )}
-      </div>
-      {turbines.length > 0 && (
-        <button
-          onClick={onClear}
-          className="mt-3 w-full text-xs text-red-400 hover:text-red-300 transition-colors flex items-center justify-center gap-1"
-        >
-          <Trash2 className="w-3 h-3" /> Clear all turbines
-        </button>
-      )}
-    </div>
-  );
+function loadLayers() {
+  try { const d = localStorage.getItem(STORAGE_KEY); return d ? JSON.parse(d) : null; } catch { return null; }
 }
 
 export default function GISMap() {
-  const [turbines, setTurbines] = useState([]);
-  const [mode, setMode] = useState('view'); // 'view' | 'place'
-  const [visibleLayers, setVisibleLayers] = useState({
-    wind_resource: true,
-    protected_areas: true,
-    setback_zones: false,
-  });
-  const [projectName, setProjectName] = useState('My Wind Project');
-  const [saved, setSaved] = useState(false);
-  const queryClient = useQueryClient();
+  const [layers, setLayers] = useState(() => loadLayers() || [
+    createLayer({ name: 'Wind Resource', type: 'wind_resource', color: '#06b6d4', fillOpacity: 0.35 }),
+  ]);
+  const [selectedLayerId, setSelectedLayerId] = useState(layers[0]?.id || null);
+  const [mode, setMode] = useState('select'); // 'select' | 'draw_polygon' | 'draw_point' | 'place_turbine'
+  const [drawingPoints, setDrawingPoints] = useState([]);
+  const [showAddLayer, setShowAddLayer] = useState(false);
+  const [rightPanelTab, setRightPanelTab] = useState('features'); // 'features' | 'style' | 'schema'
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [projectName, setProjectName] = useState('My GIS Project');
+  const [savedMsg, setSavedMsg] = useState(false);
 
-  const { data: projects } = useQuery({
-    queryKey: ['windProjects'],
-    queryFn: () => base44.entities.WindFarmProject.list(),
-    initialData: [],
-  });
+  const selectedLayer = layers.find(l => l.id === selectedLayerId);
 
-  const saveProject = useMutation({
-    mutationFn: (data) => projects.length > 0
-      ? base44.entities.WindFarmProject.update(projects[0].id, data)
-      : base44.entities.WindFarmProject.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['windProjects'] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    }
-  });
-
-  // Load saved turbines
+  // Auto-initialise first wind resource layer with demo cells
   useEffect(() => {
-    if (projects.length > 0 && projects[0].turbines?.length > 0) {
-      setTurbines(projects[0].turbines);
+    const windLayer = layers.find(l => l.type === 'wind_resource');
+    if (windLayer && windLayer.features.length === 0) {
+      const cells = [];
+      for (let i = 0; i < 5; i++) {
+        for (let j = 0; j < 5; j++) {
+          const lat = 52.0 + i * 0.08;
+          const lng = -1.6 + j * 0.1;
+          cells.push(createFeature(windLayer.id,
+            { type: 'Point', center: [lat, lng], coordinates: [lng, lat] },
+            { wind_speed_ms: +(6 + Math.random() * 5).toFixed(1), elevation_m: Math.round(50 + Math.random() * 150), cell_radius_m: 4500 }
+          ));
+        }
+      }
+      updateLayer(windLayer.id, { features: cells });
     }
-  }, [projects.length]);
+  }, []);
 
-  const handleMapClick = (latlng) => {
-    if (mode !== 'place') return;
-    setTurbines(prev => [...prev, {
-      lat: latlng.lat,
-      lng: latlng.lng,
-      name: `T${prev.length + 1}`,
-      hub_height: 100,
-      rotor_diameter: 130,
-      rated_power: 3.5,
-    }]);
+  useEffect(() => { saveLayers(layers); }, [layers]);
+
+  const updateLayer = (id, changes) => {
+    setLayers(prev => prev.map(l => l.id === id ? { ...l, ...changes } : l));
   };
 
-  const toggleLayer = (id) => setVisibleLayers(prev => ({ ...prev, [id]: !prev[id] }));
+  const addLayer = (type, name, extras = {}) => {
+    const layer = createLayer({ type, name, ...extras });
+    if (type === 'turbine' && !layer.powerCurve) layer.powerCurve = DEFAULT_POWER_CURVE;
+    // fix feature layerIds
+    layer.features = (layer.features || []).map(f => ({ ...f, layerId: layer.id }));
+    setLayers(prev => [...prev, layer]);
+    setSelectedLayerId(layer.id);
+  };
 
-  const handleSave = () => {
-    saveProject.mutate({
-      name: projectName,
-      turbines,
-      center_lat: 52.04,
-      center_lng: -1.5,
-      zoom: 11,
-      status: 'in_progress',
+  const deleteLayer = (id) => {
+    setLayers(prev => prev.filter(l => l.id !== id));
+    if (selectedLayerId === id) setSelectedLayerId(layers.find(l => l.id !== id)?.id || null);
+  };
+
+  const handleImport = (data, name) => {
+    const layer = geoJSONToLayer(data, name);
+    layer.features = layer.features.map(f => ({ ...f, layerId: layer.id }));
+    setLayers(prev => [...prev, layer]);
+    setSelectedLayerId(layer.id);
+  };
+
+  const addPoint = (latlng) => {
+    if (!selectedLayer) return;
+
+    if (mode === 'place_turbine') {
+      const windLayer = layers.find(l => l.type === 'wind_resource' && l.visible);
+      const rawSpeed = sampleWindSpeed(windLayer, latlng.lat, latlng.lng);
+      const hubHeight = 100;
+      const hubSpeed = rawSpeed ? windAtHubHeight(rawSpeed, 10, hubHeight) : null;
+      const f = createFeature(selectedLayerId,
+        { type: 'Point', coordinates: [latlng.lng, latlng.lat] },
+        {
+          name: `T${selectedLayer.features.length + 1}`,
+          hub_height: hubHeight,
+          rotor_diameter: 130,
+          rated_power_mw: 3.5,
+          hub_wind_speed: hubSpeed || '',
+          _powerCurve: selectedLayer.powerCurve || DEFAULT_POWER_CURVE,
+        }
+      );
+      updateLayer(selectedLayerId, { features: [...selectedLayer.features, f] });
+      return;
+    }
+
+    if (mode === 'draw_point') {
+      const f = createFeature(selectedLayerId,
+        { type: 'Point', coordinates: [latlng.lng, latlng.lat] },
+        {}
+      );
+      updateLayer(selectedLayerId, { features: [...selectedLayer.features, f] });
+      return;
+    }
+
+    if (mode === 'draw_polygon') {
+      setDrawingPoints(prev => [...prev, [latlng.lat, latlng.lng]]);
+    }
+  };
+
+  const finishPolygon = () => {
+    if (!selectedLayer || drawingPoints.length < 3) return;
+    const coords = [...drawingPoints, drawingPoints[0]];
+    const f = createFeature(selectedLayerId,
+      { type: 'Polygon', coordinates: [coords.map(([lat, lng]) => [lng, lat])] },
+      {}
+    );
+    updateLayer(selectedLayerId, { features: [...selectedLayer.features, f] });
+    setDrawingPoints([]);
+    setMode('select');
+  };
+
+  const deleteFeature = (featureId) => {
+    if (!selectedLayer) return;
+    updateLayer(selectedLayerId, { features: selectedLayer.features.filter(f => f.id !== featureId) });
+  };
+
+  const updateFeature = (featureId, changes) => {
+    if (!selectedLayer) return;
+    updateLayer(selectedLayerId, {
+      features: selectedLayer.features.map(f => f.id === featureId ? { ...f, ...changes } : f)
     });
   };
+
+  const handleSave = () => {
+    saveLayers(layers);
+    setSavedMsg(true);
+    setTimeout(() => setSavedMsg(false), 2000);
+  };
+
+  const handleExportAll = () => downloadJSON(layersToGeoJSON(layers), `${projectName}.geojson`);
+
+  const cursorStyle = {
+    select: 'default',
+    draw_polygon: 'crosshair',
+    draw_point: 'crosshair',
+    place_turbine: 'cell',
+  }[mode] || 'default';
+
+  const modeButtons = [
+    { id: 'select', label: 'Select', icon: MousePointer },
+    { id: 'draw_polygon', label: 'Polygon', icon: Pentagon },
+    { id: 'draw_point', label: 'Point', icon: Layers },
+    ...(selectedLayer?.type === 'turbine' ? [{ id: 'place_turbine', label: 'Turbine', icon: Wind }] : []),
+  ];
 
   return (
     <div className="flex flex-col h-full bg-slate-950">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-900 border-b border-slate-800 shrink-0">
-        <Map className="w-4 h-4 text-emerald-400" />
+      <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-slate-800 shrink-0 flex-wrap gap-y-1">
+        <Map className="w-4 h-4 text-emerald-400 shrink-0" />
         <input
           value={projectName}
           onChange={e => setProjectName(e.target.value)}
-          className="bg-transparent text-sm font-medium text-white border-none outline-none flex-1"
+          className="bg-transparent text-sm font-medium text-white border-none outline-none w-36"
         />
-        <div className="flex items-center gap-2 ml-auto">
+
+        <div className="h-4 w-px bg-slate-700 mx-1" />
+
+        {/* Mode buttons */}
+        {modeButtons.map(({ id, label, icon: Icon }) => (
           <button
-            onClick={() => setMode(m => m === 'place' ? 'view' : 'place')}
+            key={id}
+            onClick={() => { setMode(id); setDrawingPoints([]); }}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-              mode === 'place'
-                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                : "bg-slate-800 text-slate-400 hover:text-white border border-slate-700"
+              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border",
+              mode === id
+                ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                : "bg-slate-800 text-slate-400 hover:text-white border-slate-700"
             )}
           >
-            <CircleDot className="w-3 h-3" />
-            {mode === 'place' ? 'Placing turbines...' : 'Place Turbine'}
+            <Icon className="w-3 h-3" /> {label}
+          </button>
+        ))}
+
+        {mode === 'draw_polygon' && drawingPoints.length > 0 && (
+          <>
+            <button
+              onClick={finishPolygon}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-cyan-600/20 text-cyan-400 border border-cyan-500/40"
+            >
+              Finish ({drawingPoints.length} pts)
+            </button>
+            <button
+              onClick={() => setDrawingPoints([])}
+              className="flex items-center gap-1 px-2 py-1.5 text-xs text-red-400 hover:text-red-300"
+            >
+              <Trash2 className="w-3 h-3" /> Cancel
+            </button>
+          </>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={handleExportAll}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors"
+          >
+            <Download className="w-3 h-3" /> Export All
           </button>
           <button
             onClick={handleSave}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-              saved
-                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                : "bg-slate-700 hover:bg-slate-600 text-white border border-slate-600"
+              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all",
+              savedMsg ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-white border-slate-600 hover:bg-slate-700"
             )}
           >
-            <Save className="w-3 h-3" />
-            {saved ? 'Saved!' : 'Save'}
+            <Save className="w-3 h-3" /> {savedMsg ? 'Saved!' : 'Save'}
           </button>
         </div>
       </div>
 
-      {/* Map */}
-      <div className="flex-1 relative" style={{ cursor: mode === 'place' ? 'crosshair' : 'default' }}>
-        <MapContainer
-          center={[52.04, -1.5]}
-          zoom={11}
-          style={{ height: '100%', width: '100%', background: '#0f172a' }}
-          zoomControl={false}
-        >
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            attribution='&copy; <a href="https://carto.com">CARTO</a>'
-          />
+      {/* Main layout */}
+      <div className="flex flex-1 min-h-0">
 
-          <MapClickHandler onMapClick={handleMapClick} />
-
-          {/* Wind resource heatmap simulation */}
-          {visibleLayers.wind_resource && [
-            { lat: 52.05, lng: -1.55, r: 8000, color: '#06b6d4' },
-            { lat: 52.02, lng: -1.48, r: 6000, color: '#0891b2' },
-            { lat: 52.08, lng: -1.42, r: 7000, color: '#0e7490' },
-          ].map((c, i) => (
-            <Circle key={i} center={[c.lat, c.lng]} radius={c.r}
-              pathOptions={{ color: c.color, fillColor: c.color, fillOpacity: 0.15, weight: 1, opacity: 0.4 }} />
-          ))}
-
-          {/* Protected areas */}
-          {visibleLayers.protected_areas && MOCK_PROTECTED_AREAS.map((coords, i) => (
-            <Polygon key={i} positions={coords}
-              pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.25, weight: 1.5 }} />
-          ))}
-
-          {/* Setback zones */}
-          {visibleLayers.setback_zones && MOCK_SETBACK_CIRCLES.map((c, i) => (
-            <Circle key={i} center={[c.lat, c.lng]} radius={c.radius}
-              pathOptions={{ color: '#f97316', fillColor: '#f97316', fillOpacity: 0.15, weight: 1, dashArray: '5,5' }} />
-          ))}
-
-          {/* Turbines */}
-          {turbines.map((t, i) => (
-            <Marker key={i} position={[t.lat, t.lng]} icon={turbineIcon}>
-              <Popup className="dark-popup">
-                <div className="bg-slate-900 text-white p-2 rounded-lg text-xs min-w-32">
-                  <p className="font-bold text-emerald-400 mb-1">{t.name}</p>
-                  <p>Hub: {t.hub_height}m</p>
-                  <p>Rotor: {t.rotor_diameter}m</p>
-                  <p>Rated: {t.rated_power} MW</p>
-                  <button
-                    onClick={() => setTurbines(prev => prev.filter((_, j) => j !== i))}
-                    className="mt-2 text-red-400 hover:text-red-300 flex items-center gap-1"
-                  >
-                    <Trash2 className="w-3 h-3" /> Remove
-                  </button>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
-        </MapContainer>
-
-        <LayerPanel layers={visibleLayers} onToggle={toggleLayer} />
-        <InfoPanel turbines={turbines} onClear={() => setTurbines([])} />
-
-        {mode === 'place' && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-emerald-600/90 backdrop-blur-sm text-white text-xs font-medium px-4 py-2 rounded-full shadow-lg">
-            Click on the map to place turbines
+        {/* Left panel — layers */}
+        <div className={cn("flex transition-all duration-200 shrink-0", leftCollapsed ? "w-0 overflow-hidden" : "w-56")}>
+          <div className="flex flex-col w-56 h-full">
+            <LayerPanel
+              layers={layers}
+              selectedLayerId={selectedLayerId}
+              onSelectLayer={setSelectedLayerId}
+              onToggleLayer={id => updateLayer(id, { visible: !layers.find(l => l.id === id)?.visible })}
+              onDeleteLayer={deleteLayer}
+              onAddLayer={() => setShowAddLayer(true)}
+              onUpdateLayer={updateLayer}
+              onImport={handleImport}
+            />
           </div>
-        )}
+        </div>
+        <button
+          onClick={() => setLeftCollapsed(c => !c)}
+          className="w-4 bg-slate-800 border-r border-slate-700 flex items-center justify-center text-slate-600 hover:text-white hover:bg-slate-700 transition-colors shrink-0 z-10"
+        >
+          {leftCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
+        </button>
+
+        {/* Map */}
+        <div className="flex-1 relative min-w-0" style={{ cursor: cursorStyle }}>
+          <MapContainer
+            center={[52.04, -1.5]}
+            zoom={11}
+            style={{ height: '100%', width: '100%' }}
+            zoomControl={true}
+          >
+            <TileLayer
+              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              attribution='&copy; CARTO'
+            />
+
+            <MapInteraction
+              mode={mode}
+              onAddPoint={addPoint}
+              onFinishPolygon={finishPolygon}
+              drawingPoints={drawingPoints}
+            />
+
+            {/* Render all layers */}
+            {layers.map(layer => {
+              if (!layer.visible) return null;
+
+              if (layer.type === 'wind_resource') {
+                return <WindResourceRenderer key={layer.id} layer={layer} />;
+              }
+
+              return layer.features.map((f, fi) => {
+                const pathOpts = {
+                  color: layer.color,
+                  fillColor: layer.color,
+                  fillOpacity: layer.fillOpacity,
+                  weight: layer.strokeWeight,
+                  opacity: layer.strokeOpacity,
+                };
+
+                if (f.geometry.type === 'Polygon') {
+                  const positions = f.geometry.coordinates[0].map(([lng, lat]) => [lat, lng]);
+                  return (
+                    <Polygon key={f.id} positions={positions} pathOptions={pathOpts}>
+                      <Popup>
+                        <div className="text-xs min-w-32">
+                          <p className="font-bold text-slate-700 mb-1">{layer.name}</p>
+                          {Object.entries(f.properties).map(([k, v]) => (
+                            !k.startsWith('_') && <p key={k}><span className="text-slate-500">{k}:</span> {String(v)}</p>
+                          ))}
+                        </div>
+                      </Popup>
+                    </Polygon>
+                  );
+                }
+
+                if (f.geometry.type === 'Point') {
+                  const [lng, lat] = f.geometry.coordinates;
+                  const icon = layer.type === 'turbine' ? turbineIcon(layer.color) : pointIcon(layer.color);
+                  return (
+                    <Marker key={f.id} position={[lat, lng]} icon={icon}>
+                      <Popup>
+                        <div className="text-xs min-w-36">
+                          <p className="font-bold mb-1" style={{ color: layer.color }}>{f.properties.name || layer.name}</p>
+                          {Object.entries(f.properties).filter(([k]) => !k.startsWith('_')).map(([k, v]) => (
+                            <p key={k}><span className="text-slate-500">{k}:</span> {String(v)}</p>
+                          ))}
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                }
+
+                return null;
+              });
+            })}
+
+            {/* Drawing preview */}
+            {drawingPoints.length > 0 && (
+              <>
+                <Polyline
+                  positions={drawingPoints}
+                  pathOptions={{ color: '#06b6d4', weight: 2, dashArray: '5 5' }}
+                />
+                {drawingPoints.map((pt, i) => (
+                  <Circle key={i} center={pt} radius={30}
+                    pathOptions={{ color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.8, weight: 0 }} />
+                ))}
+              </>
+            )}
+          </MapContainer>
+
+          {/* Mode hint */}
+          {mode !== 'select' && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-sm text-white text-xs font-medium px-4 py-2 rounded-full shadow-lg border border-slate-700 pointer-events-none">
+              {mode === 'draw_polygon' && `Click to add vertices • Double-click to finish${drawingPoints.length > 0 ? ` (${drawingPoints.length} pts)` : ''}`}
+              {mode === 'draw_point' && 'Click to place point'}
+              {mode === 'place_turbine' && 'Click to place turbine — wind speed sampled automatically'}
+            </div>
+          )}
+        </div>
+
+        {/* Right panel — properties */}
+        <button
+          onClick={() => setRightCollapsed(c => !c)}
+          className="w-4 bg-slate-800 border-l border-slate-700 flex items-center justify-center text-slate-600 hover:text-white hover:bg-slate-700 transition-colors shrink-0 z-10"
+        >
+          {rightCollapsed ? <ChevronLeft className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        </button>
+        <div className={cn("flex flex-col transition-all duration-200 shrink-0 bg-slate-900 border-l border-slate-800", rightCollapsed ? "w-0 overflow-hidden" : "w-64")}>
+          {/* Tabs */}
+          <div className="flex border-b border-slate-800 shrink-0">
+            {['features', 'style', 'schema'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setRightPanelTab(tab)}
+                className={cn(
+                  "flex-1 py-2 text-[11px] font-medium capitalize transition-colors",
+                  rightPanelTab === tab ? "text-white border-b-2 border-emerald-500" : "text-slate-500 hover:text-slate-300"
+                )}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {rightPanelTab === 'features' && (
+              <FeaturePanel
+                layer={selectedLayer}
+                features={selectedLayer?.features || []}
+                allLayers={layers}
+                onUpdateFeature={updateFeature}
+                onDeleteFeature={deleteFeature}
+              />
+            )}
+            {rightPanelTab === 'style' && (
+              <LayerStyleEditor layer={selectedLayer} onUpdate={updateLayer} />
+            )}
+            {rightPanelTab === 'schema' && (
+              <>
+                <SchemaEditor layer={selectedLayer} onUpdate={updateLayer} />
+                {selectedLayer?.type === 'turbine' && (
+                  <PowerCurveEditor layer={selectedLayer} onUpdate={updateLayer} />
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Layer info footer */}
+          {selectedLayer && (
+            <div className="shrink-0 px-3 py-2 border-t border-slate-800 text-[10px] text-slate-600">
+              {selectedLayer.name} · {selectedLayer.features.length} features · {selectedLayer.type}
+            </div>
+          )}
+        </div>
       </div>
+
+      {showAddLayer && (
+        <AddLayerDialog
+          onAdd={addLayer}
+          onClose={() => setShowAddLayer(false)}
+        />
+      )}
     </div>
   );
 }
