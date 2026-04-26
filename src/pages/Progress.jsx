@@ -6,10 +6,10 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import {
   Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot,
-  Award, Star, Trophy, CheckCircle2, Lock, Target, Flame
+  Award, Star, Trophy, CheckCircle2, Lock, Target, Flame, BarChart2
 } from 'lucide-react';
 
-const ICON_MAP = { Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot, Award, Star, Trophy };
+const ICON_MAP = { Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot, Award, Star, Trophy, BarChart2 };
 
 function ProgressBar({ value, colorClass = 'bg-emerald-500', className }) {
   return (

@@ -9,12 +9,12 @@ import confetti from 'canvas-confetti';
 import {
   Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot,
   Award, Star, Trophy, CheckCircle2, ChevronRight, ChevronLeft,
-  Lock, ArrowRight, RotateCcw
+  Lock, ArrowRight, RotateCcw, BarChart2
 } from 'lucide-react';
 import MapExample from '@/components/learn/MapExample';
 import { MAP_EXAMPLES } from '@/lib/mapExamples';
 
-const ICON_MAP = { Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot, Award, Star, Trophy };
+const ICON_MAP = { Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot, Award, Star, Trophy, BarChart2 };
 const COLOR_MAP = {
   blue: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400', badge: 'bg-blue-500' },
   cyan: { bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', text: 'text-cyan-400', badge: 'bg-cyan-500' },
@@ -231,12 +231,12 @@ export default function Learn() {
 
     if (!wasAlreadyCompleted) {
       addBadge('first_steps');
-      if (selectedModuleId === 'gis_basics' && score === selectedModule.quiz.questions.length) addBadge('gis_master');
+      if (selectedModuleId === 'gis_basics') addBadge('map_navigator');
+      if (selectedModuleId === 'turbine_placement') addBadge('turbine_placer');
+      if (selectedModuleId === 'cable_routing') addBadge('cable_runner');
       if (selectedModuleId === 'wind_resource') addBadge('wind_analyst');
       if (selectedModuleId === 'site_suitability') addBadge('site_surveyor');
       if (selectedModuleId === 'turbine_layout') addBadge('layout_pro');
-      if (selectedModuleId === 'energy_yield') addBadge('energy_expert');
-      if (selectedModuleId === 'grid_connection') addBadge('grid_guru');
       if (score === selectedModule.quiz.questions.length) addBadge('quiz_ace');
       if (newCompleted.length === MODULES.length) addBadge('completionist');
     }

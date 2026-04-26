@@ -7,10 +7,10 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import {
   Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot,
-  Award, Star, Trophy, CheckCircle2, Lock, ArrowRight, Flame
+  Award, Star, Trophy, CheckCircle2, Lock, ArrowRight, Flame, BarChart2
 } from 'lucide-react';
 
-const ICON_MAP = { Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot, Award, Star, Trophy };
+const ICON_MAP = { Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot, Award, Star, Trophy, BarChart2 };
 const COLOR_MAP = {
   blue: 'from-blue-500/20 to-blue-600/10 border-blue-500/30 text-blue-400',
   cyan: 'from-cyan-500/20 to-cyan-600/10 border-cyan-500/30 text-cyan-400',
