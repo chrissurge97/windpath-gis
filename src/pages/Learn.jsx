@@ -11,6 +11,8 @@ import {
   Award, Star, Trophy, CheckCircle2, ChevronRight, ChevronLeft,
   Lock, ArrowRight, RotateCcw
 } from 'lucide-react';
+import MapExample from '@/components/learn/MapExample';
+import { MAP_EXAMPLES } from '@/lib/mapExamples';
 
 const ICON_MAP = { Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot, Award, Star, Trophy };
 const COLOR_MAP = {
@@ -327,29 +329,51 @@ export default function Learn() {
           </div>
           {/* Tabs */}
           <div className="flex rounded-lg overflow-hidden border border-slate-800">
-            <button
-              onClick={() => setView('lesson')}
-              className={cn("px-3 py-1.5 text-xs font-medium transition-colors",
-                view === 'lesson' ? "bg-slate-700 text-white" : "text-slate-500 hover:text-slate-300"
-              )}
-            >Lessons</button>
-            <button
-              onClick={() => setView('quiz')}
-              className={cn("px-3 py-1.5 text-xs font-medium transition-colors",
-                view === 'quiz' ? "bg-slate-700 text-white" : "text-slate-500 hover:text-slate-300"
-              )}
-            >Quiz</button>
+            {[
+              { id: 'lesson', label: 'Lessons' },
+              { id: 'map', label: '🗺 Map Exercise' },
+              { id: 'quiz', label: 'Quiz' },
+            ].map(({ id, label }) => (
+              <button key={id}
+                onClick={() => setView(id)}
+                className={cn("px-3 py-1.5 text-xs font-medium transition-colors",
+                  view === id ? "bg-slate-700 text-white" : "text-slate-500 hover:text-slate-300"
+                )}
+              >{label}</button>
+            ))}
           </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           <AnimatePresence mode="wait">
-            {view === 'lesson' ? (
+            {view === 'lesson' && (
               <motion.div key="lesson" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
-                <LessonView module={selectedModule} onComplete={() => setView('quiz')} />
+                <LessonView module={selectedModule} onComplete={() => setView('map')} />
               </motion.div>
-            ) : (
+            )}
+            {view === 'map' && (
+              <motion.div key="map" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <div className="mb-4">
+                  <p className={cn("text-xs uppercase tracking-wider font-medium mb-1", colors.text)}>Interactive Map Exercise</p>
+                  <h2 className="text-xl font-bold text-white">
+                    {MAP_EXAMPLES[selectedModuleId]?.title || 'Map Exercise'}
+                  </h2>
+                  <p className="text-slate-400 text-sm mt-1">Complete the steps on the map, then take the quiz.</p>
+                </div>
+                {MAP_EXAMPLES[selectedModuleId] ? (
+                  <MapExample
+                    steps={MAP_EXAMPLES[selectedModuleId].steps}
+                    center={MAP_EXAMPLES[selectedModuleId].center}
+                    zoom={MAP_EXAMPLES[selectedModuleId].zoom}
+                    onComplete={() => setView('quiz')}
+                  />
+                ) : (
+                  <div className="text-center py-10 text-slate-500 text-sm">No map exercise for this module yet.</div>
+                )}
+              </motion.div>
+            )}
+            {view === 'quiz' && (
               <motion.div key="quiz" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
                 <QuizView
                   module={selectedModule}

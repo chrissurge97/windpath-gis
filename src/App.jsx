@@ -8,9 +8,7 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import AppLayout from '@/components/layout/AppLayout';
 import Dashboard from '@/pages/Dashboard';
 import Learn from '@/pages/Learn';
-import GISMap from '@/pages/GISMap';
-import WindAnalysis from '@/pages/WindAnalysis';
-import EnergyYield from '@/pages/EnergyYield';
+import Planning from '@/pages/Planning';
 import Progress from '@/pages/Progress';
 
 const AuthenticatedApp = () => {
@@ -42,9 +40,7 @@ const AuthenticatedApp = () => {
       <Route element={<AppLayout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/learn" element={<Learn />} />
-        <Route path="/map" element={<GISMap />} />
-        <Route path="/wind-analysis" element={<WindAnalysis />} />
-        <Route path="/energy" element={<EnergyYield />} />
+        <Route path="/planning" element={<Planning />} />
         <Route path="/progress" element={<Progress />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />

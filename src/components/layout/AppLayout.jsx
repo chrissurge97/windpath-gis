@@ -4,16 +4,14 @@ import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import {
-  LayoutDashboard, BookOpen, Map, Wind, Zap, Trophy,
+  LayoutDashboard, BookOpen, Map, Wind, Trophy,
   Menu, X, ChevronRight
 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/learn', label: 'Learn', icon: BookOpen },
-  { path: '/map', label: 'GIS Map', icon: Map },
-  { path: '/wind-analysis', label: 'Wind Analysis', icon: Wind },
-  { path: '/energy', label: 'Energy Yield', icon: Zap },
+  { path: '/planning', label: 'Planning Tool', icon: Map },
   { path: '/progress', label: 'Progress', icon: Trophy },
 ];
 
