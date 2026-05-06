@@ -476,7 +476,7 @@ export const MAP_EXAMPLES = {
       {
         action: 'read',
         instruction: 'Step 3: Apply ecological constraints. A SSSI covers part of the northern area, and two ancient woodland blocks lie within the boundary. Both are hard exclusions — no turbines or infrastructure within or adjacent to them.',
-        hint: 'Create separate layers: "SSSI Boundary" (green) and "Ancient Woodland" (dark green). Import data from Natural England's GIS portal or draw from aerial imagery.',
+        hint: "Create separate layers: \"SSSI Boundary\" (green) and \"Ancient Woodland\" (dark green). Import data from Natural England's GIS portal or draw from aerial imagery.",
         overlays: {
           polygons: [
             { pts: [[52.02, -1.58], [52.08, -1.58], [52.08, -1.43], [52.02, -1.43]], color: '#06b6d4', opacity: 0.04, label: '' },
