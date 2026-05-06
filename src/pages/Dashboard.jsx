@@ -53,7 +53,7 @@ export default function Dashboard() {
 
   const progress = progressList[0] || {
     xp: 0, level: 1, completed_modules: [], badges: [],
-    completed_quizzes: [], quiz_scores: {}, current_module: 'gis_basics'
+    completed_quizzes: [], quiz_scores: {}, current_module: 'land_acquisition'
   };
 
   const createProgress = useMutation({
@@ -66,7 +66,7 @@ export default function Dashboard() {
     if (progressList.length === 0 && progressList !== undefined) {
       createProgress.mutate({
         xp: 0, level: 1, completed_modules: [], badges: [],
-        completed_quizzes: [], quiz_scores: {}, current_module: 'gis_basics'
+        completed_quizzes: [], quiz_scores: {}, current_module: 'land_acquisition'
       });
     }
   }, [progressList]);

@@ -76,7 +76,7 @@ export default function ProgressPage() {
           {[
             { label: 'Modules', value: completedCount, total: totalModules, color: 'bg-cyan-500' },
             { label: 'Badges', value: earnedBadges.length, total: allBadgeIds.length, color: 'bg-purple-500' },
-            { label: 'Quizzes', value: progress.completed_quizzes?.length || 0, total: totalModules, color: 'bg-orange-500' },
+            { label: 'Scenarios Done', value: completedCount, total: totalModules, color: 'bg-orange-500' },
           ].map(({ label, value, total, color }) => (
             <div key={label}>
               <div className="flex justify-between text-xs mb-1">
@@ -97,8 +97,6 @@ export default function ProgressPage() {
         <div className="divide-y divide-slate-800">
           {MODULES.map((module, i) => {
             const isCompleted = progress.completed_modules?.includes(module.id);
-            const quizId = module.quiz?.id;
-            const score = progress.quiz_scores?.[quizId];
             const Icon = ICON_MAP[module.icon] || BookOpen;
 
             return (
@@ -124,11 +122,6 @@ export default function ProgressPage() {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  {score !== undefined && (
-                    <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">
-                      {score}/{module.quiz.questions.length}
-                    </span>
-                  )}
                   <span className={cn(
                     "text-[10px] font-medium px-2 py-0.5 rounded-full",
                     isCompleted
