@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   MapContainer, TileLayer, Marker, Popup, Circle, Polygon, Polyline,
   useMapEvents
@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
   Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target,
-  Save, Layers, Settings, X
+  Save, Layers, Settings, X, Satellite, Mountain
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { createLayer, createFeature, geoJSONToLayer, downloadJSON, layersToGeoJSON, DEFAULT_POWER_CURVE, windAtHubHeight, calcTurbineAEP } from '@/lib/gisUtils';
@@ -48,12 +48,29 @@ function haversineM(lat1, lng1, lat2, lng2) {
 }
 
 function MapClickHandler({ mode, onAddPoint, onFinishPolygon }) {
+  const lastClickTime = useRef(0);
   useMapEvents({
     click(e) {
-      if (['place_turbine', 'draw_polygon', 'draw_cable'].includes(mode)) onAddPoint(e.latlng);
+      if (!['place_turbine', 'draw_polygon', 'draw_cable'].includes(mode)) return;
+      const now = Date.now();
+      // Suppress the spurious single-click that fires just before dblclick
+      if (now - lastClickTime.current < 350) {
+        // This is the second tap of a double-tap — finish polygon instead
+        if (mode === 'draw_polygon') { e.originalEvent.preventDefault(); onFinishPolygon(); }
+        lastClickTime.current = 0;
+        return;
+      }
+      lastClickTime.current = now;
+      // Delay the single-click action so we can cancel it if dblclick follows
+      const latlng = e.latlng;
+      setTimeout(() => {
+        if (Date.now() - lastClickTime.current >= 300) {
+          onAddPoint(latlng);
+        }
+      }, 300);
     },
     dblclick(e) {
-      if (mode === 'draw_polygon') { e.originalEvent.preventDefault(); onFinishPolygon(); }
+      if (mode === 'draw_polygon') { e.originalEvent.preventDefault(); lastClickTime.current = 0; onFinishPolygon(); }
     },
   });
   return null;
@@ -99,12 +116,44 @@ export default function Planning() {
   const [savedMsg, setSavedMsg] = useState(false);
   const [windParams, setWindParams] = useState({ k: 2.0, lambda: 8.0 });
 
+  // Map display state
+  const [satelliteView, setSatelliteView] = useState(false);
+  const [showElevation, setShowElevation] = useState(false);
+  const [showWindLayer, setShowWindLayer] = useState(true);
+  const [showSubstations, setShowSubstations] = useState(true);
+  const [substations, setSubstations] = useState([]);
+  const [loadingSubstations, setLoadingSubstations] = useState(false);
+
   // Turbine popup menu state
-  const [turbineMenuFeature, setTurbineMenuFeature] = useState(null); // feature object
+  const [turbineMenuFeature, setTurbineMenuFeature] = useState(null);
   const [turbineMenuTypeId, setTurbineMenuTypeId] = useState(null);
+  const [turbineMenuName, setTurbineMenuName] = useState('');
   const [turbineMenuRadius, setTurbineMenuRadius] = useState(500);
   const [turbineMenuShowRadius, setTurbineMenuShowRadius] = useState(false);
   const [turbineRadii, setTurbineRadii] = useState({}); // featureId -> { radius, show }
+
+  // Fetch ESB substations from Overpass API
+  useEffect(() => {
+    if (!showSubstations || substations.length > 0) return;
+    setLoadingSubstations(true);
+    const query = `[out:json][timeout:25];(node["power"="substation"]["operator"~"ESB|EirGrid",i](51.2,-10.7,55.5,-5.9];way["power"="substation"]["operator"~"ESB|EirGrid",i](51.2,-10.7,55.5,-5.9];);out center;`;
+    // Use a broader query for all substations in Ireland bounding box
+    const overpassQuery = `[out:json][timeout:25];(node["power"="substation"](51.2,-10.7,55.5,-5.9);way["power"="substation"](51.2,-10.7,55.5,-5.9););out center;`;
+    fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`)
+      .then(r => r.json())
+      .then(data => {
+        const pts = (data.elements || []).map(el => ({
+          id: el.id,
+          lat: el.lat ?? el.center?.lat,
+          lng: el.lon ?? el.center?.lon,
+          name: el.tags?.name || el.tags?.operator || 'Substation',
+          voltage: el.tags?.['voltage'] || '',
+        })).filter(p => p.lat && p.lng);
+        setSubstations(pts);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingSubstations(false));
+  }, [showSubstations]);
 
   const turbineLayer = layers.find(l => l.type === 'turbine');
   const cableLayer = layers.find(l => l.type === 'cable');
@@ -238,6 +287,7 @@ export default function Planning() {
   const openTurbineMenu = (f) => {
     setTurbineMenuFeature(f);
     setTurbineMenuTypeId(f.properties.turbine_type_id || turbineTypes[0]?.id);
+    setTurbineMenuName(f.properties.name || '');
     const existing = turbineRadii[f.id];
     setTurbineMenuRadius(existing?.radius || 500);
     setTurbineMenuShowRadius(existing?.show || false);
@@ -248,6 +298,7 @@ export default function Planning() {
     const tt = turbineTypes.find(t => t.id === turbineMenuTypeId) || turbineTypes[0];
     updateTurbineProps(turbineMenuFeature.id, {
       ...turbineMenuFeature.properties,
+      name: turbineMenuName || turbineMenuFeature.properties.name,
       turbine_type_id: tt.id,
       rated_power_mw: tt.rated_power_mw,
       rotor_diameter: tt.rotor_diameter_m,
@@ -380,7 +431,22 @@ export default function Planning() {
         {/* Map */}
         <div className="flex-1 relative min-w-0" style={{ cursor: cursorStyle }}>
           <MapContainer center={[53.5, -8.0]} zoom={7} style={{ height: '100%', width: '100%' }} zoomControl>
-            <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution="&copy; CARTO" />
+            {satelliteView ? (
+              <TileLayer
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                attribution="Tiles &copy; Esri"
+                maxZoom={19}
+              />
+            ) : (
+              <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution="&copy; CARTO" />
+            )}
+            {showElevation && (
+              <TileLayer
+                url="https://tile.waymarkedtrails.org/hillshading/{z}/{x}/{y}.png"
+                attribution="Hillshading &copy; waymarkedtrails"
+                opacity={0.45}
+              />
+            )}
             <MapClickHandler mode={mode} onAddPoint={addPoint} onFinishPolygon={finishPolygon} />
 
             {layers.map(layer => {
@@ -462,7 +528,67 @@ export default function Planning() {
                 ))}
               </>
             )}
+
+            {/* Wind speed heatmap circles */}
+            {showWindLayer && turbines.map(t => {
+              const spd = t.properties.hub_wind_speed;
+              if (!spd) return null;
+              const [lng, lat] = t.geometry.coordinates;
+              const color = spd >= 10 ? '#ef4444' : spd >= 8 ? '#f59e0b' : spd >= 6 ? '#10b981' : '#3b82f6';
+              return (
+                <Circle key={`wind-${t.id}`} center={[lat, lng]} radius={800}
+                  pathOptions={{ color, fillColor: color, fillOpacity: 0.18, weight: 0 }}>
+                  <Popup><span className="text-xs font-medium">{t.properties.name} — {spd} m/s hub wind</span></Popup>
+                </Circle>
+              );
+            })}
+
+            {/* ESB Substations */}
+            {showSubstations && substations.map(s => {
+              const substIcon = L.divIcon({
+                html: `<div style="width:10px;height:10px;background:#facc15;border:2px solid #fff;border-radius:2px;box-shadow:0 0 4px #facc1599"></div>`,
+                className: '', iconSize: [10, 10], iconAnchor: [5, 5],
+              });
+              return (
+                <Marker key={`sub-${s.id}`} position={[s.lat, s.lng]} icon={substIcon}>
+                  <Popup>
+                    <div className="text-xs">
+                      <p className="font-bold">{s.name}</p>
+                      {s.voltage && <p className="text-slate-500">{s.voltage} kV</p>}
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
           </MapContainer>
+
+          {/* Map layer toggles */}
+          <div className="absolute top-3 right-3 z-[1000] flex flex-col gap-1.5">
+            <button onClick={() => setSatelliteView(v => !v)}
+              className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
+                satelliteView ? "bg-blue-500/30 text-blue-300 border-blue-500/50" : "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
+              )}>
+              <Satellite className="w-3 h-3" /> Satellite
+            </button>
+            <button onClick={() => setShowElevation(v => !v)}
+              className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
+                showElevation ? "bg-amber-500/30 text-amber-300 border-amber-500/50" : "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
+              )}>
+              <Mountain className="w-3 h-3" /> Elevation
+            </button>
+            <button onClick={() => setShowWindLayer(v => !v)}
+              className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
+                showWindLayer ? "bg-cyan-500/30 text-cyan-300 border-cyan-500/50" : "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
+              )}>
+              <Wind className="w-3 h-3" /> Wind
+            </button>
+            <button onClick={() => setShowSubstations(v => !v)}
+              className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
+                showSubstations ? "bg-yellow-500/30 text-yellow-300 border-yellow-500/50" : "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
+              )}>
+              <Zap className="w-3 h-3" /> {loadingSubstations ? 'Loading…' : 'Substations'}
+            </button>
+          </div>
 
           {/* Mode hint */}
           {mode !== 'select' && (
@@ -481,8 +607,13 @@ export default function Planning() {
             return (
               <div className="absolute top-14 left-4 z-[1200] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-4 w-72">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-bold text-white">{props.name}</span>
-                  <button onClick={() => setTurbineMenuFeature(null)} className="text-slate-500 hover:text-white">
+                  <input
+                    value={turbineMenuName}
+                    onChange={e => setTurbineMenuName(e.target.value)}
+                    className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1 text-sm font-bold text-white outline-none flex-1 mr-2"
+                    placeholder="Turbine name"
+                  />
+                  <button onClick={() => setTurbineMenuFeature(null)} className="text-slate-500 hover:text-white shrink-0">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
