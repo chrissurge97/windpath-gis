@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
   Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target,
-  Save, Layers, Settings, Cable
+  Save, Layers, Settings, X
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { createLayer, createFeature, geoJSONToLayer, downloadJSON, layersToGeoJSON, DEFAULT_POWER_CURVE, windAtHubHeight, calcTurbineAEP } from '@/lib/gisUtils';
@@ -59,7 +59,7 @@ function MapClickHandler({ mode, onAddPoint, onFinishPolygon }) {
   return null;
 }
 
-const STORAGE_KEY = 'planning_v2';
+const STORAGE_KEY = 'planning_v3_ire';
 
 export default function Planning() {
   // ── State ──────────────────────────────────────────────────────────────────
@@ -98,6 +98,13 @@ export default function Planning() {
   const [projectName, setProjectName] = useState('Wind Farm Project');
   const [savedMsg, setSavedMsg] = useState(false);
   const [windParams, setWindParams] = useState({ k: 2.0, lambda: 8.0 });
+
+  // Turbine popup menu state
+  const [turbineMenuFeature, setTurbineMenuFeature] = useState(null); // feature object
+  const [turbineMenuTypeId, setTurbineMenuTypeId] = useState(null);
+  const [turbineMenuRadius, setTurbineMenuRadius] = useState(500);
+  const [turbineMenuShowRadius, setTurbineMenuShowRadius] = useState(false);
+  const [turbineRadii, setTurbineRadii] = useState({}); // featureId -> { radius, show }
 
   const turbineLayer = layers.find(l => l.type === 'turbine');
   const cableLayer = layers.find(l => l.type === 'cable');
@@ -228,6 +235,31 @@ export default function Planning() {
     });
   };
 
+  const openTurbineMenu = (f) => {
+    setTurbineMenuFeature(f);
+    setTurbineMenuTypeId(f.properties.turbine_type_id || turbineTypes[0]?.id);
+    const existing = turbineRadii[f.id];
+    setTurbineMenuRadius(existing?.radius || 500);
+    setTurbineMenuShowRadius(existing?.show || false);
+  };
+
+  const applyTurbineMenu = () => {
+    if (!turbineMenuFeature) return;
+    const tt = turbineTypes.find(t => t.id === turbineMenuTypeId) || turbineTypes[0];
+    updateTurbineProps(turbineMenuFeature.id, {
+      ...turbineMenuFeature.properties,
+      turbine_type_id: tt.id,
+      rated_power_mw: tt.rated_power_mw,
+      rotor_diameter: tt.rotor_diameter_m,
+      hub_height: tt.hub_height_m,
+    });
+    setTurbineRadii(prev => ({
+      ...prev,
+      [turbineMenuFeature.id]: { radius: turbineMenuRadius, show: turbineMenuShowRadius },
+    }));
+    setTurbineMenuFeature(null);
+  };
+
   const handleImport = () => {
     const input = document.createElement('input');
     input.type = 'file'; input.accept = '.json,.geojson';
@@ -300,7 +332,7 @@ export default function Planning() {
         <div className="h-4 w-px bg-slate-700 mx-1" />
 
         {TOOLBAR_MODES.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => { setMode(id); setDrawingPoints([]); }}
+          <button key={id} onClick={() => { setMode(id); setDrawingPoints([]); setTurbineMenuFeature(null); }}
             className={cn(
               "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border",
               mode === id ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700"
@@ -347,7 +379,7 @@ export default function Planning() {
       <div className="flex flex-1 min-h-0">
         {/* Map */}
         <div className="flex-1 relative min-w-0" style={{ cursor: cursorStyle }}>
-          <MapContainer center={[52.04, -1.5]} zoom={10} style={{ height: '100%', width: '100%' }} zoomControl>
+          <MapContainer center={[53.5, -8.0]} zoom={7} style={{ height: '100%', width: '100%' }} zoomControl>
             <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution="&copy; CARTO" />
             <MapClickHandler mode={mode} onAddPoint={addPoint} onFinishPolygon={finishPolygon} />
 
@@ -360,8 +392,17 @@ export default function Planning() {
 
                 if (f.geometry.type === 'Polygon') {
                   const positions = f.geometry.coordinates[0].map(([lng, lat]) => [lat, lng]);
-                  return <Polygon key={f.id} positions={positions} pathOptions={pathOpts}>
-                    <Popup><b>{f.properties.name || layer.name}</b></Popup>
+                  return <Polygon key={f.id} positions={positions} pathOptions={pathOpts}
+                    bubblingMouseEvents={false}
+                    eventHandlers={{
+                      click: (e) => {
+                        // In place_turbine / draw_cable / draw_polygon mode, let the click bubble to the map handler
+                        if (['place_turbine', 'draw_cable', 'draw_polygon'].includes(mode)) {
+                          addPoint(e.latlng);
+                        }
+                      }
+                    }}>
+                    {mode === 'select' && <Popup><b>{f.properties.name || layer.name}</b></Popup>}
                   </Polygon>;
                 }
 
@@ -386,19 +427,24 @@ export default function Planning() {
                   const isSelected = f.id === selectedFeatureId;
                   const tt = turbineTypes.find(t => t.id === f.properties.turbine_type_id) || selectedTurbineType;
                   const icon = layer.type === 'turbine' ? turbineIcon(tt?.color || layer.color, isSelected) : undefined;
+                  const radiusConfig = turbineRadii[f.id];
                   return (
-                    <Marker key={f.id} position={[lat, lng]} icon={icon}
-                      eventHandlers={{ click: () => { setSelectedFeatureId(f.id); setRightTab('turbines'); } }}>
-                      <Popup>
-                        <div className="text-xs min-w-36">
-                          <p className="font-bold mb-1">{f.properties.name}</p>
-                          {f.properties.rated_power_mw && <p>{f.properties.rated_power_mw} MW · Ø{f.properties.rotor_diameter}m</p>}
-                          {f.properties.elevation_m != null && <p>Elevation: {f.properties.elevation_m}m</p>}
-                          {f.properties.hub_wind_speed && <p>Hub wind: {f.properties.hub_wind_speed} m/s</p>}
-                          {f.properties.aep_mwh && <p>AEP: {f.properties.aep_mwh.toLocaleString()} MWh/yr</p>}
-                        </div>
-                      </Popup>
-                    </Marker>
+                    <React.Fragment key={f.id}>
+                      <Marker position={[lat, lng]} icon={icon}
+                        eventHandlers={{
+                          click: (e) => {
+                            if (mode === 'select') {
+                              L.DomEvent.stopPropagation(e);
+                              setSelectedFeatureId(f.id);
+                              openTurbineMenu(f);
+                            }
+                          }
+                        }} />
+                      {radiusConfig?.show && (
+                        <Circle center={[lat, lng]} radius={radiusConfig.radius}
+                          pathOptions={{ color: '#f97316', fillColor: '#f97316', fillOpacity: 0.06, weight: 1.5, dashArray: '5 4', opacity: 0.7 }} />
+                      )}
+                    </React.Fragment>
                   );
                 }
                 return null;
@@ -427,6 +473,94 @@ export default function Planning() {
             </div>
           )}
 
+          {/* Turbine popup menu */}
+          {turbineMenuFeature && (() => {
+            const [lng, lat] = turbineMenuFeature.geometry.coordinates;
+            const props = turbineMenuFeature.properties;
+            const menuTt = turbineTypes.find(t => t.id === turbineMenuTypeId) || turbineTypes[0];
+            return (
+              <div className="absolute top-14 left-4 z-[1200] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-4 w-72">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-bold text-white">{props.name}</span>
+                  <button onClick={() => setTurbineMenuFeature(null)} className="text-slate-500 hover:text-white">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Info row */}
+                <div className="grid grid-cols-2 gap-1.5 mb-3 text-[10px]">
+                  {props.elevation_m != null && <div className="bg-slate-800 rounded px-2 py-1"><span className="text-slate-500">Elevation</span><br /><span className="text-white font-medium">{props.elevation_m}m</span></div>}
+                  {props.hub_wind_speed && <div className="bg-slate-800 rounded px-2 py-1"><span className="text-slate-500">Hub wind</span><br /><span className="text-cyan-400 font-medium">{props.hub_wind_speed} m/s</span></div>}
+                  {props.aep_mwh && <div className="bg-slate-800 rounded px-2 py-1"><span className="text-slate-500">AEP</span><br /><span className="text-emerald-400 font-medium">{(props.aep_mwh/1000).toFixed(2)} GWh</span></div>}
+                  <div className="bg-slate-800 rounded px-2 py-1"><span className="text-slate-500">Position</span><br /><span className="text-white font-medium">{lat.toFixed(4)}, {lng.toFixed(4)}</span></div>
+                </div>
+
+                {/* Turbine type selector */}
+                <div className="mb-3">
+                  <label className="text-[10px] text-slate-400 block mb-1">Turbine Type</label>
+                  <select
+                    value={turbineMenuTypeId}
+                    onChange={e => setTurbineMenuTypeId(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2 py-1.5 outline-none"
+                  >
+                    {turbineTypes.map(t => (
+                      <option key={t.id} value={t.id}>{t.manufacturer} {t.model} ({t.rated_power_mw} MW)</option>
+                    ))}
+                  </select>
+                  {menuTt && (
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Ø{menuTt.rotor_diameter_m}m · {menuTt.hub_height_m}m hub · {menuTt.cut_in_ms}–{menuTt.cut_out_ms} m/s
+                    </p>
+                  )}
+                </div>
+
+                {/* Setback radius */}
+                <div className="mb-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] text-slate-400">Setback / Assessment Radius</label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" checked={turbineMenuShowRadius} onChange={e => setTurbineMenuShowRadius(e.target.checked)} className="accent-orange-500 w-3 h-3" />
+                      <span className="text-[10px] text-slate-400">Show on map</span>
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input type="range" min={100} max={5000} step={50} value={turbineMenuRadius}
+                      onChange={e => setTurbineMenuRadius(+e.target.value)}
+                      className="flex-1 accent-orange-500 h-1" />
+                    <span className="text-[10px] text-orange-400 font-medium w-14 text-right">{turbineMenuRadius}m</span>
+                  </div>
+                  <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                    {[500, 1000, 2000, 3000].map(r => (
+                      <button key={r} onClick={() => setTurbineMenuRadius(r)}
+                        className={cn("px-2 py-0.5 rounded text-[10px] border transition-colors",
+                          turbineMenuRadius === r ? "bg-orange-500/20 border-orange-500/40 text-orange-400" : "bg-slate-800 border-slate-700 text-slate-500 hover:text-white"
+                        )}>
+                        {r >= 1000 ? `${r/1000}km` : `${r}m`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2">
+                  <button onClick={applyTurbineMenu}
+                    className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition-colors">
+                    Apply
+                  </button>
+                  <button
+                    onClick={() => {
+                      turbineLayer && deleteFeature(turbineLayer.id, turbineMenuFeature.id);
+                      setTurbineRadii(prev => { const n = { ...prev }; delete n[turbineMenuFeature.id]; return n; });
+                      setTurbineMenuFeature(null);
+                    }}
+                    className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs rounded-lg transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* KPI strip overlay */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] flex gap-2 flex-wrap justify-center">
             {[
@@ -434,7 +568,7 @@ export default function Planning() {
               { label: 'Capacity', value: `${totalCapacity_mw.toFixed(1)} MW`, color: 'text-cyan-400' },
               { label: 'Est. AEP', value: totalAEP > 0 ? `${(totalAEP / 1000).toFixed(1)} GWh` : '—', color: 'text-purple-400' },
               { label: 'Cap. Factor', value: totalAEP > 0 ? `${avgCapFactor}%` : '—', color: 'text-orange-400' },
-              { label: 'Cable Cost', value: totalCableCost > 0 ? `£${(totalCableCost / 1000).toFixed(0)}k` : '—', color: 'text-yellow-400' },
+              { label: 'Cable Cost', value: totalCableCost > 0 ? `€${(totalCableCost / 1000).toFixed(0)}k` : '—', color: 'text-yellow-400' },
             ].map(({ label, value, color }) => (
               <div key={label} className="bg-slate-900/90 backdrop-blur-sm border border-slate-700 rounded-lg px-3 py-1.5 text-center">
                 <p className={cn("text-sm font-bold leading-tight", color)}>{value}</p>
@@ -550,7 +684,7 @@ export default function Planning() {
                         { l: 'Cap. Factor', v: `${avgCapFactor}%`, c: 'text-purple-400' },
                         { l: 'Avg Hub Wind', v: avgWindSpeed ? `${avgWindSpeed} m/s` : '—', c: 'text-orange-400' },
                         { l: 'Cable Length', v: `${(totalCableLength / 1000).toFixed(2)} km`, c: 'text-yellow-400' },
-                        { l: 'Cable Cost', v: `£${(totalCableCost / 1000).toFixed(0)}k`, c: 'text-red-400' },
+                        { l: 'Cable Cost', v: `€${(totalCableCost / 1000).toFixed(0)}k`, c: 'text-red-400' },
                       ].map(({ l, v, c }) => (
                         <div key={l} className="bg-slate-800/60 rounded-lg p-2 text-center">
                           <p className={cn("text-sm font-bold", c)}>{v}</p>
