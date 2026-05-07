@@ -19,6 +19,7 @@ import TurbineDataTable from '@/components/planning/TurbineDataTable';
 import CableDataTable from '@/components/planning/CableDataTable';
 import TurbineTypeEditor from '@/components/planning/TurbineTypeEditor';
 import { DEFAULT_TURBINE_TYPES, DEFAULT_CABLE_TYPES } from '@/lib/turbineTypes';
+import { exportKML } from '@/lib/exportKMZ';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -123,6 +124,7 @@ export default function Planning() {
   const [showSubstations, setShowSubstations] = useState(true);
   const [substations, setSubstations] = useState([]);
   const [loadingSubstations, setLoadingSubstations] = useState(false);
+  const [substationError, setSubstationError] = useState(false);
 
   // Turbine popup menu state
   const [turbineMenuFeature, setTurbineMenuFeature] = useState(null);
@@ -132,14 +134,16 @@ export default function Planning() {
   const [turbineMenuShowRadius, setTurbineMenuShowRadius] = useState(false);
   const [turbineRadii, setTurbineRadii] = useState({}); // featureId -> { radius, show }
 
-  // Fetch ESB substations from Overpass API
-  useEffect(() => {
-    if (!showSubstations || substations.length > 0) return;
+  // Fetch substations from Overpass API
+  const fetchSubstations = useCallback(() => {
     setLoadingSubstations(true);
-    const query = `[out:json][timeout:25];(node["power"="substation"]["operator"~"ESB|EirGrid",i](51.2,-10.7,55.5,-5.9];way["power"="substation"]["operator"~"ESB|EirGrid",i](51.2,-10.7,55.5,-5.9];);out center;`;
-    // Use a broader query for all substations in Ireland bounding box
-    const overpassQuery = `[out:json][timeout:25];(node["power"="substation"](51.2,-10.7,55.5,-5.9);way["power"="substation"](51.2,-10.7,55.5,-5.9););out center;`;
-    fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`)
+    setSubstationError(false);
+    const overpassQuery = `[out:json][timeout:30];(node["power"="substation"](51.2,-10.7,55.5,-5.9);way["power"="substation"](51.2,-10.7,55.5,-5.9);relation["power"="substation"](51.2,-10.7,55.5,-5.9););out center;`;
+    fetch(`https://overpass-api.de/api/interpreter`, {
+      method: 'POST',
+      body: `data=${encodeURIComponent(overpassQuery)}`,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    })
       .then(r => r.json())
       .then(data => {
         const pts = (data.elements || []).map(el => ({
@@ -147,12 +151,18 @@ export default function Planning() {
           lat: el.lat ?? el.center?.lat,
           lng: el.lon ?? el.center?.lon,
           name: el.tags?.name || el.tags?.operator || 'Substation',
-          voltage: el.tags?.['voltage'] || '',
+          voltage: el.tags?.voltage || '',
+          type: el.tags?.substation || '',
         })).filter(p => p.lat && p.lng);
         setSubstations(pts);
       })
-      .catch(() => {})
+      .catch(() => setSubstationError(true))
       .finally(() => setLoadingSubstations(false));
+  }, []);
+
+  useEffect(() => {
+    if (!showSubstations || substations.length > 0 || loadingSubstations) return;
+    fetchSubstations();
   }, [showSubstations]);
 
   const turbineLayer = layers.find(l => l.type === 'turbine');
@@ -413,7 +423,14 @@ export default function Planning() {
           </button>
           <button onClick={() => downloadJSON(layersToGeoJSON(layers), `${projectName}.geojson`)}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-400 hover:text-white">
-            <Download className="w-3 h-3" /> Export
+            <Download className="w-3 h-3" /> GeoJSON
+          </button>
+          <button
+            onClick={() => exportKML(layers, turbineTypes, cableTypes, substations, showSubstations, projectName)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-emerald-800/40 border border-emerald-700/50 text-emerald-300 hover:bg-emerald-700/40"
+            title="Export as KML — opens in ArcGIS, QGIS, Google Earth (georeferenced)"
+          >
+            <Download className="w-3 h-3" /> KML
           </button>
           <button
             onClick={() => { localStorage.setItem(STORAGE_KEY, JSON.stringify({ layers, turbineTypes, cableTypes })); setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2000); }}
@@ -442,9 +459,9 @@ export default function Planning() {
             )}
             {showElevation && (
               <TileLayer
-                url="https://tile.waymarkedtrails.org/hillshading/{z}/{x}/{y}.png"
-                attribution="Hillshading &copy; waymarkedtrails"
-                opacity={0.45}
+                url="https://services.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}"
+                attribution="Shaded Relief &copy; Esri"
+                opacity={0.5}
               />
             )}
             <MapClickHandler mode={mode} onAddPoint={addPoint} onFinishPolygon={finishPolygon} />
@@ -582,11 +599,18 @@ export default function Planning() {
               )}>
               <Wind className="w-3 h-3" /> Wind
             </button>
-            <button onClick={() => setShowSubstations(v => !v)}
+            <button onClick={() => {
+                if (substationError) { fetchSubstations(); return; }
+                setShowSubstations(v => !v);
+              }}
               className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
-                showSubstations ? "bg-yellow-500/30 text-yellow-300 border-yellow-500/50" : "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
+                substationError ? "bg-red-500/30 text-red-300 border-red-500/50" :
+                showSubstations && substations.length > 0 ? "bg-yellow-500/30 text-yellow-300 border-yellow-500/50" :
+                showSubstations ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" :
+                "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
               )}>
-              <Zap className="w-3 h-3" /> {loadingSubstations ? 'Loading…' : 'Substations'}
+              <Zap className="w-3 h-3" />
+              {loadingSubstations ? 'Loading…' : substationError ? 'Retry' : `Substations${substations.length > 0 ? ` (${substations.length})` : ''}`}
             </button>
           </div>
 
