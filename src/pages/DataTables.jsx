@@ -151,8 +151,8 @@ export default function DataTables() {
   const turbineRows = turbines.map(t => ({
     id: t.id,
     name: t.properties.name,
-    lat: t.geometry.coordinates[1]?.toFixed(6),
-    lng: t.geometry.coordinates[0]?.toFixed(6),
+    lat: typeof t.geometry.coordinates[1] === 'number' ? t.geometry.coordinates[1].toFixed(6) : '',
+    lng: typeof t.geometry.coordinates[0] === 'number' ? t.geometry.coordinates[0].toFixed(6) : '',
     turbine_type_id: t.properties.turbine_type_id,
     rated_power_mw: t.properties.rated_power_mw,
     hub_height: t.properties.hub_height,
@@ -197,10 +197,10 @@ export default function DataTables() {
     name: c.properties.name,
     cable_type_id: c.properties.cable_type_id,
     length_km: c.properties.length_m ? (c.properties.length_m / 1000).toFixed(3) : undefined,
-    from_lat: c.geometry.coordinates[0]?.[1]?.toFixed(6),
-    from_lng: c.geometry.coordinates[0]?.[0]?.toFixed(6),
-    to_lat: c.geometry.coordinates[1]?.[1]?.toFixed(6),
-    to_lng: c.geometry.coordinates[1]?.[0]?.toFixed(6),
+    from_lat: typeof c.geometry.coordinates[0]?.[1] === 'number' ? c.geometry.coordinates[0][1].toFixed(6) : '',
+    from_lng: typeof c.geometry.coordinates[0]?.[0] === 'number' ? c.geometry.coordinates[0][0].toFixed(6) : '',
+    to_lat: typeof c.geometry.coordinates[1]?.[1] === 'number' ? c.geometry.coordinates[1][1].toFixed(6) : '',
+    to_lng: typeof c.geometry.coordinates[1]?.[0] === 'number' ? c.geometry.coordinates[1][0].toFixed(6) : '',
   }));
 
   const CABLE_HEADERS = [
