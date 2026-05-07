@@ -65,7 +65,22 @@ export default function PolygonMenu({ feature, layer, onApply, onDelete, onClose
             onChange={e => setColor(e.target.value)}
             className="w-8 h-7 rounded cursor-pointer bg-transparent border-0"
           />
-          <span className="text-[10px] text-slate-400 font-mono">{color}</span>
+          <input
+            type="text"
+            value={color}
+            onChange={e => {
+              const v = e.target.value;
+              setColor(v);
+            }}
+            onBlur={e => {
+              // Normalise: ensure valid hex
+              const v = e.target.value;
+              if (/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(v)) setColor(v);
+            }}
+            maxLength={7}
+            className="flex-1 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-[11px] text-slate-200 font-mono outline-none focus:border-cyan-500"
+            placeholder="#hex"
+          />
         </div>
       </div>
 

@@ -339,6 +339,39 @@ export default function Planning() {
     });
   };
 
+  // Insert a new vertex into the polygon at the closest edge
+  const insertPolygonVertex = (featureId, layerId, clickLat, clickLng) => {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer) return;
+    const f = layer.features.find(ft => ft.id === featureId);
+    if (!f) return;
+    const ring = f.geometry.coordinates[0];
+    const pts = ring.slice(0, -1); // exclude closing duplicate
+    // Find the edge (i → i+1) closest to the click point
+    let bestIdx = 0, bestDist = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const [ax, ay] = pts[i];          // [lng, lat]
+      const [bx, by] = pts[(i + 1) % pts.length];
+      // Project click onto segment, get closest point distance
+      const dx = bx - ax, dy = by - ay;
+      const t = Math.max(0, Math.min(1, ((clickLng - ax) * dx + (clickLat - ay) * dy) / (dx * dx + dy * dy)));
+      const px = ax + t * dx, py = ay + t * dy;
+      const d = (clickLng - px) ** 2 + (clickLat - py) ** 2;
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    }
+    // Insert after bestIdx
+    const newPts = [...pts];
+    newPts.splice(bestIdx + 1, 0, [clickLng, clickLat]);
+    const newCoords = [...newPts, newPts[0]];
+    updateLayer(layerId, {
+      features: layer.features.map(ft =>
+        ft.id === featureId
+          ? { ...ft, geometry: { ...ft.geometry, coordinates: [newCoords] } }
+          : ft
+      ),
+    });
+  };
+
   const openTurbineMenu = (f) => {
     setTurbineMenuFeature(f);
     setTurbineMenuTypeId(f.properties.turbine_type_id || turbineTypes[0]?.id);
@@ -551,7 +584,8 @@ export default function Planning() {
                             } else {
                               L.DomEvent.stopPropagation(e);
                               if (isEditing) {
-                                setEditingPolygonId(null);
+                                // Click on polygon edge while editing → insert vertex
+                                insertPolygonVertex(f.id, layer.id, e.latlng.lat, e.latlng.lng);
                               } else {
                                 openPolygonMenu(f, layer.id);
                               }
@@ -895,7 +929,7 @@ export default function Planning() {
           {/* Edit vertices hint */}
           {editingPolygonId && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-sm text-white text-xs font-medium px-4 py-2 rounded-full border border-slate-600 flex items-center gap-3">
-              <span>Drag vertices to reshape • Click polygon to finish</span>
+              <span>Drag vertices to reshape • Click edge to add vertex • Click polygon to finish</span>
               <button onClick={() => setEditingPolygonId(null)} className="text-slate-400 hover:text-white">✕</button>
             </div>
           )}
