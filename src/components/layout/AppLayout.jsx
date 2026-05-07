@@ -51,7 +51,10 @@ export default function AppLayout() {
         sidebarCollapsed ? "lg:w-14" : "w-64"
       )}>
         {/* Logo */}
-        <div className="flex items-center gap-3 px-3 py-4 border-b border-slate-800 overflow-hidden">
+        <div className={cn(
+          "flex items-center border-b border-slate-800 overflow-hidden shrink-0",
+          sidebarCollapsed ? "flex-col gap-2 px-2 py-3" : "flex-row gap-3 px-3 py-4"
+        )}>
           <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center shrink-0">
             <Wind className="w-4 h-4 text-white" />
           </div>
@@ -61,14 +64,16 @@ export default function AppLayout() {
               <p className="text-[10px] text-slate-500">Renewable Energy Training</p>
             </div>
           )}
+          {/* Mobile close */}
           <button
             className="lg:hidden text-slate-400 hover:text-white ml-auto"
             onClick={() => setSidebarOpen(false)}
           >
             <X className="w-4 h-4" />
           </button>
+          {/* Desktop collapse/expand toggle */}
           <button
-            className="hidden lg:flex text-slate-500 hover:text-white ml-auto shrink-0"
+            className="hidden lg:flex items-center justify-center text-slate-500 hover:text-white shrink-0"
             onClick={() => setSidebarCollapsed(v => !v)}
             title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
