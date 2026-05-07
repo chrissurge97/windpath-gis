@@ -18,6 +18,7 @@ import WindResourceRenderer from '@/components/gis/WindResourceLayer';
 import TurbineDataTable from '@/components/planning/TurbineDataTable';
 import CableDataTable from '@/components/planning/CableDataTable';
 import TurbineTypeEditor from '@/components/planning/TurbineTypeEditor';
+import PolygonMenu from '@/components/planning/PolygonMenu';
 import { DEFAULT_TURBINE_TYPES, DEFAULT_CABLE_TYPES } from '@/lib/turbineTypes';
 import { exportKML } from '@/lib/exportKMZ';
 
@@ -133,6 +134,13 @@ export default function Planning() {
   const [turbineMenuRadius, setTurbineMenuRadius] = useState(500);
   const [turbineMenuShowRadius, setTurbineMenuShowRadius] = useState(false);
   const [turbineRadii, setTurbineRadii] = useState({}); // featureId -> { radius, show }
+
+  // Polygon menu state
+  const [polygonMenuFeature, setPolygonMenuFeature] = useState(null);
+  const [polygonMenuLayerId, setPolygonMenuLayerId] = useState(null);
+
+  // Vertex edit mode: featureId -> [[lat,lng],...]
+  const [editingPolygonId, setEditingPolygonId] = useState(null);
 
   // Fetch substations from Overpass API
   const fetchSubstations = useCallback(() => {
@@ -269,14 +277,17 @@ export default function Planning() {
   };
 
   const finishPolygon = () => {
-    if (!selectedLayerId || drawingPoints.length < 3) return;
-    const layer = layers.find(l => l.id === selectedLayerId);
-    if (!layer) return;
-    const f = createFeature(selectedLayerId,
-      { type: 'Polygon', coordinates: [drawingPoints.map(([lat, lng]) => [lng, lat])] },
-      { name: 'Site Boundary' }
+    if (drawingPoints.length < 3) return;
+    // Use selectedLayerId if it's a polygon layer, otherwise fall back to first polygon layer
+    const polyLayers = layers.filter(l => !['turbine', 'cable', 'wind_resource'].includes(l.type));
+    const targetLayer = polyLayers.find(l => l.id === selectedLayerId) || polyLayers[0];
+    if (!targetLayer) return;
+    const closed = [...drawingPoints, drawingPoints[0]]; // close ring
+    const f = createFeature(targetLayer.id,
+      { type: 'Polygon', coordinates: [closed.map(([lat, lng]) => [lng, lat])] },
+      { name: targetLayer.name || 'Polygon' }
     );
-    updateLayer(selectedLayerId, { features: [...layer.features, f] });
+    updateLayer(targetLayer.id, { features: [...targetLayer.features, f] });
     setDrawingPoints([]);
     setMode('select');
   };
@@ -291,6 +302,44 @@ export default function Planning() {
     if (!turbineLayer) return;
     updateLayer(turbineLayer.id, {
       features: turbineLayer.features.map(f => f.id === featureId ? { ...f, properties: props } : f)
+    });
+  };
+
+  const applyPolygonMenu = ({ name, color, fillOpacity, notes }) => {
+    if (!polygonMenuFeature || !polygonMenuLayerId) return;
+    const layer = layers.find(l => l.id === polygonMenuLayerId);
+    if (!layer) return;
+    // Update feature properties
+    updateLayer(polygonMenuLayerId, {
+      color,
+      fillOpacity,
+      features: layer.features.map(f =>
+        f.id === polygonMenuFeature.id
+          ? { ...f, properties: { ...f.properties, name, notes } }
+          : f
+      ),
+    });
+    setPolygonMenuFeature(null);
+    setPolygonMenuLayerId(null);
+  };
+
+  const openPolygonMenu = (feature, layerId) => {
+    setPolygonMenuFeature(feature);
+    setPolygonMenuLayerId(layerId);
+    setTurbineMenuFeature(null); // close turbine menu
+    setEditingPolygonId(null);
+  };
+
+  const updatePolygonVertices = (featureId, layerId, newLatLngs) => {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer) return;
+    const coords = [...newLatLngs, newLatLngs[0]].map(([lat, lng]) => [lng, lat]);
+    updateLayer(layerId, {
+      features: layer.features.map(f =>
+        f.id === featureId
+          ? { ...f, geometry: { ...f.geometry, coordinates: [coords] } }
+          : f
+      ),
     });
   };
 
@@ -367,7 +416,7 @@ export default function Planning() {
 
   const TOOLBAR_MODES = [
     { id: 'select', label: 'Select', icon: MousePointer },
-    { id: 'draw_polygon', label: 'Boundary', icon: Pentagon },
+    { id: 'draw_polygon', label: 'Polygon', icon: Pentagon },
     { id: 'place_turbine', label: 'Place Turbine', icon: Wind },
     { id: 'draw_cable', label: 'Draw Cable', icon: Zap },
   ];
@@ -393,7 +442,18 @@ export default function Planning() {
         <div className="h-4 w-px bg-slate-700 mx-1" />
 
         {TOOLBAR_MODES.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => { setMode(id); setDrawingPoints([]); setTurbineMenuFeature(null); }}
+          <button key={id} onClick={() => {
+            setMode(id);
+            setDrawingPoints([]);
+            setTurbineMenuFeature(null);
+            setPolygonMenuFeature(null);
+            setEditingPolygonId(null);
+            // Auto-select first polygon layer when entering draw_polygon mode
+            if (id === 'draw_polygon') {
+              const first = layers.find(l => !['turbine','cable','wind_resource'].includes(l.type));
+              if (first) setSelectedLayerId(first.id);
+            }
+          }}
             className={cn(
               "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border",
               mode === id ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700"
@@ -474,19 +534,54 @@ export default function Planning() {
                 const pathOpts = { color: layer.color, fillColor: layer.color, fillOpacity: layer.fillOpacity, weight: layer.strokeWeight || 2, opacity: layer.strokeOpacity || 0.9 };
 
                 if (f.geometry.type === 'Polygon') {
-                  const positions = f.geometry.coordinates[0].map(([lng, lat]) => [lat, lng]);
-                  return <Polygon key={f.id} positions={positions} pathOptions={pathOpts}
-                    bubblingMouseEvents={false}
-                    eventHandlers={{
-                      click: (e) => {
-                        // In place_turbine / draw_cable / draw_polygon mode, let the click bubble to the map handler
-                        if (['place_turbine', 'draw_cable', 'draw_polygon'].includes(mode)) {
-                          addPoint(e.latlng);
-                        }
-                      }
-                    }}>
-                    {mode === 'select' && <Popup><b>{f.properties.name || layer.name}</b></Popup>}
-                  </Polygon>;
+                  // Don't render inner closing vertex (last == first)
+                  const ring = f.geometry.coordinates[0];
+                  const positions = ring.slice(0, -1).map(([lng, lat]) => [lat, lng]);
+                  const isEditing = editingPolygonId === f.id;
+                  const polyColor = layer.type === 'polygon' ? (layer.color || '#06b6d4') : pathOpts.color;
+                  const polyOpts = { ...pathOpts, color: polyColor, fillColor: polyColor,
+                    weight: isEditing ? 2.5 : pathOpts.weight,
+                    dashArray: isEditing ? '6 4' : undefined };
+                  return (
+                    <React.Fragment key={f.id}>
+                      <Polygon positions={positions} pathOptions={polyOpts}
+                        bubblingMouseEvents={false}
+                        eventHandlers={{
+                          click: (e) => {
+                            if (['place_turbine', 'draw_cable', 'draw_polygon'].includes(mode)) {
+                              addPoint(e.latlng);
+                            } else {
+                              L.DomEvent.stopPropagation(e);
+                              if (isEditing) {
+                                setEditingPolygonId(null);
+                              } else {
+                                openPolygonMenu(f, layer.id);
+                              }
+                            }
+                          }
+                        }}
+                      />
+                      {/* Vertex edit handles */}
+                      {isEditing && positions.map(([lat, lng], vi) => {
+                        const vIcon = L.divIcon({
+                          html: `<div style="width:10px;height:10px;background:#fff;border:2px solid ${polyColor};border-radius:50%;cursor:move"></div>`,
+                          className: '', iconSize: [10, 10], iconAnchor: [5, 5],
+                        });
+                        return (
+                          <Marker key={`v-${f.id}-${vi}`} position={[lat, lng]} icon={vIcon} draggable
+                            eventHandlers={{
+                              dragend: (e) => {
+                                const newPts = positions.map(([la, ln], i) =>
+                                  i === vi ? [e.target.getLatLng().lat, e.target.getLatLng().lng] : [la, ln]
+                                );
+                                updatePolygonVertices(f.id, layer.id, newPts);
+                              }
+                            }}
+                          />
+                        );
+                      })}
+                    </React.Fragment>
+                  );
                 }
 
                 if (f.geometry.type === 'LineString') {
@@ -505,11 +600,11 @@ export default function Planning() {
                   </Polyline>;
                 }
 
-                if (f.geometry.type === 'Point') {
+                if (f.geometry.type === 'Point' && layer.type === 'turbine') {
                   const [lng, lat] = f.geometry.coordinates;
                   const isSelected = f.id === selectedFeatureId;
                   const tt = turbineTypes.find(t => t.id === f.properties.turbine_type_id) || selectedTurbineType;
-                  const icon = layer.type === 'turbine' ? turbineIcon(tt?.color || layer.color, isSelected) : undefined;
+                  const icon = turbineIcon(tt?.color || layer.color, isSelected);
                   const radiusConfig = turbineRadii[f.id];
                   return (
                     <React.Fragment key={f.id}>
@@ -715,6 +810,34 @@ export default function Planning() {
               </div>
             );
           })()}
+
+          {/* Polygon menu */}
+          {polygonMenuFeature && (
+            <PolygonMenu
+              feature={polygonMenuFeature}
+              layer={layers.find(l => l.id === polygonMenuLayerId)}
+              onApply={applyPolygonMenu}
+              onDelete={() => {
+                deleteFeature(polygonMenuLayerId, polygonMenuFeature.id);
+                setPolygonMenuFeature(null);
+                setPolygonMenuLayerId(null);
+              }}
+              onClose={() => { setPolygonMenuFeature(null); setPolygonMenuLayerId(null); }}
+              onEditVertices={() => {
+                setEditingPolygonId(polygonMenuFeature.id);
+                setPolygonMenuFeature(null);
+                setPolygonMenuLayerId(null);
+              }}
+            />
+          )}
+
+          {/* Edit vertices hint */}
+          {editingPolygonId && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-sm text-white text-xs font-medium px-4 py-2 rounded-full border border-slate-600 flex items-center gap-3">
+              <span>Drag vertices to reshape • Click polygon to finish</span>
+              <button onClick={() => setEditingPolygonId(null)} className="text-slate-400 hover:text-white">✕</button>
+            </div>
+          )}
 
           {/* KPI strip overlay */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] flex gap-2 flex-wrap justify-center">

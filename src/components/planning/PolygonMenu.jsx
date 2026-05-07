@@ -1,0 +1,121 @@
+import React, { useState, useEffect } from 'react';
+import { X, Trash2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const PRESET_COLORS = [
+  '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#ec4899', '#f97316', '#3b82f6', '#84cc16', '#ffffff',
+];
+
+export default function PolygonMenu({ feature, layer, onApply, onDelete, onClose, onEditVertices }) {
+  const [name, setName] = useState(feature?.properties?.name || '');
+  const [color, setColor] = useState(layer?.color || '#06b6d4');
+  const [fillOpacity, setFillOpacity] = useState(layer?.fillOpacity ?? 0.15);
+  const [notes, setNotes] = useState(feature?.properties?.notes || '');
+
+  useEffect(() => {
+    setName(feature?.properties?.name || '');
+    setColor(layer?.color || '#06b6d4');
+    setFillOpacity(layer?.fillOpacity ?? 0.15);
+    setNotes(feature?.properties?.notes || '');
+  }, [feature?.id]);
+
+  if (!feature || !layer) return null;
+
+  return (
+    <div className="absolute top-14 left-4 z-[1200] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-4 w-72">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Polygon</span>
+        <button onClick={onClose} className="text-slate-500 hover:text-white">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Name */}
+      <div className="mb-3">
+        <label className="text-[10px] text-slate-400 block mb-1">Name</label>
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-sm text-white outline-none"
+          placeholder="Polygon name"
+        />
+      </div>
+
+      {/* Colour */}
+      <div className="mb-3">
+        <label className="text-[10px] text-slate-400 block mb-1">Colour</label>
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {PRESET_COLORS.map(c => (
+            <button
+              key={c}
+              onClick={() => setColor(c)}
+              style={{ background: c }}
+              className={cn(
+                'w-5 h-5 rounded-full border-2 transition-all',
+                color === c ? 'border-white scale-110' : 'border-transparent'
+              )}
+            />
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            value={color}
+            onChange={e => setColor(e.target.value)}
+            className="w-8 h-7 rounded cursor-pointer bg-transparent border-0"
+          />
+          <span className="text-[10px] text-slate-400 font-mono">{color}</span>
+        </div>
+      </div>
+
+      {/* Fill Opacity */}
+      <div className="mb-3">
+        <div className="flex justify-between text-[10px] mb-1">
+          <label className="text-slate-400">Fill Transparency</label>
+          <span className="text-cyan-400 font-medium">{Math.round(fillOpacity * 100)}%</span>
+        </div>
+        <input
+          type="range" min={0} max={0.8} step={0.05} value={fillOpacity}
+          onChange={e => setFillOpacity(parseFloat(e.target.value))}
+          className="w-full accent-cyan-500 h-1"
+        />
+      </div>
+
+      {/* Notes */}
+      <div className="mb-3">
+        <label className="text-[10px] text-slate-400 block mb-1">Notes / Data</label>
+        <textarea
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          rows={3}
+          className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-white outline-none resize-none"
+          placeholder="Add any notes, land reference, status, area details…"
+        />
+      </div>
+
+      <div className="flex gap-2 mb-2">
+        <button
+          onClick={() => onApply({ name, color, fillOpacity, notes })}
+          className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition-colors"
+        >
+          Apply
+        </button>
+        <button
+          onClick={onDelete}
+          className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs rounded-lg transition-colors"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {onEditVertices && (
+        <button
+          onClick={onEditVertices}
+          className="w-full py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-medium rounded-lg transition-colors border border-slate-600"
+        >
+          ✏ Edit / Move Vertices
+        </button>
+      )}
+    </div>
+  );
+}

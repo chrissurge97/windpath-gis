@@ -10,6 +10,7 @@ import Dashboard from '@/pages/Dashboard';
 import Learn from '@/pages/Learn';
 import Planning from '@/pages/Planning';
 import Progress from '@/pages/Progress';
+import DataTables from '@/pages/DataTables';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -42,6 +43,7 @@ const AuthenticatedApp = () => {
         <Route path="/learn" element={<Learn />} />
         <Route path="/planning" element={<Planning />} />
         <Route path="/progress" element={<Progress />} />
+        <Route path="/data" element={<DataTables />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
