@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MODULES, BADGES } from '@/lib/trainingModules';
+import { EXERCISES } from '@/lib/exercises';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import {
   Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot,
-  Award, Star, Trophy, CheckCircle2, ChevronRight, ChevronLeft, BarChart2
+  Award, Star, Trophy, CheckCircle2, ChevronRight, ChevronLeft, BarChart2, ExternalLink
 } from 'lucide-react';
-import MapExample from '@/components/learn/MapExample';
-import { MAP_EXAMPLES } from '@/lib/mapExamples';
 
 const ICON_MAP = { Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot, Award, Star, Trophy, BarChart2 };
 const COLOR_MAP = {
@@ -98,6 +97,7 @@ function LessonView({ module, onComplete }) {
 
 export default function Learn() {
   const location = useLocation();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const { data: progressList } = useQuery({
@@ -113,10 +113,16 @@ export default function Learn() {
 
   const initialModuleId = location.state?.moduleId || progress.current_module || MODULES[0].id;
   const [selectedModuleId, setSelectedModuleId] = useState(initialModuleId);
-  const [view, setView] = useState('lesson'); // 'lesson' | 'map'
+  const [view, setView] = useState('lesson'); // 'lesson' | 'exercise'
 
   useEffect(() => {
-    if (location.state?.moduleId) setSelectedModuleId(location.state.moduleId);
+    if (location.state?.moduleId) {
+      setSelectedModuleId(location.state.moduleId);
+      // If returning from Planning with exercise completed, trigger XP award
+      if (location.state?.exerciseCompleted) {
+        handleScenarioComplete(location.state.moduleId);
+      }
+    }
   }, [location.state]);
 
   const selectedModule = MODULES.find(m => m.id === selectedModuleId) || MODULES[0];
@@ -126,28 +132,30 @@ export default function Learn() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['userProgress'] }),
   });
 
-  // Called when the map scenario is completed
-  const handleScenarioComplete = () => {
+  // Called when the exercise is completed (from Planning or inline)
+  const handleScenarioComplete = (moduleIdOverride) => {
+    const moduleId = moduleIdOverride || selectedModuleId;
     confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
 
-    const wasAlreadyCompleted = progress.completed_modules?.includes(selectedModuleId);
+    const wasAlreadyCompleted = progress.completed_modules?.includes(moduleId);
     if (wasAlreadyCompleted) return; // already awarded XP
 
-    const newCompleted = [...(progress.completed_modules || []), selectedModuleId];
-    const xpGain = selectedModule.xp_reward;
-    const newXP = (progress.xp || 0) + xpGain;
+    const mod = MODULES.find(m => m.id === moduleId) || selectedModule;
+    const newCompleted = [...(progress.completed_modules || []), moduleId];
+    const xpGain = mod.xp_reward;
+    const newXP = (progress.xp || 0) + (xpGain || 0);
     const newLevel = Math.floor(newXP / 200) + 1;
 
     const newBadges = [...(progress.badges || [])];
     const addBadge = (b) => { if (!newBadges.includes(b)) newBadges.push(b); };
 
     addBadge('first_steps');
-    const moduleBadge = MODULE_BADGE[selectedModuleId];
+    const moduleBadge = MODULE_BADGE[moduleId];
     if (moduleBadge) addBadge(moduleBadge);
     if (newCompleted.length === MODULES.length) addBadge('completionist');
 
     const nextModuleIdx = MODULES.findIndex(m => !newCompleted.includes(m.id));
-    const nextModule = nextModuleIdx >= 0 ? MODULES[nextModuleIdx].id : selectedModuleId;
+    const nextModule = nextModuleIdx >= 0 ? MODULES[nextModuleIdx].id : moduleId;
 
     if (progress.id) {
       updateProgress.mutate({
@@ -222,7 +230,7 @@ export default function Learn() {
           <div className="flex rounded-lg overflow-hidden border border-slate-800 shrink-0">
             {[
               { id: 'lesson', label: 'Lessons' },
-              { id: 'map', label: '🗺 Scenario' },
+              { id: 'exercise', label: '🗺 Exercise' },
             ].map(({ id, label }) => (
               <button
                 key={id}
@@ -242,35 +250,56 @@ export default function Learn() {
           <AnimatePresence mode="wait">
             {view === 'lesson' && (
               <motion.div key="lesson" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
-                <LessonView module={selectedModule} onComplete={() => setView('map')} />
+                <LessonView module={selectedModule} onComplete={() => setView('exercise')} />
               </motion.div>
             )}
-            {view === 'map' && (
-              <motion.div key="map" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <div className="mb-4">
-                  <p className={cn('text-xs uppercase tracking-wider font-medium mb-1', colors.text)}>
-                    Interactive Scenario
-                  </p>
-                  <h2 className="text-xl font-bold text-white">
-                    {MAP_EXAMPLES[selectedModuleId]?.title || 'Map Scenario'}
-                  </h2>
-                  <p className="text-slate-400 text-sm mt-1">
-                    Work through each step. Complete the scenario to earn XP and unlock a badge.
-                  </p>
-                </div>
-                {MAP_EXAMPLES[selectedModuleId] ? (
-                  <MapExample
-                    key={selectedModuleId}
-                    steps={MAP_EXAMPLES[selectedModuleId].steps}
-                    center={MAP_EXAMPLES[selectedModuleId].center}
-                    zoom={MAP_EXAMPLES[selectedModuleId].zoom}
-                    onComplete={handleScenarioComplete}
-                  />
-                ) : (
-                  <div className="text-center py-10 text-slate-500 text-sm">
-                    No map scenario for this module yet.
-                  </div>
-                )}
+            {view === 'exercise' && (
+              <motion.div key="exercise" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                {(() => {
+                  const ex = EXERCISES[selectedModuleId];
+                  if (!ex) return (
+                    <div className="text-center py-10 text-slate-500 text-sm">No exercise for this module yet.</div>
+                  );
+                  return (
+                    <div className="max-w-lg">
+                      <p className={cn('text-xs uppercase tracking-wider font-medium mb-1', colors.text)}>
+                        Practical Exercise
+                      </p>
+                      <h2 className="text-xl font-bold text-white mb-2">{ex.title}</h2>
+                      <p className="text-slate-400 text-sm mb-6">{ex.intro}</p>
+
+                      {/* Step preview */}
+                      <div className="space-y-2 mb-6">
+                        {ex.steps.map((step, i) => (
+                          <div key={i} className="flex items-start gap-3 bg-slate-800/60 rounded-xl px-3 py-2.5 border border-slate-700">
+                            <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-400 shrink-0 mt-0.5">{i + 1}</div>
+                            <p className="text-xs text-slate-300 leading-snug">{step.instruction}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 mb-4">
+                        <p className="text-xs text-emerald-300 leading-relaxed">
+                          <strong>How it works:</strong> Click the button below to open the real Planning Tool with a step-by-step guide floating over the map. Complete each step using the full tool — the guide detects your progress automatically and lets you advance when done.
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => navigate('/planning', { state: { exerciseId: selectedModuleId } })}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-semibold text-white transition-colors"
+                      >
+                        Open Exercise in Planning Tool <ExternalLink className="w-4 h-4" />
+                      </button>
+
+                      {isCompleted && (
+                        <div className="mt-4 flex items-center gap-2 text-sm text-emerald-400 bg-emerald-500/10 rounded-xl px-4 py-3 border border-emerald-500/30">
+                          <CheckCircle2 className="w-4 h-4 shrink-0" />
+                          Exercise completed — XP and badge awarded!
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </motion.div>
             )}
           </AnimatePresence>

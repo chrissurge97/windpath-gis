@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, BookOpen, Map, Wind, Trophy, Table2,
-  Menu, X, ChevronRight
+  Menu, X, ChevronRight, ChevronLeft, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -18,6 +18,7 @@ const NAV_ITEMS = [
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const location = useLocation();
 
   const { data: user } = useQuery({
@@ -45,74 +46,105 @@ export default function AppLayout() {
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed lg:static inset-y-0 left-0 z-30 w-64 flex flex-col bg-slate-900 border-r border-slate-800 transition-transform duration-300",
-        sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        "fixed lg:static inset-y-0 left-0 z-30 flex flex-col bg-slate-900 border-r border-slate-800 transition-all duration-300",
+        sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+        sidebarCollapsed ? "lg:w-14" : "w-64"
       )}>
         {/* Logo */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800">
+        <div className="flex items-center gap-3 px-3 py-4 border-b border-slate-800 overflow-hidden">
           <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center shrink-0">
             <Wind className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <p className="font-bold text-sm leading-tight">GIS Wind Trainer</p>
-            <p className="text-[10px] text-slate-500">Renewable Energy Training</p>
-          </div>
+          {!sidebarCollapsed && (
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm leading-tight">GIS Wind Trainer</p>
+              <p className="text-[10px] text-slate-500">Renewable Energy Training</p>
+            </div>
+          )}
           <button
-            className="ml-auto lg:hidden text-slate-400 hover:text-white"
+            className="lg:hidden text-slate-400 hover:text-white ml-auto"
             onClick={() => setSidebarOpen(false)}
           >
             <X className="w-4 h-4" />
           </button>
+          <button
+            className="hidden lg:flex text-slate-500 hover:text-white ml-auto shrink-0"
+            onClick={() => setSidebarCollapsed(v => !v)}
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+          </button>
         </div>
 
         {/* XP Bar */}
-        <div className="px-4 py-3 border-b border-slate-800">
-          <div className="flex items-center justify-between text-xs mb-1.5">
-            <span className="text-slate-400">Level {progress.level}</span>
-            <span className="text-emerald-400 font-medium">{progress.xp} XP</span>
+        {!sidebarCollapsed && (
+          <div className="px-4 py-3 border-b border-slate-800">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="text-slate-400">Level {progress.level}</span>
+              <span className="text-emerald-400 font-medium">{progress.xp} XP</span>
+            </div>
+            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full transition-all duration-700"
+                style={{ width: `${Math.min(100, ((progress.xp % 200) / 200) * 100)}%` }}
+              />
+            </div>
           </div>
-          <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full transition-all duration-700"
-              style={{ width: `${Math.min(100, ((progress.xp % 200) / 200) * 100)}%` }}
-            />
+        )}
+        {sidebarCollapsed && (
+          <div className="px-2 py-3 border-b border-slate-800 flex justify-center">
+            <span className="text-[10px] text-emerald-400 font-bold">L{progress.level}</span>
           </div>
-        </div>
+        )}
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
           {NAV_ITEMS.map(({ path, label, icon: Icon }) => (
             <NavLink
               key={path}
               to={path}
               end={path === '/'}
               onClick={() => setSidebarOpen(false)}
+              title={sidebarCollapsed ? label : undefined}
               className={({ isActive }) => cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all group",
+                "flex items-center gap-3 px-2.5 py-2.5 rounded-lg text-sm transition-all group",
+                sidebarCollapsed ? "justify-center" : "",
                 isActive
                   ? "bg-emerald-500/15 text-emerald-400 font-medium"
                   : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
               )}
             >
               <Icon className="w-4 h-4 shrink-0" />
-              <span className="flex-1">{label}</span>
-              <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+              {!sidebarCollapsed && (
+                <>
+                  <span className="flex-1">{label}</span>
+                  <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+                </>
+              )}
             </NavLink>
           ))}
         </nav>
 
         {/* User */}
         {user && (
-          <div className="px-4 py-3 border-t border-slate-800">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center text-xs font-bold text-white">
-                {user.full_name?.charAt(0) || user.email?.charAt(0) || '?'}
+          <div className="px-3 py-3 border-t border-slate-800">
+            {sidebarCollapsed ? (
+              <div className="flex justify-center">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center text-xs font-bold text-white">
+                  {user.full_name?.charAt(0) || user.email?.charAt(0) || '?'}
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{user.full_name || 'Learner'}</p>
-                <p className="text-[10px] text-slate-500 truncate">{user.email}</p>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                  {user.full_name?.charAt(0) || user.email?.charAt(0) || '?'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{user.full_name || 'Learner'}</p>
+                  <p className="text-[10px] text-slate-500 truncate">{user.email}</p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </aside>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   MapContainer, TileLayer, Marker, Popup, Circle, Polygon, Polyline,
   useMapEvents
@@ -21,6 +22,8 @@ import TurbineTypeEditor from '@/components/planning/TurbineTypeEditor';
 import PolygonMenu from '@/components/planning/PolygonMenu';
 import { DEFAULT_TURBINE_TYPES, DEFAULT_CABLE_TYPES } from '@/lib/turbineTypes';
 import { exportKML } from '@/lib/exportKMZ';
+import ExerciseGuide from '@/components/planning/ExerciseGuide';
+import { EXERCISES } from '@/lib/exercises';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -81,6 +84,11 @@ function MapClickHandler({ mode, onAddPoint, onFinishPolygon }) {
 const STORAGE_KEY = 'planning_v3_ire';
 
 export default function Planning() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const exerciseId = location.state?.exerciseId || null;
+  const activeExercise = exerciseId ? EXERCISES[exerciseId] : null;
+
   // ── State ──────────────────────────────────────────────────────────────────
   const [layers, setLayers] = useState(() => {
     try {
@@ -932,6 +940,15 @@ export default function Planning() {
               <span>Drag vertices to reshape • Click edge to add vertex • Click polygon to finish</span>
               <button onClick={() => setEditingPolygonId(null)} className="text-slate-400 hover:text-white">✕</button>
             </div>
+          )}
+
+          {/* Exercise Guide overlay */}
+          {activeExercise && (
+            <ExerciseGuide
+              exercise={activeExercise}
+              onComplete={() => {}}
+              onClose={() => navigate('/learn', { state: { moduleId: exerciseId, exerciseCompleted: true } })}
+            />
           )}
 
           {/* KPI strip overlay */}
