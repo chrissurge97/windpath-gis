@@ -53,7 +53,7 @@ function MapClickHandler({ mode, onAddPoint, onFinishPolygon }) {
   const lastClickTime = useRef(0);
   useMapEvents({
     click(e) {
-      if (!['place_turbine', 'draw_polygon', 'draw_cable'].includes(mode)) return;
+      if (!['place_turbine', 'draw_polygon', 'draw_cable', 'place_substation'].includes(mode)) return;
       const now = Date.now();
       // Suppress the spurious single-click that fires just before dblclick
       if (now - lastClickTime.current < 350) {
@@ -86,12 +86,19 @@ export default function Planning() {
     try {
       const d = localStorage.getItem(STORAGE_KEY);
       const parsed = d ? JSON.parse(d) : null;
-      if (parsed?.layers) return parsed.layers;
+      if (parsed?.layers) {
+        // Migrate: add substation layer if missing
+        if (!parsed.layers.find(l => l.type === 'substation')) {
+          parsed.layers.push(createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 }));
+        }
+        return parsed.layers;
+      }
     } catch {}
     return [
       createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }),
       createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }),
       createLayer({ name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8 }),
+      createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 }),
     ];
   });
 
@@ -123,9 +130,9 @@ export default function Planning() {
   const [showElevation, setShowElevation] = useState(false);
   const [showWindLayer, setShowWindLayer] = useState(true);
   const [showSubstations, setShowSubstations] = useState(true);
-  const [substations, setSubstations] = useState([]);
-  const [loadingSubstations, setLoadingSubstations] = useState(false);
-  const [substationError, setSubstationError] = useState(false);
+
+  // Substation popup menu state
+  const [substationMenuFeature, setSubstationMenuFeature] = useState(null);
 
   // Turbine popup menu state
   const [turbineMenuFeature, setTurbineMenuFeature] = useState(null);
@@ -142,36 +149,8 @@ export default function Planning() {
   // Vertex edit mode: featureId -> [[lat,lng],...]
   const [editingPolygonId, setEditingPolygonId] = useState(null);
 
-  // Fetch substations from Overpass API
-  const fetchSubstations = useCallback(() => {
-    setLoadingSubstations(true);
-    setSubstationError(false);
-    const overpassQuery = `[out:json][timeout:30];(node["power"="substation"](51.2,-10.7,55.5,-5.9);way["power"="substation"](51.2,-10.7,55.5,-5.9);relation["power"="substation"](51.2,-10.7,55.5,-5.9););out center;`;
-    fetch(`https://overpass-api.de/api/interpreter`, {
-      method: 'POST',
-      body: `data=${encodeURIComponent(overpassQuery)}`,
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    })
-      .then(r => r.json())
-      .then(data => {
-        const pts = (data.elements || []).map(el => ({
-          id: el.id,
-          lat: el.lat ?? el.center?.lat,
-          lng: el.lon ?? el.center?.lon,
-          name: el.tags?.name || el.tags?.operator || 'Substation',
-          voltage: el.tags?.voltage || '',
-          type: el.tags?.substation || '',
-        })).filter(p => p.lat && p.lng);
-        setSubstations(pts);
-      })
-      .catch(() => setSubstationError(true))
-      .finally(() => setLoadingSubstations(false));
-  }, []);
-
-  useEffect(() => {
-    if (!showSubstations || substations.length > 0 || loadingSubstations) return;
-    fetchSubstations();
-  }, [showSubstations]);
+  const substationLayer = layers.find(l => l.type === 'substation');
+  const substations = substationLayer?.features || [];
 
   const turbineLayer = layers.find(l => l.type === 'turbine');
   const cableLayer = layers.find(l => l.type === 'cable');
@@ -219,6 +198,23 @@ export default function Planning() {
         }
         return next;
       });
+      return;
+    }
+
+    if (mode === 'place_substation') {
+      const subLayer = layers.find(l => l.type === 'substation');
+      if (!subLayer) return;
+      const f = createFeature(subLayer.id,
+        { type: 'Point', coordinates: [latlng.lng, latlng.lat] },
+        {
+          name: `Substation ${subLayer.features.length + 1}`,
+          transformer_mva: 60,
+          capacity_demand_mw: 30,
+          capacity_generation_mw: 30,
+          notes: '',
+        }
+      );
+      updateLayer(subLayer.id, { features: [...subLayer.features, f] });
       return;
     }
 
@@ -279,7 +275,7 @@ export default function Planning() {
   const finishPolygon = () => {
     if (drawingPoints.length < 3) return;
     // Use selectedLayerId if it's a polygon layer, otherwise fall back to first polygon layer
-    const polyLayers = layers.filter(l => !['turbine', 'cable', 'wind_resource'].includes(l.type));
+    const polyLayers = layers.filter(l => !['turbine', 'cable', 'wind_resource', 'substation'].includes(l.type));
     const targetLayer = polyLayers.find(l => l.id === selectedLayerId) || polyLayers[0];
     if (!targetLayer) return;
     const closed = [...drawingPoints, drawingPoints[0]]; // close ring
@@ -419,6 +415,7 @@ export default function Planning() {
     { id: 'draw_polygon', label: 'Polygon', icon: Pentagon },
     { id: 'place_turbine', label: 'Place Turbine', icon: Wind },
     { id: 'draw_cable', label: 'Draw Cable', icon: Zap },
+    { id: 'place_substation', label: 'Substation', icon: Target },
   ];
 
   const RIGHT_TABS = [
@@ -450,7 +447,7 @@ export default function Planning() {
             setEditingPolygonId(null);
             // Auto-select first polygon layer when entering draw_polygon mode
             if (id === 'draw_polygon') {
-              const first = layers.find(l => !['turbine','cable','wind_resource'].includes(l.type));
+              const first = layers.find(l => !['turbine','cable','wind_resource','substation'].includes(l.type));
               if (first) setSelectedLayerId(first.id);
             }
           }}
@@ -529,6 +526,7 @@ export default function Planning() {
             {layers.map(layer => {
               if (!layer.visible) return null;
               if (layer.type === 'wind_resource') return <WindResourceRenderer key={layer.id} layer={layer} />;
+              if (layer.type === 'substation') return null; // rendered separately below
 
               return layer.features.map(f => {
                 const pathOpts = { color: layer.color, fillColor: layer.color, fillOpacity: layer.fillOpacity, weight: layer.strokeWeight || 2, opacity: layer.strokeOpacity || 0.9 };
@@ -655,18 +653,27 @@ export default function Planning() {
               );
             })}
 
-            {/* ESB Substations */}
+            {/* Placeable Substations */}
             {showSubstations && substations.map(s => {
+              const [lng, lat] = s.geometry.coordinates;
               const substIcon = L.divIcon({
-                html: `<div style="width:10px;height:10px;background:#facc15;border:2px solid #fff;border-radius:2px;box-shadow:0 0 4px #facc1599"></div>`,
-                className: '', iconSize: [10, 10], iconAnchor: [5, 5],
+                html: `<div style="width:14px;height:14px;background:#facc15;border:2px solid #fff;border-radius:3px;box-shadow:0 0 6px #facc1599;display:flex;align-items:center;justify-content:center;">
+                  <div style="width:6px;height:6px;background:#000;border-radius:1px;opacity:0.5"></div>
+                </div>`,
+                className: '', iconSize: [14, 14], iconAnchor: [7, 7],
               });
               return (
-                <Marker key={`sub-${s.id}`} position={[s.lat, s.lng]} icon={substIcon}>
+                <Marker key={`sub-${s.id}`} position={[lat, lng]} icon={substIcon}
+                  eventHandlers={{
+                    click: (e) => {
+                      if (mode === 'select') { L.DomEvent.stopPropagation(e); setSubstationMenuFeature(s); setTurbineMenuFeature(null); setPolygonMenuFeature(null); }
+                    }
+                  }}>
                   <Popup>
-                    <div className="text-xs">
-                      <p className="font-bold">{s.name}</p>
-                      {s.voltage && <p className="text-slate-500">{s.voltage} kV</p>}
+                    <div className="text-xs min-w-32">
+                      <p className="font-bold">{s.properties.name}</p>
+                      <p className="text-slate-500">{s.properties.transformer_mva} MVA transformer</p>
+                      <p className="text-slate-500">Gen: {s.properties.capacity_generation_mw} MW · Demand: {s.properties.capacity_demand_mw} MW</p>
                     </div>
                   </Popup>
                 </Marker>
@@ -694,18 +701,14 @@ export default function Planning() {
               )}>
               <Wind className="w-3 h-3" /> Wind
             </button>
-            <button onClick={() => {
-                if (substationError) { fetchSubstations(); return; }
-                setShowSubstations(v => !v);
-              }}
+            <button onClick={() => setShowSubstations(v => !v)}
               className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
-                substationError ? "bg-red-500/30 text-red-300 border-red-500/50" :
                 showSubstations && substations.length > 0 ? "bg-yellow-500/30 text-yellow-300 border-yellow-500/50" :
                 showSubstations ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" :
                 "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
               )}>
               <Zap className="w-3 h-3" />
-              {loadingSubstations ? 'Loading…' : substationError ? 'Retry' : `Substations${substations.length > 0 ? ` (${substations.length})` : ''}`}
+              {`Substations${substations.length > 0 ? ` (${substations.length})` : ''}`}
             </button>
           </div>
 
@@ -715,6 +718,7 @@ export default function Planning() {
               {mode === 'draw_polygon' && `Click to add vertices • Double-click to finish`}
               {mode === 'place_turbine' && `Placing: ${selectedTurbineType?.manufacturer} ${selectedTurbineType?.model} — click map`}
               {mode === 'draw_cable' && `Click two points to draw a cable route (${selectedCableType?.name})`}
+              {mode === 'place_substation' && `Click map to place a substation — then click it to edit attributes`}
             </div>
           )}
 
@@ -830,6 +834,63 @@ export default function Planning() {
               }}
             />
           )}
+
+          {/* Substation popup menu */}
+          {substationMenuFeature && (() => {
+            const [lng, lat] = substationMenuFeature.geometry.coordinates;
+            const p = substationMenuFeature.properties;
+            const subLayer = layers.find(l => l.type === 'substation');
+            const updateSubProps = (newProps) => {
+              if (!subLayer) return;
+              updateLayer(subLayer.id, {
+                features: subLayer.features.map(f =>
+                  f.id === substationMenuFeature.id ? { ...f, properties: { ...f.properties, ...newProps } } : f
+                )
+              });
+            };
+            return (
+              <div className="absolute top-14 left-4 z-[1200] bg-slate-900 border border-yellow-500/40 rounded-xl shadow-2xl p-4 w-72">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[10px] text-yellow-400 uppercase tracking-wider font-medium">⚡ Substation</span>
+                  <button onClick={() => setSubstationMenuFeature(null)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="space-y-2 mb-3">
+                  {[
+                    { label: 'Name', key: 'name', type: 'text' },
+                    { label: 'Transformer (MVA)', key: 'transformer_mva', type: 'number' },
+                    { label: 'Available Gen Capacity (MW)', key: 'capacity_generation_mw', type: 'number' },
+                    { label: 'Available Demand Capacity (MW)', key: 'capacity_demand_mw', type: 'number' },
+                    { label: 'Notes', key: 'notes', type: 'text' },
+                  ].map(({ label, key, type }) => (
+                    <div key={key}>
+                      <label className="text-[10px] text-slate-500 block mb-0.5">{label}</label>
+                      <input
+                        type={type}
+                        defaultValue={p[key] ?? ''}
+                        onBlur={e => updateSubProps({ [key]: type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value })}
+                        className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-yellow-500/60"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="text-[10px] text-slate-600 mb-3">{lat.toFixed(5)}, {lng.toFixed(5)}</div>
+                <div className="flex gap-2">
+                  <button onClick={() => setSubstationMenuFeature(null)}
+                    className="flex-1 py-1.5 bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-300 text-xs font-medium rounded-lg border border-yellow-600/30 transition-colors">
+                    Done
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (subLayer) updateLayer(subLayer.id, { features: subLayer.features.filter(f => f.id !== substationMenuFeature.id) });
+                      setSubstationMenuFeature(null);
+                    }}
+                    className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs rounded-lg transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Edit vertices hint */}
           {editingPolygonId && (
@@ -1004,7 +1065,7 @@ export default function Planning() {
                       className="text-slate-500 hover:text-white p-0.5 shrink-0">
                       {layer.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                     </button>
-                    {!['turbine','cable'].includes(layer.type) && (
+                    {!['turbine','cable','substation'].includes(layer.type) && (
                       <button onClick={e => { e.stopPropagation(); setLayers(prev => prev.filter(l => l.id !== layer.id)); }}
                         className="text-slate-600 hover:text-red-400 p-0.5 shrink-0">
                         <Trash2 className="w-3 h-3" />

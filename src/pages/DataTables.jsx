@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Table2, Wind, Zap, Pentagon, RefreshCw } from 'lucide-react';
+import { Table2, Wind, Zap, Pentagon, RefreshCw, Plus, Trash2 } from 'lucide-react';
 
 const STORAGE_KEY = 'planning_v3_ire';
 
@@ -47,13 +47,18 @@ function Cell({ value, onChange, type = 'text', className }) {
   );
 }
 
-function DataSection({ title, icon: Icon, headers, rows, onCellChange, emptyMsg }) {
+function DataSection({ title, icon: Icon, headers, rows, onCellChange, emptyMsg, onAddRow, onDeleteRow }) {
   return (
     <div className="mb-8">
       <div className="flex items-center gap-2 mb-2">
         <Icon className="w-4 h-4 text-emerald-400" />
         <h2 className="text-sm font-semibold text-white">{title}</h2>
         <span className="text-[10px] text-slate-500 ml-1">({rows.length} rows) · click any cell to edit</span>
+        {onAddRow && (
+          <button onClick={onAddRow} className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-white">
+            <Plus className="w-3 h-3" /> Add Row
+          </button>
+        )}
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-800">
         <table className="w-full border-collapse text-xs">
@@ -64,12 +69,13 @@ function DataSection({ title, icon: Icon, headers, rows, onCellChange, emptyMsg 
                   {h.label}
                 </th>
               ))}
+              {onDeleteRow && <th className="px-2 py-2 w-6" />}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={headers.length} className="px-4 py-6 text-center text-slate-600 italic text-xs">
+                <td colSpan={headers.length + (onDeleteRow ? 1 : 0)} className="px-4 py-6 text-center text-slate-600 italic text-xs">
                   {emptyMsg}
                 </td>
               </tr>
@@ -83,6 +89,13 @@ function DataSection({ title, icon: Icon, headers, rows, onCellChange, emptyMsg 
                     onChange={val => onCellChange(ri, h.key, val)}
                   />
                 ))}
+                {onDeleteRow && (
+                  <td className="px-1">
+                    <button onClick={() => onDeleteRow(ri)} className="p-0.5 text-slate-700 hover:text-red-400">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -128,7 +141,8 @@ export default function DataTables() {
 
   const turbineLayer = data.layers?.find(l => l.type === 'turbine');
   const cableLayer = data.layers?.find(l => l.type === 'cable');
-  const polygonLayers = data.layers?.filter(l => !['turbine', 'cable', 'wind_resource'].includes(l.type)) || [];
+  const substationLayer = data.layers?.find(l => l.type === 'substation');
+  const polygonLayers = data.layers?.filter(l => !['turbine', 'cable', 'wind_resource', 'substation'].includes(l.type)) || [];
 
   const turbines = turbineLayer?.features || [];
   const cables = cableLayer?.features || [];
@@ -216,6 +230,69 @@ export default function DataTables() {
     save(newData);
   };
 
+  // ── Substation rows ───────────────────────────────────────────────────────
+  const substationFeatures = substationLayer?.features || [];
+  const substationRows = substationFeatures.map(s => ({
+    id: s.id,
+    name: s.properties.name,
+    lat: s.geometry.coordinates[1]?.toFixed(6),
+    lng: s.geometry.coordinates[0]?.toFixed(6),
+    transformer_mva: s.properties.transformer_mva,
+    capacity_generation_mw: s.properties.capacity_generation_mw,
+    capacity_demand_mw: s.properties.capacity_demand_mw,
+    notes: s.properties.notes || '',
+  }));
+
+  const SUBSTATION_HEADERS = [
+    { key: 'name', label: 'Name' },
+    { key: 'lat', label: 'Lat', type: 'number' },
+    { key: 'lng', label: 'Lng', type: 'number' },
+    { key: 'transformer_mva', label: 'Transformer (MVA)', type: 'number' },
+    { key: 'capacity_generation_mw', label: 'Gen Capacity (MW)', type: 'number' },
+    { key: 'capacity_demand_mw', label: 'Demand Capacity (MW)', type: 'number' },
+    { key: 'notes', label: 'Notes' },
+  ];
+
+  const updateSubstationCell = (rowIdx, key, val) => {
+    const newData = JSON.parse(JSON.stringify(data));
+    const sLayer = newData.layers.find(l => l.type === 'substation');
+    if (!sLayer) return;
+    const f = sLayer.features[rowIdx];
+    if (!f) return;
+    if (key === 'lat') f.geometry.coordinates[1] = parseFloat(val) || f.geometry.coordinates[1];
+    else if (key === 'lng') f.geometry.coordinates[0] = parseFloat(val) || f.geometry.coordinates[0];
+    else if (['transformer_mva', 'capacity_generation_mw', 'capacity_demand_mw'].includes(key)) f.properties[key] = parseFloat(val) || 0;
+    else f.properties[key] = val;
+    setData(newData);
+    save(newData);
+  };
+
+  const addSubstationRow = () => {
+    const newData = JSON.parse(JSON.stringify(data));
+    let sLayer = newData.layers.find(l => l.type === 'substation');
+    if (!sLayer) {
+      sLayer = { id: crypto.randomUUID(), name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1, visible: true, features: [] };
+      newData.layers.push(sLayer);
+    }
+    sLayer.features.push({
+      id: crypto.randomUUID(),
+      layer_id: sLayer.id,
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      properties: { name: `Substation ${sLayer.features.length + 1}`, transformer_mva: 60, capacity_generation_mw: 30, capacity_demand_mw: 30, notes: '' },
+    });
+    setData(newData);
+    save(newData);
+  };
+
+  const deleteSubstationRow = (rowIdx) => {
+    const newData = JSON.parse(JSON.stringify(data));
+    const sLayer = newData.layers.find(l => l.type === 'substation');
+    if (!sLayer) return;
+    sLayer.features.splice(rowIdx, 1);
+    setData(newData);
+    save(newData);
+  };
+
   // ── Polygon rows ──────────────────────────────────────────────────────────
   const polygonRows = polygonLayers.flatMap(layer =>
     layer.features.filter(f => f.geometry.type === 'Polygon').map(f => ({
@@ -294,6 +371,17 @@ export default function DataTables() {
           rows={cableRows}
           onCellChange={updateCableCell}
           emptyMsg="No cables drawn yet — go to the Planning page and draw cable routes."
+        />
+
+        <DataSection
+          title="Substations"
+          icon={Zap}
+          headers={SUBSTATION_HEADERS}
+          rows={substationRows}
+          onCellChange={updateSubstationCell}
+          onAddRow={addSubstationRow}
+          onDeleteRow={deleteSubstationRow}
+          emptyMsg="No substations placed yet — go to the Planning page and use the Substation tool, or click Add Row."
         />
 
         <DataSection
