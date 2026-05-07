@@ -235,8 +235,8 @@ export default function DataTables() {
   const substationRows = substationFeatures.map(s => ({
     id: s.id,
     name: s.properties.name,
-    lat: s.geometry.coordinates[1]?.toFixed(6),
-    lng: s.geometry.coordinates[0]?.toFixed(6),
+    lat: typeof s.geometry.coordinates[1] === 'number' ? s.geometry.coordinates[1].toFixed(6) : '',
+    lng: typeof s.geometry.coordinates[0] === 'number' ? s.geometry.coordinates[0].toFixed(6) : '',
     transformer_mva: s.properties.transformer_mva,
     capacity_generation_mw: s.properties.capacity_generation_mw,
     capacity_demand_mw: s.properties.capacity_demand_mw,
