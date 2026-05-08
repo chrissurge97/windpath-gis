@@ -650,14 +650,27 @@ export default function Planning() {
                 if (f.geometry.type === 'LineString') {
                   const ct = cableTypes.find(t => t.id === f.properties.cable_type_id) || cableTypes[0];
                   const positions = f.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+                  const capacityMVA = ct ? +(Math.sqrt(3) * ct.voltage_kv * ct.ampacity_a / 1000).toFixed(1) : 0;
+                  const assignedIds = f.properties.turbine_ids || [];
+                  const usedMw = assignedIds.reduce((s, tid) => {
+                    const t = turbines.find(t => t.id === tid);
+                    return s + (t?.properties?.rated_power_mw || 0);
+                  }, 0);
+                  const usedA = ct ? +(usedMw * 1000 / (Math.sqrt(3) * ct.voltage_kv)).toFixed(0) : 0;
+                  const overloaded = usedMw > 0 && usedA > (ct?.ampacity_a || 0);
                   return <Polyline key={f.id} positions={positions}
-                    pathOptions={{ color: ct?.color || '#f97316', weight: 3, opacity: 0.85 }}>
+                    pathOptions={{ color: overloaded ? '#ef4444' : (ct?.color || '#f97316'), weight: overloaded ? 4 : 3, opacity: 0.85, dashArray: overloaded ? '8 4' : undefined }}>
                     <Popup>
-                      <div className="text-xs min-w-28">
+                      <div className="text-xs min-w-36">
                         <p className="font-bold mb-1">{f.properties.name}</p>
                         <p>Type: {ct?.name}</p>
                         <p>Length: {(f.properties.length_m / 1000).toFixed(2)} km</p>
                         <p>Cost: £{(f.properties.length_m * (ct?.cost_per_m || 0)).toFixed(0)}</p>
+                        <p>Capacity: {ct?.ampacity_a}A / {capacityMVA} MVA</p>
+                        {usedMw > 0 && <p style={{ color: overloaded ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>
+                          Load: {usedA}A ({usedMw.toFixed(1)} MW){overloaded ? ' ⚠ OVERLOADED' : ''}
+                        </p>}
+                        {assignedIds.length > 0 && <p style={{ color: '#94a3b8' }}>{assignedIds.length} turbine{assignedIds.length !== 1 ? 's' : ''} assigned</p>}
                       </div>
                     </Popup>
                   </Polyline>;
@@ -1035,6 +1048,13 @@ export default function Planning() {
                 onSelectCableType={setSelectedCableTypeId}
                 onDeleteCable={(id) => cableLayer && deleteFeature(cableLayer.id, id)}
                 onUpdateCableType={(id, vals) => setCableTypes(prev => prev.map(ct => ct.id === id ? vals : ct))}
+                onUpdateCable={(id, props) => {
+                  if (!cableLayer) return;
+                  updateLayer(cableLayer.id, {
+                    features: cableLayer.features.map(f => f.id === id ? { ...f, properties: props } : f)
+                  });
+                }}
+                turbines={turbines}
               />
             )}
 
