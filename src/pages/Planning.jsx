@@ -1261,7 +1261,28 @@ export default function Planning() {
                   <span className="text-[10px] text-orange-400 uppercase tracking-wider font-medium">⚡ Cable</span>
                   <button onClick={() => setCableMenuFeature(null)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
                 </div>
-                <p className="text-sm font-bold text-white mb-3 truncate">{cf.properties.name}</p>
+                <p className="text-sm font-bold text-white mb-2 truncate">{cf.properties.name}</p>
+                {/* Cable type selector */}
+                <div className="mb-3">
+                  <label className="text-[10px] text-slate-400 block mb-1">Cable Type</label>
+                  <select
+                    value={cf.properties.cable_type_id || cableTypes[0]?.id}
+                    onChange={e => {
+                      if (!cableLayer) return;
+                      updateLayer(cableLayer.id, {
+                        features: cableLayer.features.map(f =>
+                          f.id === cf.id ? { ...f, properties: { ...f.properties, cable_type_id: e.target.value } } : f
+                        )
+                      });
+                      setCableMenuFeature(prev => ({ ...prev, properties: { ...prev.properties, cable_type_id: e.target.value } }));
+                    }}
+                    className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2 py-1.5 outline-none"
+                  >
+                    {cableTypes.map(ct => (
+                      <option key={ct.id} value={ct.id}>{ct.name} — {ct.voltage_kv}kV / {ct.ampacity_a}A</option>
+                    ))}
+                  </select>
+                </div>
                 {/* Load bar */}
                 <div className="mb-3">
                   <div className="flex justify-between text-[10px] mb-1">

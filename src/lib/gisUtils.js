@@ -71,18 +71,26 @@ export function calcTurbineAEP(windSpeed, powerCurve) {
 
 // ── Weibull-integrated AEP for a turbine ──────────────────────────────────
 // Integrates power curve × Weibull PDF over wind speeds 0–30 m/s
+// Uses k and lambda directly (lambda is the Weibull scale parameter in m/s)
+// hubWindSpeed is used to site-correct lambda: lambda is scaled so the
+// Weibull mean equals hubWindSpeed, giving a per-turbine AEP estimate.
 export function calcWeibullAEP(hubWindSpeed, powerCurve, k, lambda) {
   if (!hubWindSpeed || !powerCurve || !k || !lambda) return null;
-  // Scale lambda so the Weibull mean matches hubWindSpeed
-  // Weibull mean = lambda * Gamma(1 + 1/k); scale lambda to target
+
+  // Use the raw lambda from wind params as the shape, but rescale it so
+  // the distribution mean equals the actual hub wind speed at this turbine.
+  // Weibull mean = lambda * Gamma(1 + 1/k)
   const gamma1pk = Math.exp(lgamma(1 + 1 / k));
-  const scaledLambda = hubWindSpeed / gamma1pk;
+  // Reference mean from the slider lambda (what the user set for the site)
+  const sliderMean = lambda * gamma1pk;
+  // Ratio of actual hub speed to slider mean → scale lambda accordingly
+  const siteLambda = lambda * (hubWindSpeed / sliderMean);
 
   const sorted = [...powerCurve].sort((a, b) => a.v - b.v);
-  const dv = 0.5; // integration step m/s
+  const dv = 0.25; // finer integration step for accuracy
   let energyKwh = 0;
-  for (let v = 0; v < 30; v += dv) {
-    const pdf = (k / scaledLambda) * Math.pow(v / scaledLambda, k - 1) * Math.exp(-Math.pow(v / scaledLambda, k));
+  for (let v = dv / 2; v < 30; v += dv) {
+    const pdf = (k / siteLambda) * Math.pow(v / siteLambda, k - 1) * Math.exp(-Math.pow(v / siteLambda, k));
     const p = interpPower(sorted, v);
     energyKwh += p * pdf * dv * 8760;
   }
