@@ -23,6 +23,7 @@ import TurbineTypeEditor from '@/components/planning/TurbineTypeEditor';
 import PolygonMenu from '@/components/planning/PolygonMenu';
 import { DEFAULT_TURBINE_TYPES, DEFAULT_CABLE_TYPES } from '@/lib/turbineTypes';
 import { exportKML } from '@/lib/exportKMZ';
+import { buildDemoProject } from '@/lib/demoProject';
 import ExerciseGuide from '@/components/planning/ExerciseGuide';
 import { EXERCISES } from '@/lib/exercises';
 
@@ -219,7 +220,7 @@ export default function Planning() {
   const [windParams, setWindParams] = useState({ k: 2.0, lambda: 8.0 });
 
   // Map display state
-  const [baseMap, setBaseMap] = useState('dark'); // 'dark' | 'satellite' | 'roads'
+  const [baseMap, setBaseMap] = useState('roads'); // 'dark' | 'satellite' | 'roads'
   const [showBaseMapMenu, setShowBaseMapMenu] = useState(false);
   const satelliteView = baseMap === 'satellite';
   const roadsView = baseMap === 'roads';
@@ -251,6 +252,8 @@ export default function Planning() {
   const [drawingSnapNodes, setDrawingSnapNodes] = useState([]); // array of { type, id, lat, lng } or null per point
   const [snapPreview, setSnapPreview] = useState(null); // node being hovered near
 
+  const mapRef = useRef(null);
+
   const substationLayer = layers.find(l => l.type === 'substation');
   const substations = substationLayer?.features || [];
 
@@ -272,14 +275,14 @@ export default function Planning() {
   }, []);
 
   // ── Map interactions ───────────────────────────────────────────────────────
-  const addPoint = async (latlng, map) => {
+  const addPoint = async (latlng) => {
     if (mode === 'draw_polygon') {
       setDrawingPoints(prev => [...prev, [latlng.lat, latlng.lng]]);
       return;
     }
 
     if (mode === 'draw_cable') {
-      const snap = findSnapNode(latlng, turbines, substations, map);
+      const snap = mapRef.current ? findSnapNode(latlng, turbines, substations, mapRef.current) : null;
       const point = snap ? [snap.lat, snap.lng] : [latlng.lat, latlng.lng];
       setDrawingPoints(prev => [...prev, point]);
       setDrawingSnapNodes(prev => [...prev, snap || null]);
@@ -514,6 +517,19 @@ export default function Planning() {
     setTurbineMenuFeature(null);
   };
 
+  const handleLoadDemo = () => {
+    if (!window.confirm('Load the Ballycraggan Wind Farm demo? This will replace your current project.')) return;
+    const demo = buildDemoProject();
+    setLayers(demo.layers);
+    setProjectName(demo.projectName);
+    setWindParams(demo.windParams);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ layers: demo.layers, turbineTypes, cableTypes }));
+    // Fly map to demo site
+    setTimeout(() => {
+      if (mapRef.current) mapRef.current.setView(demo.center, demo.zoom, { animate: true });
+    }, 100);
+  };
+
   const handleImport = () => {
     const input = document.createElement('input');
     input.type = 'file'; input.accept = '.json,.geojson';
@@ -630,6 +646,10 @@ export default function Planning() {
         )}
 
         <div className="ml-auto flex items-center gap-2">
+          <button onClick={handleLoadDemo}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-emerald-900/40 border border-emerald-700/50 text-emerald-300 hover:bg-emerald-800/50 font-medium">
+            <Wind className="w-3 h-3" /> Load Demo
+          </button>
           <button onClick={handleImport}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-400 hover:text-white">
             <Upload className="w-3 h-3" /> Import
@@ -660,7 +680,7 @@ export default function Planning() {
       <div className="flex flex-1 min-h-0">
         {/* Map */}
         <div className="flex-1 relative min-w-0" style={{ cursor: cursorStyle }}>
-          <MapContainer center={[53.5, -8.0]} zoom={7} style={{ height: '100%', width: '100%' }} zoomControl>
+          <MapContainer center={[53.5, -8.0]} zoom={7} style={{ height: '100%', width: '100%' }} zoomControl ref={mapRef}>
             {satelliteView ? (
               <TileLayer
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
