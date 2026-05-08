@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
   Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target,
-  Save, Layers, Settings, X, Satellite, Mountain
+  Save, Layers, Settings, X, Satellite, Mountain, Navigation
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { createLayer, createFeature, geoJSONToLayer, downloadJSON, layersToGeoJSON, DEFAULT_POWER_CURVE, windAtHubHeight, calcTurbineAEP } from '@/lib/gisUtils';
@@ -52,7 +52,7 @@ function haversineM(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function MapClickHandler({ mode, onAddPoint, onFinishPolygon }) {
+function MapClickHandler({ mode, onAddPoint, onFinishPolygon, onFinishCable }) {
   const lastClickTime = useRef(0);
   useMapEvents({
     click(e) {
@@ -60,13 +60,12 @@ function MapClickHandler({ mode, onAddPoint, onFinishPolygon }) {
       const now = Date.now();
       // Suppress the spurious single-click that fires just before dblclick
       if (now - lastClickTime.current < 350) {
-        // This is the second tap of a double-tap — finish polygon instead
         if (mode === 'draw_polygon') { e.originalEvent.preventDefault(); onFinishPolygon(); }
+        if (mode === 'draw_cable') { e.originalEvent.preventDefault(); onFinishCable(); }
         lastClickTime.current = 0;
         return;
       }
       lastClickTime.current = now;
-      // Delay the single-click action so we can cancel it if dblclick follows
       const latlng = e.latlng;
       setTimeout(() => {
         if (Date.now() - lastClickTime.current >= 300) {
@@ -76,6 +75,7 @@ function MapClickHandler({ mode, onAddPoint, onFinishPolygon }) {
     },
     dblclick(e) {
       if (mode === 'draw_polygon') { e.originalEvent.preventDefault(); lastClickTime.current = 0; onFinishPolygon(); }
+      if (mode === 'draw_cable') { e.originalEvent.preventDefault(); lastClickTime.current = 0; onFinishCable(); }
     },
   });
   return null;
@@ -135,6 +135,7 @@ export default function Planning() {
 
   // Map display state
   const [satelliteView, setSatelliteView] = useState(false);
+  const [roadsView, setRoadsView] = useState(false);
   const [showElevation, setShowElevation] = useState(false);
   const [showWindLayer, setShowWindLayer] = useState(true);
   const [showSubstations, setShowSubstations] = useState(true);
@@ -185,27 +186,7 @@ export default function Planning() {
     }
 
     if (mode === 'draw_cable') {
-      setDrawingPoints(prev => {
-        const next = [...prev, [latlng.lat, latlng.lng]];
-        // Auto-finish cable after 2 points
-        if (next.length === 2) {
-          const len = haversineM(next[0][0], next[0][1], next[1][0], next[1][1]);
-          const cLayer = layers.find(l => l.type === 'cable');
-          if (!cLayer) return [];
-          const f = createFeature(cLayer.id,
-            { type: 'LineString', coordinates: next.map(([lat, lng]) => [lng, lat]) },
-            {
-              name: `Cable ${cLayer.features.length + 1}`,
-              cable_type_id: selectedCableTypeId,
-              length_m: +len.toFixed(0),
-            }
-          );
-          updateLayer(cLayer.id, { features: [...cLayer.features, f] });
-          setMode('draw_cable'); // keep mode for next cable
-          return [];
-        }
-        return next;
-      });
+      setDrawingPoints(prev => [...prev, [latlng.lat, latlng.lng]]);
       return;
     }
 
@@ -294,6 +275,28 @@ export default function Planning() {
     updateLayer(targetLayer.id, { features: [...targetLayer.features, f] });
     setDrawingPoints([]);
     setMode('select');
+  };
+
+  const finishCable = () => {
+    if (drawingPoints.length < 2) return;
+    const cLayer = layers.find(l => l.type === 'cable');
+    if (!cLayer) return;
+    // Calculate total length along all segments
+    let totalLen = 0;
+    for (let i = 0; i < drawingPoints.length - 1; i++) {
+      totalLen += haversineM(drawingPoints[i][0], drawingPoints[i][1], drawingPoints[i+1][0], drawingPoints[i+1][1]);
+    }
+    const f = createFeature(cLayer.id,
+      { type: 'LineString', coordinates: drawingPoints.map(([lat, lng]) => [lng, lat]) },
+      {
+        name: `Cable ${cLayer.features.length + 1}`,
+        cable_type_id: selectedCableTypeId,
+        length_m: +totalLen.toFixed(0),
+      }
+    );
+    updateLayer(cLayer.id, { features: [...cLayer.features, f] });
+    setDrawingPoints([]);
+    // Keep draw_cable mode so user can draw another cable immediately
   };
 
   const deleteFeature = (layerId, featureId) => {
@@ -507,6 +510,12 @@ export default function Planning() {
             Finish ({drawingPoints.length} pts)
           </button>
         )}
+        {mode === 'draw_cable' && drawingPoints.length >= 2 && (
+          <button onClick={finishCable}
+            className="px-2.5 py-1.5 rounded-lg text-xs bg-orange-600/20 text-orange-400 border border-orange-500/40">
+            Finish Cable ({drawingPoints.length} pts)
+          </button>
+        )}
 
         {loadingWind && (
           <span className="flex items-center gap-1.5 text-xs text-amber-400">
@@ -552,8 +561,22 @@ export default function Planning() {
                 attribution="Tiles &copy; Esri"
                 maxZoom={19}
               />
+            ) : roadsView ? (
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                maxZoom={19}
+              />
             ) : (
               <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution="&copy; CARTO" />
+            )}
+            {/* Satellite + road labels overlay */}
+            {satelliteView && (
+              <TileLayer
+                url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png"
+                attribution=""
+                opacity={0.7}
+              />
             )}
             {showElevation && (
               <TileLayer
@@ -562,7 +585,7 @@ export default function Planning() {
                 opacity={0.5}
               />
             )}
-            <MapClickHandler mode={mode} onAddPoint={addPoint} onFinishPolygon={finishPolygon} />
+            <MapClickHandler mode={mode} onAddPoint={addPoint} onFinishPolygon={finishPolygon} onFinishCable={finishCable} />
 
             {layers.map(layer => {
               if (!layer.visible) return null;
@@ -676,7 +699,7 @@ export default function Planning() {
                   pathOptions={{ color: mode === 'draw_cable' ? '#f97316' : '#06b6d4', weight: 2, dashArray: '5 5' }} />
                 {drawingPoints.map((pt, i) => (
                   <Circle key={i} center={pt} radius={40}
-                    pathOptions={{ color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.8, weight: 0 }} />
+                    pathOptions={{ color: mode === 'draw_cable' ? '#f97316' : '#06b6d4', fillColor: mode === 'draw_cable' ? '#f97316' : '#06b6d4', fillOpacity: 0.8, weight: 0 }} />
                 ))}
               </>
             )}
@@ -725,11 +748,17 @@ export default function Planning() {
 
           {/* Map layer toggles */}
           <div className="absolute top-3 right-3 z-[1000] flex flex-col gap-1.5">
-            <button onClick={() => setSatelliteView(v => !v)}
+            <button onClick={() => { setSatelliteView(v => !v); setRoadsView(false); }}
               className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
                 satelliteView ? "bg-blue-500/30 text-blue-300 border-blue-500/50" : "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
               )}>
               <Satellite className="w-3 h-3" /> Satellite
+            </button>
+            <button onClick={() => { setRoadsView(v => !v); setSatelliteView(false); }}
+              className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
+                roadsView ? "bg-green-500/30 text-green-300 border-green-500/50" : "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
+              )}>
+              <Navigation className="w-3 h-3" /> Roads
             </button>
             <button onClick={() => setShowElevation(v => !v)}
               className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
@@ -759,7 +788,7 @@ export default function Planning() {
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-sm text-white text-xs font-medium px-4 py-2 rounded-full border border-slate-700 pointer-events-none">
               {mode === 'draw_polygon' && `Click to add vertices • Double-click to finish`}
               {mode === 'place_turbine' && `Placing: ${selectedTurbineType?.manufacturer} ${selectedTurbineType?.model} — click map`}
-              {mode === 'draw_cable' && `Click two points to draw a cable route (${selectedCableType?.name})`}
+              {mode === 'draw_cable' && `Click to add waypoints • Double-click to finish cable (${selectedCableType?.name})`}
               {mode === 'place_substation' && `Click map to place a substation — then click it to edit attributes`}
             </div>
           )}
