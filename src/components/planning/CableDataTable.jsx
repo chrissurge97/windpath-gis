@@ -7,32 +7,45 @@ function cableMVA(ct) {
   return +(Math.sqrt(3) * ct.voltage_kv * ct.ampacity_a / 1000).toFixed(1);
 }
 
-function calcCableLoad(cableId, cables, turbines, visited = new Set()) {
+function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = new Set()) {
   if (visited.has(cableId)) return 0;
   visited.add(cableId);
 
   const cable = cables.find(c => c.id === cableId);
   if (!cable) return 0;
-  const nodes = [cable.properties.start_node, cable.properties.end_node].filter(Boolean);
+
+  const start = cable.properties.start_node;
+  const end = cable.properties.end_node;
+
+  let upstreamNode = null;
+  if (fromNodeId !== null) {
+    if (start?.id === fromNodeId) upstreamNode = end;
+    else if (end?.id === fromNodeId) upstreamNode = start;
+    else return 0;
+  } else {
+    if (end?.type === 'substation') upstreamNode = start;
+    else if (start?.type === 'substation') upstreamNode = end;
+    else upstreamNode = start;
+  }
+
+  if (!upstreamNode) return 0;
+
   let total = 0;
-  for (const n of nodes) {
-    if (n.type === 'turbine') {
-      const t = turbines.find(t => t.id === n.id);
-      total += t?.properties?.rated_power_mw || 0;
-    }
+  if (upstreamNode.type === 'turbine') {
+    const t = turbines.find(t => t.id === upstreamNode.id);
+    total += t?.properties?.rated_power_mw || 0;
   }
-  const turbineNodeIds = nodes.filter(n => n.type === 'turbine').map(n => n.id);
-  for (const tid of turbineNodeIds) {
-    const feedingCables = cables.filter(c =>
-      c.id !== cableId && (
-        c.properties.start_node?.id === tid ||
-        c.properties.end_node?.id === tid
-      )
-    );
-    for (const fc of feedingCables) {
-      total += calcCableLoad(fc.id, cables, turbines, visited);
-    }
+
+  const feedingCables = cables.filter(c =>
+    c.id !== cableId && (
+      c.properties.start_node?.id === upstreamNode.id ||
+      c.properties.end_node?.id === upstreamNode.id
+    )
+  );
+  for (const fc of feedingCables) {
+    total += calcCableLoad(fc.id, cables, turbines, upstreamNode.id, new Set(visited));
   }
+
   return total;
 }
 

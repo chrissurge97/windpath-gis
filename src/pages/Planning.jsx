@@ -76,54 +76,85 @@ function findSnapNode(latlng, turbines, substations, map) {
 }
 
 // ── Topology: compute cumulative MW load carried by a cable ─────────────────
-// Returns total MW that flows through `cableId` (turbines upstream in string)
-function calcCableLoad(cableId, cables, turbines, visited = new Set()) {
+// Power flows FROM the upstream node (away from substation) TOWARD the downstream node.
+// A cable's load = power of turbine(s) at its upstream node
+//                + loads of all OTHER cables whose downstream node is that same upstream node.
+//
+// "upstreamNode" = the node of this cable that is NOT a substation, and is not the
+//                  node that other cables are flowing FROM toward.
+// We determine direction by: given we're coming from `fromNodeId` (the downstream side),
+// the upstream side is the OTHER end of this cable.
+
+function turbineMW(nodeId, turbines) {
+  const t = turbines.find(t => t.id === nodeId);
+  return t?.properties?.rated_power_mw || 0;
+}
+
+// Returns the MW load flowing through cableId, given that flow is coming FROM fromNodeId
+// (i.e. fromNodeId is the downstream end — toward the substation).
+// If fromNodeId is null, we detect direction: substation end is downstream.
+function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = new Set()) {
   if (visited.has(cableId)) return 0;
   visited.add(cableId);
 
   const cable = cables.find(c => c.id === cableId);
   if (!cable) return 0;
 
-  const nodes = [cable.properties.start_node, cable.properties.end_node].filter(Boolean);
+  const start = cable.properties.start_node;
+  const end = cable.properties.end_node;
 
-  let total = 0;
-  for (const n of nodes) {
-    if (n.type === 'turbine') {
-      const t = turbines.find(t => t.id === n.id);
-      total += t?.properties?.rated_power_mw || 0;
+  // Determine upstream node (the end we're collecting power FROM)
+  let upstreamNode = null;
+  if (fromNodeId !== null) {
+    // We know which end is downstream (fromNodeId) — upstream is the other end
+    if (start?.id === fromNodeId) upstreamNode = end;
+    else if (end?.id === fromNodeId) upstreamNode = start;
+    else return 0; // cable not actually connected to fromNodeId
+  } else {
+    // No direction hint: pick the non-substation end as upstream
+    // (substation is always the sink/downstream)
+    if (end?.type === 'substation') upstreamNode = start;
+    else if (start?.type === 'substation') upstreamNode = end;
+    else {
+      // Neither end is a substation — pick start as upstream by default
+      upstreamNode = start;
     }
   }
 
-  const turbineNodeIds = nodes.filter(n => n.type === 'turbine').map(n => n.id);
-  for (const tid of turbineNodeIds) {
-    const feedingCables = cables.filter(c =>
-      c.id !== cableId && (
-        c.properties.start_node?.id === tid ||
-        c.properties.end_node?.id === tid
-      )
-    );
-    for (const fc of feedingCables) {
-      total += calcCableLoad(fc.id, cables, turbines, visited);
-    }
+  if (!upstreamNode) return 0;
+
+  let total = 0;
+
+  // Add power of the turbine at the upstream node (if it's a turbine)
+  if (upstreamNode.type === 'turbine') {
+    total += turbineMW(upstreamNode.id, turbines);
+  }
+
+  // Add loads of all OTHER cables that deliver power INTO the upstream node
+  // (i.e. cables connected to upstreamNode where upstreamNode is their downstream end)
+  const feedingCables = cables.filter(c =>
+    c.id !== cableId && (
+      c.properties.start_node?.id === upstreamNode.id ||
+      c.properties.end_node?.id === upstreamNode.id
+    )
+  );
+  for (const fc of feedingCables) {
+    // For each feeding cable, upstreamNode is their DOWNSTREAM end (they flow INTO it)
+    total += calcCableLoad(fc.id, cables, turbines, upstreamNode.id, new Set(visited));
   }
 
   return total;
 }
 
 // ── Substation total load: sum cables feeding INTO the substation ────────────
-// Only count cables where the substation is the END node (receiving power)
 function calcSubstationLoad(substationId, cables, turbines) {
-  const connectedCables = cables.filter(c =>
+  const incomingCables = cables.filter(c =>
     c.properties.start_node?.id === substationId ||
     c.properties.end_node?.id === substationId
   );
-  return connectedCables.reduce((sum, c) => {
-    // Only sum cables that bring power TO this substation (not export cables leaving it)
-    const isReceiving =
-      c.properties.end_node?.id === substationId ||
-      (c.properties.start_node?.id === substationId && c.properties.end_node?.type !== 'substation');
-    if (!isReceiving) return sum;
-    return sum + calcCableLoad(c.id, cables, turbines);
+  return incomingCables.reduce((sum, c) => {
+    // Flow direction: substation is downstream, so pass substationId as fromNodeId
+    return sum + calcCableLoad(c.id, cables, turbines, substationId, new Set());
   }, 0);
 }
 
@@ -818,13 +849,16 @@ export default function Planning() {
                   const overloaded = usedMw > 0 && usedA > (ct?.ampacity_a || 0);
                   const isSelected = cableMenuFeature?.id === f.id;
                   const nonSelectMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation'].includes(mode);
+                  // Capture a stable snapshot of the feature for the click handler
+                  const fSnapshot = f;
                   return <Polyline key={f.id} positions={positions}
                     pathOptions={{ color: isSelected ? '#38bdf8' : overloaded ? '#ef4444' : (ct?.color || '#f97316'), weight: isSelected ? 5 : overloaded ? 4 : 3, opacity: 0.9, dashArray: overloaded ? '8 4' : undefined }}
+                    bubblingMouseEvents={false}
                     eventHandlers={{
                       click: (e) => {
                         if (nonSelectMode) return;
-                        L.DomEvent.stopPropagation(e);
-                        setCableMenuFeature(f);
+                        L.DomEvent.stop(e);
+                        setCableMenuFeature(fSnapshot);
                         setTurbineMenuFeature(null);
                         setSubstationMenuFeature(null);
                         setPolygonMenuFeature(null);
@@ -1175,7 +1209,7 @@ export default function Planning() {
 
           {/* Cable popup menu */}
           {cableMenuFeature && (() => {
-            const cf = cableMenuFeature;
+            const cf = cables.find(c => c.id === cableMenuFeature.id) || cableMenuFeature;
             const ct = cableTypes.find(t => t.id === cf.properties.cable_type_id) || cableTypes[0];
             const usedMw = calcCableLoad(cf.id, cables, turbines);
             const capacityMVA = ct ? +(Math.sqrt(3) * ct.voltage_kv * ct.ampacity_a / 1000).toFixed(1) : 0;
