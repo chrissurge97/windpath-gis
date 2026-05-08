@@ -10,7 +10,8 @@ import { cn } from '@/lib/utils';
 import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
   Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target,
-  Save, Layers, Settings, X, Satellite, Mountain, Navigation
+  Save, Layers, Settings, X, Satellite, Mountain, Navigation,
+  ChevronDown, ArrowUp, ArrowDown, PlusCircle
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { createLayer, createFeature, geoJSONToLayer, downloadJSON, layersToGeoJSON, DEFAULT_POWER_CURVE, windAtHubHeight, calcTurbineAEP } from '@/lib/gisUtils';
@@ -134,8 +135,10 @@ export default function Planning() {
   const [windParams, setWindParams] = useState({ k: 2.0, lambda: 8.0 });
 
   // Map display state
-  const [satelliteView, setSatelliteView] = useState(false);
-  const [roadsView, setRoadsView] = useState(false);
+  const [baseMap, setBaseMap] = useState('dark'); // 'dark' | 'satellite' | 'roads'
+  const [showBaseMapMenu, setShowBaseMapMenu] = useState(false);
+  const satelliteView = baseMap === 'satellite';
+  const roadsView = baseMap === 'roads';
   const [showElevation, setShowElevation] = useState(false);
   const [showWindLayer, setShowWindLayer] = useState(true);
   const [showSubstations, setShowSubstations] = useState(true);
@@ -150,6 +153,8 @@ export default function Planning() {
   const [turbineMenuRadius, setTurbineMenuRadius] = useState(500);
   const [turbineMenuShowRadius, setTurbineMenuShowRadius] = useState(false);
   const [turbineRadii, setTurbineRadii] = useState({}); // featureId -> { radius, show }
+  const [turbineMenuCustomFields, setTurbineMenuCustomFields] = useState({}); // { label: value }
+  const [turbineMenuPolygonId, setTurbineMenuPolygonId] = useState('');
 
   // Polygon menu state
   const [polygonMenuFeature, setPolygonMenuFeature] = useState(null);
@@ -390,6 +395,8 @@ export default function Planning() {
     const existing = turbineRadii[f.id];
     setTurbineMenuRadius(existing?.radius || 500);
     setTurbineMenuShowRadius(existing?.show || false);
+    setTurbineMenuCustomFields(f.properties.custom_fields || {});
+    setTurbineMenuPolygonId(f.properties.assigned_polygon_id || '');
   };
 
   const applyTurbineMenu = () => {
@@ -402,6 +409,8 @@ export default function Planning() {
       rated_power_mw: tt.rated_power_mw,
       rotor_diameter: tt.rotor_diameter_m,
       hub_height: tt.hub_height_m,
+      custom_fields: turbineMenuCustomFields,
+      assigned_polygon_id: turbineMenuPolygonId || null,
     });
     setTurbineRadii(prev => ({
       ...prev,
@@ -604,22 +613,20 @@ export default function Planning() {
                   const polyOpts = { ...pathOpts, color: polyColor, fillColor: polyColor,
                     weight: isEditing ? 2.5 : pathOpts.weight,
                     dashArray: isEditing ? '6 4' : undefined };
+                  // In non-select modes, let clicks bubble through to the map handler
+                  const nonSelectMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation'].includes(mode);
                   return (
                     <React.Fragment key={f.id}>
                       <Polygon positions={positions} pathOptions={polyOpts}
-                        bubblingMouseEvents={false}
+                        bubblingMouseEvents={nonSelectMode}
                         eventHandlers={{
                           click: (e) => {
-                            if (['place_turbine', 'draw_cable', 'draw_polygon'].includes(mode)) {
-                              addPoint(e.latlng);
+                            if (nonSelectMode) return; // let it bubble
+                            L.DomEvent.stopPropagation(e);
+                            if (isEditing) {
+                              insertPolygonVertex(f.id, layer.id, e.latlng.lat, e.latlng.lng);
                             } else {
-                              L.DomEvent.stopPropagation(e);
-                              if (isEditing) {
-                                // Click on polygon edge while editing → insert vertex
-                                insertPolygonVertex(f.id, layer.id, e.latlng.lat, e.latlng.lng);
-                              } else {
-                                openPolygonMenu(f, layer.id);
-                              }
+                              openPolygonMenu(f, layer.id);
                             }
                           }
                         }}
@@ -761,18 +768,33 @@ export default function Planning() {
 
           {/* Map layer toggles */}
           <div className="absolute top-3 right-3 z-[1000] flex flex-col gap-1.5">
-            <button onClick={() => { setSatelliteView(v => !v); setRoadsView(false); }}
-              className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
-                satelliteView ? "bg-blue-500/30 text-blue-300 border-blue-500/50" : "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
-              )}>
-              <Satellite className="w-3 h-3" /> Satellite
-            </button>
-            <button onClick={() => { setRoadsView(v => !v); setSatelliteView(false); }}
-              className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
-                roadsView ? "bg-green-500/30 text-green-300 border-green-500/50" : "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
-              )}>
-              <Navigation className="w-3 h-3" /> Roads
-            </button>
+            {/* Base map picker */}
+            <div className="relative">
+              <button
+                onClick={() => setShowBaseMapMenu(v => !v)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg bg-slate-900/90 border-slate-700 text-slate-300 hover:text-white"
+              >
+                {baseMap === 'satellite' ? <Satellite className="w-3 h-3 text-blue-400" /> : baseMap === 'roads' ? <Navigation className="w-3 h-3 text-green-400" /> : <Map className="w-3 h-3 text-slate-400" />}
+                {baseMap === 'satellite' ? 'Satellite' : baseMap === 'roads' ? 'Roads' : 'Dark'}
+                <ChevronDown className={cn("w-3 h-3 text-slate-500 transition-transform", showBaseMapMenu && "rotate-180")} />
+              </button>
+              {showBaseMapMenu && (
+                <div className="absolute top-full right-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl overflow-hidden min-w-[110px]">
+                  {[
+                    { id: 'dark', label: 'Dark', Icon: Map },
+                    { id: 'satellite', label: 'Satellite', Icon: Satellite },
+                    { id: 'roads', label: 'Roads', Icon: Navigation },
+                  ].map(({ id, label, Icon }) => (
+                    <button key={id} onClick={() => { setBaseMap(id); setShowBaseMapMenu(false); }}
+                      className={cn("flex items-center gap-2 w-full px-3 py-2 text-[10px] font-medium transition-colors",
+                        baseMap === id ? "bg-emerald-500/20 text-emerald-300" : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                      )}>
+                      <Icon className="w-3 h-3" /> {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button onClick={() => setShowElevation(v => !v)}
               className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
                 showElevation ? "bg-amber-500/30 text-amber-300 border-amber-500/50" : "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
@@ -850,6 +872,63 @@ export default function Planning() {
                       Ø{menuTt.rotor_diameter_m}m · {menuTt.hub_height_m}m hub · {menuTt.cut_in_ms}–{menuTt.cut_out_ms} m/s
                     </p>
                   )}
+                </div>
+
+                {/* Custom fields */}
+                <div className="mb-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] text-slate-400">Custom Fields</label>
+                    <button
+                      onClick={() => {
+                        const label = `Field ${Object.keys(turbineMenuCustomFields).length + 1}`;
+                        setTurbineMenuCustomFields(prev => ({ ...prev, [label]: '' }));
+                      }}
+                      className="flex items-center gap-0.5 text-[10px] text-slate-500 hover:text-emerald-400">
+                      <PlusCircle className="w-3 h-3" /> Add
+                    </button>
+                  </div>
+                  {Object.entries(turbineMenuCustomFields).map(([label, val]) => (
+                    <div key={label} className="flex items-center gap-1 mb-1">
+                      <input
+                        value={label}
+                        onChange={e => {
+                          const newKey = e.target.value;
+                          setTurbineMenuCustomFields(prev => {
+                            const entries = Object.entries(prev).map(([k, v]) => k === label ? [newKey, v] : [k, v]);
+                            return Object.fromEntries(entries);
+                          });
+                        }}
+                        className="w-24 bg-slate-800 border border-slate-600 rounded px-1.5 py-0.5 text-[10px] text-slate-300 outline-none"
+                        placeholder="Label"
+                      />
+                      <input
+                        value={val}
+                        onChange={e => setTurbineMenuCustomFields(prev => ({ ...prev, [label]: e.target.value }))}
+                        className="flex-1 bg-slate-800 border border-slate-600 rounded px-1.5 py-0.5 text-[10px] text-white outline-none"
+                        placeholder="Value"
+                      />
+                      <button onClick={() => setTurbineMenuCustomFields(prev => { const n = { ...prev }; delete n[label]; return n; })}
+                        className="text-slate-600 hover:text-red-400 shrink-0">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  {/* Assign to polygon */}
+                  <div className="mt-2">
+                    <label className="text-[10px] text-slate-400 block mb-1">Assign to Zone / Polygon</label>
+                    <select
+                      value={turbineMenuPolygonId}
+                      onChange={e => setTurbineMenuPolygonId(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 text-white text-[10px] rounded px-2 py-1 outline-none"
+                    >
+                      <option value="">— None —</option>
+                      {layers.filter(l => !['turbine','cable','substation','wind_resource'].includes(l.type)).flatMap(l =>
+                        l.features.filter(f => f.geometry.type === 'Polygon').map(f => (
+                          <option key={f.id} value={f.id}>{l.name} › {f.properties.name || f.id.slice(0,8)}</option>
+                        ))
+                      )}
+                    </select>
+                  </div>
                 </div>
 
                 {/* Setback radius */}
@@ -1153,14 +1232,44 @@ export default function Planning() {
                     <Plus className="w-3 h-3" /> Add Zone
                   </button>
                 </div>
-                {layers.map(layer => (
+                <p className="text-[9px] text-slate-600">Higher layers render on top. Use ↑↓ to reorder.</p>
+                {layers.map((layer, idx) => (
                   <div key={layer.id} onClick={() => setSelectedLayerId(layer.id)}
-                    className={cn("flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all",
+                    className={cn("flex items-center gap-1.5 p-2 rounded-lg border cursor-pointer transition-all",
                       layer.id === selectedLayerId ? "bg-slate-700 border-slate-600" : "bg-slate-800/50 border-slate-700 hover:border-slate-600"
                     )}>
                     <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: layer.color }} />
                     <span className="flex-1 text-xs text-slate-300 truncate">{layer.name}</span>
                     <span className="text-[10px] text-slate-600 shrink-0">{layer.features.length}</span>
+                    {/* Z-order controls */}
+                    <div className="flex flex-col gap-0 shrink-0">
+                      <button
+                        disabled={idx === 0}
+                        onClick={e => {
+                          e.stopPropagation();
+                          setLayers(prev => {
+                            const a = [...prev];
+                            [a[idx - 1], a[idx]] = [a[idx], a[idx - 1]];
+                            return a;
+                          });
+                        }}
+                        className="p-0.5 text-slate-600 hover:text-white disabled:opacity-20">
+                        <ArrowUp className="w-2.5 h-2.5" />
+                      </button>
+                      <button
+                        disabled={idx === layers.length - 1}
+                        onClick={e => {
+                          e.stopPropagation();
+                          setLayers(prev => {
+                            const a = [...prev];
+                            [a[idx], a[idx + 1]] = [a[idx + 1], a[idx]];
+                            return a;
+                          });
+                        }}
+                        className="p-0.5 text-slate-600 hover:text-white disabled:opacity-20">
+                        <ArrowDown className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
                     <button onClick={e => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
                       className="text-slate-500 hover:text-white p-0.5 shrink-0">
                       {layer.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}

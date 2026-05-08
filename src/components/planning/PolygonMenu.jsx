@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Trash2 } from 'lucide-react';
+import { X, Trash2, Plus, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const PRESET_COLORS = [
@@ -68,12 +68,8 @@ export default function PolygonMenu({ feature, layer, onApply, onDelete, onClose
           <input
             type="text"
             value={color}
-            onChange={e => {
-              const v = e.target.value;
-              setColor(v);
-            }}
+            onChange={e => setColor(e.target.value)}
             onBlur={e => {
-              // Normalise: ensure valid hex
               const v = e.target.value;
               if (/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(v)) setColor(v);
             }}
