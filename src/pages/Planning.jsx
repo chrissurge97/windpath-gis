@@ -617,10 +617,10 @@ export default function Planning() {
     const res = calcWeibullAEP(hubSpd, pc, windParams.k, windParams.lambda);
     return s + (res?.aep_mwh || t.properties.aep_mwh || 0);
   }, 0);
-  const totalAEP = totalAEP_stored; // used for map overlay KPIs
-  const avgCapFactor = totalCapacity_mw > 0 ? ((totalAEP / (totalCapacity_mw * 8760)) * 100).toFixed(1) : 0;
-  // Live cap factor for analysis tab
-  const liveCapFactor = totalCapacity_mw > 0 ? ((totalAEP_live / (totalCapacity_mw * 8760)) * 100).toFixed(1) : 0;
+  // Both map overlay and analysis tab now use live Weibull AEP so sliders update everything
+  const totalAEP = totalAEP_live;
+  const avgCapFactor = totalCapacity_mw > 0 ? ((totalAEP_live / (totalCapacity_mw * 8760)) * 100).toFixed(1) : 0;
+  const liveCapFactor = avgCapFactor;
   const avgWindSpeed = turbines.length > 0
     ? (turbines.reduce((s, t) => s + (t.properties.hub_wind_speed || 0), 0) / turbines.length).toFixed(1)
     : null;
@@ -851,21 +851,31 @@ export default function Planning() {
                   const nonSelectMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation'].includes(mode);
                   // Capture a stable snapshot of the feature for the click handler
                   const fSnapshot = f;
-                  return <Polyline key={f.id} positions={positions}
-                    pathOptions={{ color: isSelected ? '#38bdf8' : overloaded ? '#ef4444' : (ct?.color || '#f97316'), weight: isSelected ? 5 : overloaded ? 4 : 3, opacity: 0.9, dashArray: overloaded ? '8 4' : undefined }}
-                    bubblingMouseEvents={false}
-                    eventHandlers={{
-                      click: (e) => {
-                        if (nonSelectMode) return;
-                        L.DomEvent.stop(e);
-                        setCableMenuFeature(fSnapshot);
-                        setTurbineMenuFeature(null);
-                        setSubstationMenuFeature(null);
-                        setPolygonMenuFeature(null);
-                        setRightTab('cables');
-                      }
-                    }}
-                  />;
+                  const visWeight = isSelected ? 5 : overloaded ? 4 : 3;
+                  return (
+                    <React.Fragment key={f.id}>
+                      {/* Invisible wide hit-area so cables are easy to click */}
+                      <Polyline positions={positions}
+                        pathOptions={{ color: 'transparent', weight: 20, opacity: 0 }}
+                        bubblingMouseEvents={false}
+                        eventHandlers={{
+                          click: (e) => {
+                            if (nonSelectMode) return;
+                            L.DomEvent.stop(e);
+                            setCableMenuFeature(fSnapshot);
+                            setTurbineMenuFeature(null);
+                            setSubstationMenuFeature(null);
+                            setPolygonMenuFeature(null);
+                            setRightTab('cables');
+                          }
+                        }}
+                      />
+                      {/* Visible cable line (non-interactive — hit-area above handles clicks) */}
+                      <Polyline positions={positions}
+                        pathOptions={{ color: isSelected ? '#38bdf8' : overloaded ? '#ef4444' : (ct?.color || '#f97316'), weight: visWeight, opacity: 0.9, dashArray: overloaded ? '8 4' : undefined, interactive: false }}
+                      />
+                    </React.Fragment>
+                  );
                 }
 
                 if (f.geometry.type === 'Point' && layer.type === 'turbine') {
