@@ -744,6 +744,8 @@ export default function Planning() {
               totalCableCost,
               windParams,
               monthlyData,
+              layers,
+              mapEl: mapRef.current?.getContainer ? mapRef.current.getContainer() : null,
             })}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-purple-800/40 border border-purple-700/50 text-purple-300 hover:bg-purple-700/40"
             title="Download PDF summary report"

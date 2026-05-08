@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // ── Colour helpers ──────────────────────────────────────────────────────────
 function hexToRgb(hex) {
@@ -35,8 +36,176 @@ function drawBarChart(doc, x, y, w, h, data, label) {
   });
 }
 
+// ── Map page (A0 landscape) ──────────────────────────────────────────────────
+async function addMapPage(doc, mapEl, layers, projectName) {
+  // A0 landscape: 1189 x 841 mm
+  doc.addPage('a0', 'landscape');
+  const PW = 1189;
+  const PH = 841;
+  const MARGIN = 20;
+  const LEGEND_W = 120;
+
+  // Dark background
+  setFill(doc, '#0f172a');
+  doc.rect(0, 0, PW, PH, 'F');
+
+  // Header band
+  setFill(doc, '#1e293b');
+  doc.rect(0, 0, PW, 28, 'F');
+  setFill(doc, '#10b981');
+  doc.rect(0, 26, PW, 2, 'F');
+
+  setTextColor(doc, '#ffffff');
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text(projectName || 'Wind Farm Project', MARGIN, 17);
+
+  setTextColor(doc, '#64748b');
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Site Drawing — Planning Layout', MARGIN, 24);
+
+  setTextColor(doc, '#10b981');
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text('EagleView Academy', PW - MARGIN, 17, { align: 'right' });
+
+  // Map image area
+  const mapX = MARGIN;
+  const mapY = 34;
+  const mapW = PW - MARGIN * 2 - LEGEND_W - 8;
+  const mapH = PH - mapY - MARGIN;
+
+  // Capture map using html2canvas
+  if (mapEl) {
+    try {
+      const canvas = await html2canvas(mapEl, {
+        useCORS: true,
+        allowTaint: true,
+        scale: 1.5,
+        backgroundColor: '#0f172a',
+        logging: false,
+      });
+      const imgData = canvas.toDataURL('image/jpeg', 0.88);
+      doc.addImage(imgData, 'JPEG', mapX, mapY, mapW, mapH);
+    } catch (e) {
+      // fallback: grey placeholder
+      setFill(doc, '#1e293b');
+      doc.rect(mapX, mapY, mapW, mapH, 'F');
+      setTextColor(doc, '#475569');
+      doc.setFontSize(12);
+      doc.text('Map capture unavailable', mapX + mapW / 2, mapY + mapH / 2, { align: 'center' });
+    }
+  }
+
+  // Map border
+  setDrawColor(doc, '#334155');
+  doc.setLineWidth(0.5);
+  doc.rect(mapX, mapY, mapW, mapH);
+
+  // ── Legend panel ────────────────────────────────────────────────────────────
+  const legX = PW - MARGIN - LEGEND_W;
+  const legY = mapY;
+  const legH = mapH;
+
+  setFill(doc, '#1e293b');
+  doc.roundedRect(legX, legY, LEGEND_W, legH, 3, 3, 'F');
+  setDrawColor(doc, '#334155');
+  doc.setLineWidth(0.3);
+  doc.roundedRect(legX, legY, LEGEND_W, legH, 3, 3);
+
+  setFill(doc, '#10b981');
+  doc.rect(legX, legY, LEGEND_W, 10, 'F');
+  setTextColor(doc, '#ffffff');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('MAP LEGEND', legX + LEGEND_W / 2, legY + 7, { align: 'center' });
+
+  let ly = legY + 16;
+
+  const legLine = (label, color, symbol = 'rect') => {
+    if (ly > legY + legH - 10) return;
+    setFill(doc, color);
+    if (symbol === 'circle') {
+      doc.circle(legX + 8, ly - 1.5, 3, 'F');
+    } else if (symbol === 'line') {
+      setDrawColor(doc, color);
+      doc.setLineWidth(1.2);
+      doc.line(legX + 5, ly - 1.5, legX + 13, ly - 1.5);
+    } else {
+      doc.rect(legX + 5, ly - 4, 8, 5, 'F');
+    }
+    setTextColor(doc, '#cbd5e1');
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    const lines = doc.splitTextToSize(label, LEGEND_W - 20);
+    doc.text(lines, legX + 16, ly);
+    ly += Math.max(8, lines.length * 5);
+  };
+
+  // Fixed items
+  legLine('Turbine', '#10b981', 'circle');
+  legLine('Cable (33kV)', '#f97316', 'line');
+  legLine('Substation', '#facc15', 'rect');
+
+  // Polygon layers from the layers array
+  const polyLayers = (layers || []).filter(l =>
+    !['turbine', 'cable', 'substation', 'wind_resource'].includes(l.type) &&
+    l.features?.some(f => f.geometry?.type === 'Polygon')
+  );
+
+  if (polyLayers.length > 0) {
+    ly += 3;
+    setFill(doc, '#0f172a');
+    doc.rect(legX + 2, ly - 3, LEGEND_W - 4, 0.5, 'F');
+    setTextColor(doc, '#64748b');
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'bold');
+    doc.text('ZONES / POLYGONS', legX + LEGEND_W / 2, ly + 1, { align: 'center' });
+    ly += 7;
+
+    for (const layer of polyLayers) {
+      // Collect unique polygon names from this layer
+      const names = [...new Set(
+        layer.features
+          .filter(f => f.geometry?.type === 'Polygon')
+          .map(f => f.properties?.name || layer.name)
+      )];
+      for (const name of names) {
+        legLine(name, layer.color || '#06b6d4', 'rect');
+      }
+    }
+  }
+
+  // North arrow (simple)
+  const naX = mapX + mapW - 14;
+  const naY = mapY + mapH - 22;
+  setFill(doc, '#ffffff');
+  doc.circle(naX, naY, 8, 'F');
+  setFill(doc, '#0f172a');
+  doc.circle(naX, naY, 7, 'F');
+  setTextColor(doc, '#ffffff');
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+  doc.text('N', naX, naY - 1, { align: 'center' });
+  setFill(doc, '#ffffff');
+  doc.triangle(naX, naY - 5, naX - 2.5, naY + 1, naX + 2.5, naY + 1, 'F');
+
+  // Scale note
+  setTextColor(doc, '#64748b');
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Scale: Not to scale — indicative planning layout only', mapX + 4, mapY + mapH - 3);
+
+  // Footer
+  const footerY = PH - 5;
+  setTextColor(doc, '#475569');
+  doc.setFontSize(7);
+  doc.text(`Drawing produced: ${new Date().toLocaleDateString('en-IE', { dateStyle: 'long' })}   |   EagleView Academy Wind Farm Planning Tool   |   For indicative purposes only`, PW / 2, footerY, { align: 'center' });
+}
+
 // ── Main export function ─────────────────────────────────────────────────────
-export function exportProjectPDF({
+export async function exportProjectPDF({
   projectName,
   turbines,
   turbineTypes,
@@ -51,6 +220,8 @@ export function exportProjectPDF({
   totalCableCost,
   windParams,
   monthlyData,
+  layers,
+  mapEl,
 }) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const PW = 210; // page width
@@ -310,6 +481,9 @@ export function exportProjectPDF({
   doc.setFont('helvetica', 'normal');
   doc.text('EagleView Academy — Wind Farm Planning Tool', ML, footerY + 2);
   doc.text('Estimates only. Not for use in formal planning submissions.', PW - MR, footerY + 2, { align: 'right' });
+
+  // ── Map drawing page (A0 landscape) ────────────────────────────────────────
+  await addMapPage(doc, mapEl, layers, projectName);
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const safeName = (projectName || 'wind-farm').replace(/[^a-z0-9]/gi, '-').toLowerCase();
