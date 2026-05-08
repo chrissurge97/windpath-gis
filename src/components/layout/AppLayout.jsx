@@ -60,7 +60,7 @@ export default function AppLayout() {
           </div>
           {!sidebarCollapsed && (
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm leading-tight">GIS Wind Trainer</p>
+              <p className="font-bold text-sm leading-tight">EagleView Academy</p>
               <p className="text-[10px] text-slate-500">Renewable Energy Training</p>
             </div>
           )}
@@ -166,7 +166,7 @@ export default function AppLayout() {
           </button>
           <div className="flex items-center gap-2">
             <Wind className="w-4 h-4 text-emerald-400" />
-            <span className="font-semibold text-sm">GIS Wind Trainer</span>
+            <span className="font-semibold text-sm">EagleView Academy</span>
           </div>
           <div className="ml-auto text-xs text-emerald-400 font-medium">Lv.{progress.level}</div>
         </header>
