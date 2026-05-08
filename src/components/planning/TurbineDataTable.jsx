@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Trash2, Edit2, Check, X, Wind, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export default function TurbineDataTable({ turbines, turbineTypes, selectedTypeId, onSelectType, onDeleteTurbine, onUpdateTurbine, turbineLayer }) {
+export default function TurbineDataTable({ turbines, turbineTypes, selectedTypeId, onSelectType, onDeleteTurbine, onUpdateTurbine, turbineLayer, onFlyTo }) {
   const [editingId, setEditingId] = useState(null);
   const [editVals, setEditVals] = useState({});
   const [showTypeSelect, setShowTypeSelect] = useState(false);
@@ -89,7 +89,7 @@ export default function TurbineDataTable({ turbines, turbineTypes, selectedTypeI
           const isEditing = editingId === t.id;
           const p = t.properties;
           return (
-            <div key={t.id} className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
+            <div key={t.id} className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden cursor-pointer hover:border-slate-500 transition-colors" onClick={() => onFlyTo && onFlyTo(t)}>
               <div className="flex items-center gap-2 px-2.5 py-2">
                 <div className="w-2 h-2 rounded-full shrink-0" style={{ background: selectedType?.color || '#10b981' }} />
                 {isEditing ? (
@@ -104,13 +104,13 @@ export default function TurbineDataTable({ turbines, turbineTypes, selectedTypeI
                 <div className="flex items-center gap-0.5 shrink-0">
                   {isEditing ? (
                     <>
-                      <button onClick={() => commitEdit(t)} className="p-1 text-emerald-400 hover:text-emerald-300"><Check className="w-3 h-3" /></button>
-                      <button onClick={() => setEditingId(null)} className="p-1 text-slate-500 hover:text-white"><X className="w-3 h-3" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); commitEdit(t); }} className="p-1 text-emerald-400 hover:text-emerald-300"><Check className="w-3 h-3" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); setEditingId(null); }} className="p-1 text-slate-500 hover:text-white"><X className="w-3 h-3" /></button>
                     </>
                   ) : (
-                    <button onClick={() => startEdit(t)} className="p-1 text-slate-600 hover:text-slate-300"><Edit2 className="w-3 h-3" /></button>
+                    <button onClick={(e) => { e.stopPropagation(); startEdit(t); }} className="p-1 text-slate-600 hover:text-slate-300"><Edit2 className="w-3 h-3" /></button>
                   )}
-                  <button onClick={() => onDeleteTurbine(t.id)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                  <button onClick={(e) => { e.stopPropagation(); onDeleteTurbine(t.id); }} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
                 </div>
               </div>
               {/* Data rows */}

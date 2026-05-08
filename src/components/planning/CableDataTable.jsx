@@ -35,7 +35,7 @@ function calcCableLoad(cableId, cables, turbines) {
 
 export default function CableDataTable({
   cables, cableTypes, selectedCableTypeId, onSelectCableType,
-  onDeleteCable, onUpdateCableType, onUpdateCable, turbines = [], substations = []
+  onDeleteCable, onUpdateCableType, onUpdateCable, turbines = [], substations = [], onFlyTo
 }) {
   const [showTypeSelect, setShowTypeSelect] = useState(false);
   const [editingTypeId, setEditingTypeId] = useState(null);
@@ -179,9 +179,9 @@ export default function CableDataTable({
 
           return (
             <div key={c.id} className={cn(
-              "border rounded-lg overflow-hidden",
+              "border rounded-lg overflow-hidden cursor-pointer hover:border-slate-500 transition-colors",
               isOverloaded ? "border-red-500/50 bg-red-500/5" : "border-slate-700 bg-slate-800/50"
-            )}>
+            )} onClick={() => onFlyTo && onFlyTo(c)}>
               {/* Header row */}
               <div className="flex items-center gap-2 px-2.5 py-2">
                 <div className="w-2 h-2 rounded shrink-0" style={{ background: ctype?.color || '#f97316' }} />
@@ -189,11 +189,11 @@ export default function CableDataTable({
                 {isOverloaded && <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
                 {usedMw > 0 && !isOverloaded && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
                 {hasConnections && <Link className="w-3 h-3 text-yellow-400 shrink-0" />}
-                <button onClick={() => setExpandedCableId(isExpanded ? null : c.id)}
+                <button onClick={(e) => { e.stopPropagation(); setExpandedCableId(isExpanded ? null : c.id); }}
                   className="p-0.5 text-slate-500 hover:text-white">
                   <ChevronDown className={cn("w-3 h-3 transition-transform", isExpanded && "rotate-180")} />
                 </button>
-                <button onClick={() => onDeleteCable(c.id)} className="p-0.5 text-slate-600 hover:text-red-400">
+                <button onClick={(e) => { e.stopPropagation(); onDeleteCable(c.id); }} className="p-0.5 text-slate-600 hover:text-red-400">
                   <Trash2 className="w-3 h-3" />
                 </button>
               </div>

@@ -231,6 +231,9 @@ export default function Planning() {
   // Substation popup menu state
   const [substationMenuFeature, setSubstationMenuFeature] = useState(null);
 
+  // Cable popup menu state
+  const [cableMenuFeature, setCableMenuFeature] = useState(null);
+
   // Turbine popup menu state
   const [turbineMenuFeature, setTurbineMenuFeature] = useState(null);
   const [turbineMenuTypeId, setTurbineMenuTypeId] = useState(null);
@@ -517,6 +520,22 @@ export default function Planning() {
     setTurbineMenuFeature(null);
   };
 
+  // ── Fly map to a feature ───────────────────────────────────────────────────
+  const flyToFeature = useCallback((feature) => {
+    if (!mapRef.current || !feature) return;
+    const geo = feature.geometry;
+    if (geo.type === 'Point') {
+      const [lng, lat] = geo.coordinates;
+      mapRef.current.flyTo([lat, lng], Math.max(mapRef.current.getZoom(), 14), { animate: true, duration: 0.8 });
+    } else if (geo.type === 'LineString') {
+      const latlngs = geo.coordinates.map(([lng, lat]) => [lat, lng]);
+      mapRef.current.flyToBounds(L.latLngBounds(latlngs), { padding: [60, 60], animate: true, duration: 0.8 });
+    } else if (geo.type === 'Polygon') {
+      const latlngs = geo.coordinates[0].map(([lng, lat]) => [lat, lng]);
+      mapRef.current.flyToBounds(L.latLngBounds(latlngs), { padding: [60, 60], animate: true, duration: 0.8 });
+    }
+  }, []);
+
   const handleLoadDemo = () => {
     if (!window.confirm('Load the Ballycraggan Wind Farm demo? This will replace your current project.')) return;
     const demo = buildDemoProject();
@@ -775,35 +794,25 @@ export default function Planning() {
                 if (f.geometry.type === 'LineString') {
                   const ct = cableTypes.find(t => t.id === f.properties.cable_type_id) || cableTypes[0];
                   const positions = f.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-                  const capacityMVA = ct ? +(Math.sqrt(3) * ct.voltage_kv * ct.ampacity_a / 1000).toFixed(1) : 0;
                   const usedMw = calcCableLoad(f.id, cables, turbines);
                   const usedA = ct ? +(usedMw * 1000 / (Math.sqrt(3) * ct.voltage_kv)).toFixed(0) : 0;
                   const overloaded = usedMw > 0 && usedA > (ct?.ampacity_a || 0);
-                  const startN = f.properties.start_node;
-                  const endN = f.properties.end_node;
-                  const nodeLabel = (n) => {
-                    if (!n) return '—';
-                    if (n.type === 'turbine') return turbines.find(t => t.id === n.id)?.properties?.name || 'Turbine';
-                    if (n.type === 'substation') return substations.find(s => s.id === n.id)?.properties?.name || 'Substation';
-                    return '—';
-                  };
+                  const isSelected = cableMenuFeature?.id === f.id;
+                  const nonSelectMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation'].includes(mode);
                   return <Polyline key={f.id} positions={positions}
-                    pathOptions={{ color: overloaded ? '#ef4444' : (ct?.color || '#f97316'), weight: overloaded ? 4 : 3, opacity: 0.85, dashArray: overloaded ? '8 4' : undefined }}>
-                    <Popup>
-                      <div className="text-xs min-w-40">
-                        <p className="font-bold mb-1">{f.properties.name}</p>
-                        <p>Type: {ct?.name}</p>
-                        <p>Length: {(f.properties.length_m / 1000).toFixed(2)} km</p>
-                        <p>Cost: £{(f.properties.length_m * (ct?.cost_per_m || 0)).toFixed(0)}</p>
-                        <p>Capacity: {ct?.ampacity_a}A / {capacityMVA} MVA</p>
-                        <p style={{ color: '#94a3b8' }}>From: {nodeLabel(startN)} → To: {nodeLabel(endN)}</p>
-                        {usedMw > 0 && <p style={{ color: overloaded ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>
-                          Load: {usedA}A ({usedMw.toFixed(1)} MW){overloaded ? ' ⚠ OVERLOADED' : ' ✓ OK'}
-                        </p>}
-                        {usedMw === 0 && <p style={{ color: '#64748b' }}>No connected turbines</p>}
-                      </div>
-                    </Popup>
-                  </Polyline>;
+                    pathOptions={{ color: isSelected ? '#38bdf8' : overloaded ? '#ef4444' : (ct?.color || '#f97316'), weight: isSelected ? 5 : overloaded ? 4 : 3, opacity: 0.9, dashArray: overloaded ? '8 4' : undefined }}
+                    eventHandlers={{
+                      click: (e) => {
+                        if (nonSelectMode) return;
+                        L.DomEvent.stopPropagation(e);
+                        setCableMenuFeature(f);
+                        setTurbineMenuFeature(null);
+                        setSubstationMenuFeature(null);
+                        setPolygonMenuFeature(null);
+                        setRightTab('cables');
+                      }
+                    }}
+                  />;
                 }
 
                 if (f.geometry.type === 'Point' && layer.type === 'turbine') {
@@ -886,10 +895,10 @@ export default function Planning() {
               const subCapMw = s.properties.capacity_generation_mw || 0;
               const subOverloaded = subTotalMw > 0 && subTotalMw > subCapMw;
               const subIcon = L.divIcon({
-                html: `<div style="width:14px;height:14px;background:${subOverloaded ? '#ef4444' : '#facc15'};border:2px solid #fff;border-radius:3px;box-shadow:0 0 6px ${subOverloaded ? '#ef444499' : '#facc1599'};display:flex;align-items:center;justify-content:center;">
+                html: `<div style="width:16px;height:16px;background:${subOverloaded ? '#ef4444' : '#facc15'};border:2px solid #fff;border-radius:3px;box-shadow:0 0 6px ${subOverloaded ? '#ef444499' : '#facc1599'};display:flex;align-items:center;justify-content:center;">
                   <div style="width:6px;height:6px;background:#000;border-radius:1px;opacity:0.5"></div>
                 </div>`,
-                className: '', iconSize: [14, 14], iconAnchor: [7, 7],
+                className: '', iconSize: [16, 16], iconAnchor: [8, 8],
               });
               return (
                 <Marker key={`sub-${s.id}`} position={[lat, lng]} icon={subIcon}
@@ -914,29 +923,29 @@ export default function Planning() {
           </MapContainer>
 
           {/* Map layer toggles */}
-          <div className="absolute top-3 right-3 z-[1000] flex flex-col gap-1.5">
+          <div className="absolute top-3 right-3 z-[1100] flex flex-col gap-1.5">
             {/* Base map picker */}
             <div className="relative">
               <button
                 onClick={() => setShowBaseMapMenu(v => !v)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg bg-slate-900/90 border-slate-700 text-slate-300 hover:text-white"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg bg-slate-900 border-slate-700 text-slate-300 hover:text-white w-full"
               >
                 {baseMap === 'satellite' ? <Satellite className="w-3 h-3 text-blue-400" /> : baseMap === 'roads' ? <Navigation className="w-3 h-3 text-green-400" /> : <Map className="w-3 h-3 text-slate-400" />}
-                {baseMap === 'satellite' ? 'Satellite' : baseMap === 'roads' ? 'Roads' : 'Dark'}
+                <span className="flex-1 text-left">{baseMap === 'satellite' ? 'Satellite' : baseMap === 'roads' ? 'Roads' : 'Dark'}</span>
                 <ChevronDown className={cn("w-3 h-3 text-slate-500 transition-transform", showBaseMapMenu && "rotate-180")} />
               </button>
               {showBaseMapMenu && (
-                <div className="absolute top-full right-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl overflow-hidden min-w-[110px]">
+                <div className="absolute top-full right-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl overflow-hidden min-w-[110px] z-[1200]">
                   {[
-                    { id: 'dark', label: 'Dark', Icon: Map },
-                    { id: 'satellite', label: 'Satellite', Icon: Satellite },
-                    { id: 'roads', label: 'Roads', Icon: Navigation },
-                  ].map(({ id, label, Icon }) => (
+                    { id: 'dark', label: 'Dark', Ic: Map },
+                    { id: 'satellite', label: 'Satellite', Ic: Satellite },
+                    { id: 'roads', label: 'Roads', Ic: Navigation },
+                  ].map(({ id, label, Ic }) => (
                     <button key={id} onClick={() => { setBaseMap(id); setShowBaseMapMenu(false); }}
                       className={cn("flex items-center gap-2 w-full px-3 py-2 text-[10px] font-medium transition-colors",
                         baseMap === id ? "bg-emerald-500/20 text-emerald-300" : "text-slate-400 hover:bg-slate-800 hover:text-white"
                       )}>
-                      <Icon className="w-3 h-3" /> {label}
+                      <Ic className="w-3 h-3" /> {label}
                     </button>
                   ))}
                 </div>
@@ -944,13 +953,13 @@ export default function Planning() {
             </div>
             <button onClick={() => setShowElevation(v => !v)}
               className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
-                showElevation ? "bg-amber-500/30 text-amber-300 border-amber-500/50" : "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
+                showElevation ? "bg-amber-500/30 text-amber-300 border-amber-500/50" : "bg-slate-900 text-slate-400 border-slate-700 hover:text-white"
               )}>
               <Mountain className="w-3 h-3" /> Elevation
             </button>
             <button onClick={() => setShowWindLayer(v => !v)}
               className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
-                showWindLayer ? "bg-cyan-500/30 text-cyan-300 border-cyan-500/50" : "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
+                showWindLayer ? "bg-cyan-500/30 text-cyan-300 border-cyan-500/50" : "bg-slate-900 text-slate-400 border-slate-700 hover:text-white"
               )}>
               <Wind className="w-3 h-3" /> Wind
             </button>
@@ -958,7 +967,7 @@ export default function Planning() {
               className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
                 showSubstations && substations.length > 0 ? "bg-yellow-500/30 text-yellow-300 border-yellow-500/50" :
                 showSubstations ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" :
-                "bg-slate-900/90 text-slate-400 border-slate-700 hover:text-white"
+                "bg-slate-900 text-slate-400 border-slate-700 hover:text-white"
               )}>
               <Zap className="w-3 h-3" />
               {`Substations${substations.length > 0 ? ` (${substations.length})` : ''}`}
@@ -1145,6 +1154,68 @@ export default function Planning() {
             />
           )}
 
+          {/* Cable popup menu */}
+          {cableMenuFeature && (() => {
+            const cf = cableMenuFeature;
+            const ct = cableTypes.find(t => t.id === cf.properties.cable_type_id) || cableTypes[0];
+            const usedMw = calcCableLoad(cf.id, cables, turbines);
+            const capacityMVA = ct ? +(Math.sqrt(3) * ct.voltage_kv * ct.ampacity_a / 1000).toFixed(1) : 0;
+            const usedA = ct ? +(usedMw * 1000 / (Math.sqrt(3) * ct.voltage_kv)).toFixed(0) : 0;
+            const remainingA = Math.max(0, (ct?.ampacity_a || 0) - usedA);
+            const remainingMW = ct ? +(remainingA * Math.sqrt(3) * ct.voltage_kv / 1000).toFixed(1) : 0;
+            const loadPct = ct?.ampacity_a > 0 ? Math.min(100, (usedA / ct.ampacity_a) * 100) : 0;
+            const overloaded = usedMw > 0 && usedA > (ct?.ampacity_a || 0);
+            const nodeLabel = (n) => {
+              if (!n) return 'Free end';
+              if (n.type === 'turbine') return turbines.find(t => t.id === n.id)?.properties?.name || 'Turbine';
+              if (n.type === 'substation') return substations.find(s => s.id === n.id)?.properties?.name || 'Substation';
+              return '—';
+            };
+            return (
+              <div className="absolute top-14 left-4 z-[1200] bg-slate-900 border border-orange-500/40 rounded-xl shadow-2xl p-4 w-72">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] text-orange-400 uppercase tracking-wider font-medium">⚡ Cable</span>
+                  <button onClick={() => setCableMenuFeature(null)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+                </div>
+                <p className="text-sm font-bold text-white mb-3 truncate">{cf.properties.name}</p>
+                {/* Load bar */}
+                <div className="mb-3">
+                  <div className="flex justify-between text-[10px] mb-1">
+                    <span className="text-slate-500">Load utilisation</span>
+                    <span className={cn("font-bold", overloaded ? "text-red-400" : loadPct > 80 ? "text-amber-400" : "text-emerald-400")}>
+                      {loadPct.toFixed(0)}%{overloaded ? ' ⚠ OVERLOADED' : ''}
+                    </span>
+                  </div>
+                  <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div className={cn("h-full rounded-full", overloaded ? "bg-red-500" : loadPct > 80 ? "bg-amber-400" : "bg-emerald-500")}
+                      style={{ width: `${Math.min(100, loadPct)}%` }} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 text-[10px] mb-3">
+                  <div className="bg-slate-800 rounded px-2 py-1.5"><p className="text-slate-500">Type</p><p className="text-white font-medium truncate">{ct?.name || '—'}</p></div>
+                  <div className="bg-slate-800 rounded px-2 py-1.5"><p className="text-slate-500">Length</p><p className="text-orange-400 font-medium">{((cf.properties.length_m || 0) / 1000).toFixed(2)} km</p></div>
+                  <div className="bg-slate-800 rounded px-2 py-1.5"><p className="text-slate-500">Capacity</p><p className="text-cyan-400 font-medium">{ct?.ampacity_a}A / {capacityMVA} MVA</p></div>
+                  <div className="bg-slate-800 rounded px-2 py-1.5"><p className="text-slate-500">Load</p><p className={cn("font-medium", overloaded ? "text-red-400" : "text-emerald-400")}>{usedA}A ({usedMw.toFixed(1)} MW)</p></div>
+                  <div className="bg-slate-800 rounded px-2 py-1.5 col-span-2"><p className="text-slate-500">Remaining capacity</p><p className={cn("font-bold", overloaded ? "text-red-400" : "text-emerald-400")}>{overloaded ? 'OVERLOADED' : `${remainingA}A / ${remainingMW} MW spare`}</p></div>
+                  <div className="bg-slate-800 rounded px-2 py-1.5"><p className="text-slate-500">From</p><p className="text-slate-300 font-medium truncate">{nodeLabel(cf.properties.start_node)}</p></div>
+                  <div className="bg-slate-800 rounded px-2 py-1.5"><p className="text-slate-500">To</p><p className="text-slate-300 font-medium truncate">{nodeLabel(cf.properties.end_node)}</p></div>
+                  <div className="bg-slate-800 rounded px-2 py-1.5"><p className="text-slate-500">Cost</p><p className="text-yellow-400 font-medium">£{((cf.properties.length_m || 0) * (ct?.cost_per_m || 0)).toFixed(0)}</p></div>
+                  <div className="bg-slate-800 rounded px-2 py-1.5"><p className="text-slate-500">Voltage</p><p className="text-purple-400 font-medium">{ct?.voltage_kv} kV</p></div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setCableMenuFeature(null)}
+                    className="flex-1 py-1.5 bg-orange-600/20 hover:bg-orange-600/30 text-orange-300 text-xs font-medium rounded-lg border border-orange-600/30 transition-colors">
+                    Done
+                  </button>
+                  <button onClick={() => { cableLayer && deleteFeature(cableLayer.id, cf.id); setCableMenuFeature(null); }}
+                    className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs rounded-lg transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Substation popup menu */}
           {substationMenuFeature && (() => {
             const [lng, lat] = substationMenuFeature.geometry.coordinates;
@@ -1278,6 +1349,7 @@ export default function Planning() {
                 onDeleteTurbine={(id) => turbineLayer && deleteFeature(turbineLayer.id, id)}
                 onUpdateTurbine={updateTurbineProps}
                 turbineLayer={turbineLayer}
+                onFlyTo={flyToFeature}
               />
             )}
 
@@ -1298,6 +1370,7 @@ export default function Planning() {
                 }}
                 turbines={turbines}
                 substations={substations}
+                onFlyTo={flyToFeature}
               />
             )}
 
@@ -1398,7 +1471,20 @@ export default function Planning() {
                 </div>
                 <p className="text-[9px] text-slate-600">Higher layers render on top. Use ↑↓ to reorder.</p>
                 {layers.map((layer, idx) => (
-                  <div key={layer.id} onClick={() => setSelectedLayerId(layer.id)}
+                  <div key={layer.id} onClick={() => {
+                    setSelectedLayerId(layer.id);
+                    // Fly to the bounds of all features in this layer
+                    if (mapRef.current && layer.features.length > 0) {
+                      const allPts = layer.features.flatMap(f => {
+                        const g = f.geometry;
+                        if (g.type === 'Point') return [[g.coordinates[1], g.coordinates[0]]];
+                        if (g.type === 'LineString') return g.coordinates.map(([lng, lat]) => [lat, lng]);
+                        if (g.type === 'Polygon') return g.coordinates[0].map(([lng, lat]) => [lat, lng]);
+                        return [];
+                      });
+                      if (allPts.length > 0) mapRef.current.flyToBounds(L.latLngBounds(allPts), { padding: [60, 60], animate: true, duration: 0.8 });
+                    }
+                  }}
                     className={cn("flex items-center gap-1.5 p-2 rounded-lg border cursor-pointer transition-all",
                       layer.id === selectedLayerId ? "bg-slate-700 border-slate-600" : "bg-slate-800/50 border-slate-700 hover:border-slate-600"
                     )}>
