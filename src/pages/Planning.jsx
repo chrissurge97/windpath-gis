@@ -53,13 +53,97 @@ function haversineM(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// ── Snap to nearest turbine/substation (pixel distance on screen) ───────────
+const SNAP_PX = 25; // pixels
+function findSnapNode(latlng, turbines, substations, map) {
+  if (!map) return null;
+  const clickPt = map.latLngToContainerPoint(latlng);
+  let best = null, bestDist = SNAP_PX;
+  for (const t of turbines) {
+    const [lng, lat] = t.geometry.coordinates;
+    const pt = map.latLngToContainerPoint([lat, lng]);
+    const d = Math.hypot(pt.x - clickPt.x, pt.y - clickPt.y);
+    if (d < bestDist) { bestDist = d; best = { type: 'turbine', id: t.id, lat, lng }; }
+  }
+  for (const s of substations) {
+    const [lng, lat] = s.geometry.coordinates;
+    const pt = map.latLngToContainerPoint([lat, lng]);
+    const d = Math.hypot(pt.x - clickPt.x, pt.y - clickPt.y);
+    if (d < bestDist) { bestDist = d; best = { type: 'substation', id: s.id, lat, lng }; }
+  }
+  return best;
+}
+
+// ── Topology: compute cumulative MW load carried by a cable ─────────────────
+// Returns total MW that flows through `cableId` (turbines upstream in string)
+function calcCableLoad(cableId, cables, turbines) {
+  const cable = cables.find(c => c.id === cableId);
+  if (!cable) return 0;
+
+  // Collect all turbines directly connected as start/end nodes on this cable
+  const directTurbineMW = (nodeList) => {
+    let mw = 0;
+    for (const n of nodeList) {
+      if (n.type === 'turbine') {
+        const t = turbines.find(t => t.id === n.id);
+        mw += t?.properties?.rated_power_mw || 0;
+      }
+    }
+    return mw;
+  };
+
+  const nodes = [cable.properties.start_node, cable.properties.end_node].filter(Boolean);
+  // Direct turbine MW on this cable's endpoints
+  let total = directTurbineMW(nodes);
+
+  // Also add any cables feeding INTO turbine nodes of this cable
+  // i.e. if a turbine is the END of another cable, that cable's load also flows through here
+  // We do a simple recursive search (no cycle protection needed for trees)
+  const turbineNodeIds = nodes.filter(n => n.type === 'turbine').map(n => n.id);
+  for (const tid of turbineNodeIds) {
+    // Find cables that have this turbine as an endpoint (other than this cable)
+    const feedingCables = cables.filter(c =>
+      c.id !== cableId && (
+        c.properties.start_node?.id === tid ||
+        c.properties.end_node?.id === tid
+      )
+    );
+    for (const fc of feedingCables) {
+      total += calcCableLoad(fc.id, cables, turbines);
+    }
+  }
+
+  return total;
+}
+
+// ── Substation total load: sum all cables connecting to it ──────────────────
+function calcSubstationLoad(substationId, cables, turbines) {
+  const connectedCables = cables.filter(c =>
+    c.properties.start_node?.id === substationId ||
+    c.properties.end_node?.id === substationId
+  );
+  return connectedCables.reduce((sum, c) => sum + calcCableLoad(c.id, cables, turbines), 0);
+}
+
+function MapMouseHandler({ mode, turbines, substations, onSnapPreview }) {
+  useMapEvents({
+    mousemove(e) {
+      if (mode !== 'draw_cable') { onSnapPreview(null); return; }
+      // We need the map instance — use e.target
+      const snap = findSnapNode(e.latlng, turbines, substations, e.target);
+      onSnapPreview(snap);
+    },
+  });
+  return null;
+}
+
 function MapClickHandler({ mode, onAddPoint, onFinishPolygon, onFinishCable }) {
   const lastClickTime = useRef(0);
-  useMapEvents({
+  const mapRef = useRef(null);
+  const map = useMapEvents({
     click(e) {
       if (!['place_turbine', 'draw_polygon', 'draw_cable', 'place_substation'].includes(mode)) return;
       const now = Date.now();
-      // Suppress the spurious single-click that fires just before dblclick
       if (now - lastClickTime.current < 350) {
         if (mode === 'draw_polygon') { e.originalEvent.preventDefault(); onFinishPolygon(); }
         if (mode === 'draw_cable') { e.originalEvent.preventDefault(); onFinishCable(); }
@@ -70,7 +154,7 @@ function MapClickHandler({ mode, onAddPoint, onFinishPolygon, onFinishCable }) {
       const latlng = e.latlng;
       setTimeout(() => {
         if (Date.now() - lastClickTime.current >= 300) {
-          onAddPoint(latlng);
+          onAddPoint(latlng, map);
         }
       }, 300);
     },
@@ -163,6 +247,10 @@ export default function Planning() {
   // Vertex edit mode: featureId -> [[lat,lng],...]
   const [editingPolygonId, setEditingPolygonId] = useState(null);
 
+  // Cable snap state: stores snapped node for start/end of current cable
+  const [drawingSnapNodes, setDrawingSnapNodes] = useState([]); // array of { type, id, lat, lng } or null per point
+  const [snapPreview, setSnapPreview] = useState(null); // node being hovered near
+
   const substationLayer = layers.find(l => l.type === 'substation');
   const substations = substationLayer?.features || [];
 
@@ -184,14 +272,17 @@ export default function Planning() {
   }, []);
 
   // ── Map interactions ───────────────────────────────────────────────────────
-  const addPoint = async (latlng) => {
+  const addPoint = async (latlng, map) => {
     if (mode === 'draw_polygon') {
       setDrawingPoints(prev => [...prev, [latlng.lat, latlng.lng]]);
       return;
     }
 
     if (mode === 'draw_cable') {
-      setDrawingPoints(prev => [...prev, [latlng.lat, latlng.lng]]);
+      const snap = findSnapNode(latlng, turbines, substations, map);
+      const point = snap ? [snap.lat, snap.lng] : [latlng.lat, latlng.lng];
+      setDrawingPoints(prev => [...prev, point]);
+      setDrawingSnapNodes(prev => [...prev, snap || null]);
       return;
     }
 
@@ -286,22 +377,26 @@ export default function Planning() {
     if (drawingPoints.length < 2) return;
     const cLayer = layers.find(l => l.type === 'cable');
     if (!cLayer) return;
-    // Calculate total length along all segments
     let totalLen = 0;
     for (let i = 0; i < drawingPoints.length - 1; i++) {
       totalLen += haversineM(drawingPoints[i][0], drawingPoints[i][1], drawingPoints[i+1][0], drawingPoints[i+1][1]);
     }
+    const startNode = drawingSnapNodes[0] || null;
+    const endNode = drawingSnapNodes[drawingSnapNodes.length - 1] || null;
     const f = createFeature(cLayer.id,
       { type: 'LineString', coordinates: drawingPoints.map(([lat, lng]) => [lng, lat]) },
       {
         name: `Cable ${cLayer.features.length + 1}`,
         cable_type_id: selectedCableTypeId,
         length_m: +totalLen.toFixed(0),
+        start_node: startNode ? { type: startNode.type, id: startNode.id } : null,
+        end_node: endNode ? { type: endNode.type, id: endNode.id } : null,
       }
     );
     updateLayer(cLayer.id, { features: [...cLayer.features, f] });
     setDrawingPoints([]);
-    // Keep draw_cable mode so user can draw another cable immediately
+    setDrawingSnapNodes([]);
+    setSnapPreview(null);
   };
 
   const deleteFeature = (layerId, featureId) => {
@@ -495,6 +590,8 @@ export default function Planning() {
           <button key={id} onClick={() => {
             setMode(id);
             setDrawingPoints([]);
+            setDrawingSnapNodes([]);
+            setSnapPreview(null);
             setTurbineMenuFeature(null);
             setPolygonMenuFeature(null);
             setEditingPolygonId(null);
@@ -595,6 +692,7 @@ export default function Planning() {
               />
             )}
             <MapClickHandler mode={mode} onAddPoint={addPoint} onFinishPolygon={finishPolygon} onFinishCable={finishCable} />
+            <MapMouseHandler mode={mode} turbines={turbines} substations={substations} onSnapPreview={setSnapPreview} />
 
             {layers.map(layer => {
               if (!layer.visible) return null;
@@ -658,26 +756,31 @@ export default function Planning() {
                   const ct = cableTypes.find(t => t.id === f.properties.cable_type_id) || cableTypes[0];
                   const positions = f.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
                   const capacityMVA = ct ? +(Math.sqrt(3) * ct.voltage_kv * ct.ampacity_a / 1000).toFixed(1) : 0;
-                  const assignedIds = f.properties.turbine_ids || [];
-                  const usedMw = assignedIds.reduce((s, tid) => {
-                    const t = turbines.find(t => t.id === tid);
-                    return s + (t?.properties?.rated_power_mw || 0);
-                  }, 0);
+                  const usedMw = calcCableLoad(f.id, cables, turbines);
                   const usedA = ct ? +(usedMw * 1000 / (Math.sqrt(3) * ct.voltage_kv)).toFixed(0) : 0;
                   const overloaded = usedMw > 0 && usedA > (ct?.ampacity_a || 0);
+                  const startN = f.properties.start_node;
+                  const endN = f.properties.end_node;
+                  const nodeLabel = (n) => {
+                    if (!n) return '—';
+                    if (n.type === 'turbine') return turbines.find(t => t.id === n.id)?.properties?.name || 'Turbine';
+                    if (n.type === 'substation') return substations.find(s => s.id === n.id)?.properties?.name || 'Substation';
+                    return '—';
+                  };
                   return <Polyline key={f.id} positions={positions}
                     pathOptions={{ color: overloaded ? '#ef4444' : (ct?.color || '#f97316'), weight: overloaded ? 4 : 3, opacity: 0.85, dashArray: overloaded ? '8 4' : undefined }}>
                     <Popup>
-                      <div className="text-xs min-w-36">
+                      <div className="text-xs min-w-40">
                         <p className="font-bold mb-1">{f.properties.name}</p>
                         <p>Type: {ct?.name}</p>
                         <p>Length: {(f.properties.length_m / 1000).toFixed(2)} km</p>
                         <p>Cost: £{(f.properties.length_m * (ct?.cost_per_m || 0)).toFixed(0)}</p>
                         <p>Capacity: {ct?.ampacity_a}A / {capacityMVA} MVA</p>
+                        <p style={{ color: '#94a3b8' }}>From: {nodeLabel(startN)} → To: {nodeLabel(endN)}</p>
                         {usedMw > 0 && <p style={{ color: overloaded ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>
-                          Load: {usedA}A ({usedMw.toFixed(1)} MW){overloaded ? ' ⚠ OVERLOADED' : ''}
+                          Load: {usedA}A ({usedMw.toFixed(1)} MW){overloaded ? ' ⚠ OVERLOADED' : ' ✓ OK'}
                         </p>}
-                        {assignedIds.length > 0 && <p style={{ color: '#94a3b8' }}>{assignedIds.length} turbine{assignedIds.length !== 1 ? 's' : ''} assigned</p>}
+                        {usedMw === 0 && <p style={{ color: '#64748b' }}>No connected turbines</p>}
                       </div>
                     </Popup>
                   </Polyline>;
@@ -717,11 +820,23 @@ export default function Planning() {
               <>
                 <Polyline positions={drawingPoints}
                   pathOptions={{ color: mode === 'draw_cable' ? '#f97316' : '#06b6d4', weight: 2, dashArray: '5 5' }} />
-                {drawingPoints.map((pt, i) => (
-                  <Circle key={i} center={pt} radius={40}
-                    pathOptions={{ color: mode === 'draw_cable' ? '#f97316' : '#06b6d4', fillColor: mode === 'draw_cable' ? '#f97316' : '#06b6d4', fillOpacity: 0.8, weight: 0 }} />
-                ))}
+                {drawingPoints.map((pt, i) => {
+                  const snap = drawingSnapNodes[i];
+                  const color = mode === 'draw_cable' ? (snap ? '#facc15' : '#f97316') : '#06b6d4';
+                  return (
+                    <Circle key={i} center={pt} radius={snap ? 80 : 40}
+                      pathOptions={{ color, fillColor: color, fillOpacity: 0.9, weight: snap ? 2 : 0 }} />
+                  );
+                })}
               </>
+            )}
+            {/* Snap preview ring */}
+            {snapPreview && mode === 'draw_cable' && (
+              <Circle
+                center={[snapPreview.lat, snapPreview.lng]}
+                radius={120}
+                pathOptions={{ color: '#facc15', fillColor: '#facc15', fillOpacity: 0.25, weight: 2, dashArray: '4 3' }}
+              />
             )}
 
             {/* Wind speed heatmap circles */}
@@ -747,18 +862,30 @@ export default function Planning() {
                 </div>`,
                 className: '', iconSize: [14, 14], iconAnchor: [7, 7],
               });
+              const subTotalMw = calcSubstationLoad(s.id, cables, turbines);
+              const subCapMw = s.properties.capacity_generation_mw || 0;
+              const subOverloaded = subTotalMw > 0 && subTotalMw > subCapMw;
+              const subIcon = L.divIcon({
+                html: `<div style="width:14px;height:14px;background:${subOverloaded ? '#ef4444' : '#facc15'};border:2px solid #fff;border-radius:3px;box-shadow:0 0 6px ${subOverloaded ? '#ef444499' : '#facc1599'};display:flex;align-items:center;justify-content:center;">
+                  <div style="width:6px;height:6px;background:#000;border-radius:1px;opacity:0.5"></div>
+                </div>`,
+                className: '', iconSize: [14, 14], iconAnchor: [7, 7],
+              });
               return (
-                <Marker key={`sub-${s.id}`} position={[lat, lng]} icon={substIcon}
+                <Marker key={`sub-${s.id}`} position={[lat, lng]} icon={subIcon}
                   eventHandlers={{
                     click: (e) => {
                       if (mode === 'select') { L.DomEvent.stopPropagation(e); setSubstationMenuFeature(s); setTurbineMenuFeature(null); setPolygonMenuFeature(null); }
                     }
                   }}>
                   <Popup>
-                    <div className="text-xs min-w-32">
+                    <div className="text-xs min-w-36">
                       <p className="font-bold">{s.properties.name}</p>
                       <p className="text-slate-500">{s.properties.transformer_mva} MVA transformer</p>
-                      <p className="text-slate-500">Gen: {s.properties.capacity_generation_mw} MW · Demand: {s.properties.capacity_demand_mw} MW</p>
+                      <p className="text-slate-500">Gen capacity: {subCapMw} MW</p>
+                      {subTotalMw > 0 && <p style={{ color: subOverloaded ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>
+                        Connected load: {subTotalMw.toFixed(1)} MW{subOverloaded ? ' ⚠ OVER CAPACITY' : ' ✓ OK'}
+                      </p>}
                     </div>
                   </Popup>
                 </Marker>
@@ -823,7 +950,7 @@ export default function Planning() {
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-sm text-white text-xs font-medium px-4 py-2 rounded-full border border-slate-700 pointer-events-none">
               {mode === 'draw_polygon' && `Click to add vertices • Double-click to finish`}
               {mode === 'place_turbine' && `Placing: ${selectedTurbineType?.manufacturer} ${selectedTurbineType?.model} — click map`}
-              {mode === 'draw_cable' && `Click to add waypoints • Double-click to finish cable (${selectedCableType?.name})`}
+              {mode === 'draw_cable' && `Click to add waypoints • Hover near turbine/substation to snap • Double-click to finish (${selectedCableType?.name})`}
               {mode === 'place_substation' && `Click map to place a substation — then click it to edit attributes`}
             </div>
           )}
@@ -1003,6 +1130,13 @@ export default function Planning() {
             const [lng, lat] = substationMenuFeature.geometry.coordinates;
             const p = substationMenuFeature.properties;
             const subLayer = layers.find(l => l.type === 'substation');
+            const connectedMw = calcSubstationLoad(substationMenuFeature.id, cables, turbines);
+            const capMw = p.capacity_generation_mw || 0;
+            const subOver = connectedMw > 0 && connectedMw > capMw;
+            const connectedCables = cables.filter(c =>
+              c.properties.start_node?.id === substationMenuFeature.id ||
+              c.properties.end_node?.id === substationMenuFeature.id
+            );
             const updateSubProps = (newProps) => {
               if (!subLayer) return;
               updateLayer(subLayer.id, {
@@ -1017,6 +1151,15 @@ export default function Planning() {
                   <span className="text-[10px] text-yellow-400 uppercase tracking-wider font-medium">⚡ Substation</span>
                   <button onClick={() => setSubstationMenuFeature(null)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
                 </div>
+                {/* Live load summary */}
+                {connectedCables.length > 0 && (
+                  <div className={cn("rounded-lg px-3 py-2 mb-3 text-[10px]", subOver ? "bg-red-500/10 border border-red-500/30" : "bg-emerald-500/10 border border-emerald-500/20")}>
+                    <p className={cn("font-bold", subOver ? "text-red-400" : "text-emerald-400")}>
+                      {subOver ? '⚠ OVER CAPACITY' : '✓ Within capacity'}
+                    </p>
+                    <p className="text-slate-400">{connectedCables.length} cable{connectedCables.length !== 1 ? 's' : ''} connected · {connectedMw.toFixed(1)} / {capMw} MW</p>
+                  </div>
+                )}
                 <div className="space-y-2 mb-3">
                   {[
                     { label: 'Name', key: 'name', type: 'text' },
@@ -1134,6 +1277,7 @@ export default function Planning() {
                   });
                 }}
                 turbines={turbines}
+                substations={substations}
               />
             )}
 

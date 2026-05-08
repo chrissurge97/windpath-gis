@@ -1,31 +1,41 @@
 import React, { useState } from 'react';
-import { Trash2, Edit2, Check, X, Zap, ChevronDown, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Trash2, Edit2, Check, X, Zap, ChevronDown, AlertTriangle, CheckCircle2, Link } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// MVA capacity = √3 × voltage_kv × ampacity_a / 1000
 function cableMVA(ct) {
   if (!ct) return 0;
   return +(Math.sqrt(3) * ct.voltage_kv * ct.ampacity_a / 1000).toFixed(1);
 }
 
-// Sum of rated MW for turbines assigned to this cable
-function usedMW(cable, turbines) {
-  const ids = cable.properties.turbine_ids || [];
-  return ids.reduce((s, tid) => {
-    const t = turbines.find(t => t.id === tid);
-    return s + (t?.properties?.rated_power_mw || 0);
-  }, 0);
-}
-
-// Used amps = usedMW × 1000 / (√3 × voltage_kv)
-function usedAmps(usedMw, voltage_kv) {
-  if (!voltage_kv) return 0;
-  return +(usedMw * 1000 / (Math.sqrt(3) * voltage_kv)).toFixed(0);
+function calcCableLoad(cableId, cables, turbines) {
+  const cable = cables.find(c => c.id === cableId);
+  if (!cable) return 0;
+  const nodes = [cable.properties.start_node, cable.properties.end_node].filter(Boolean);
+  let total = 0;
+  for (const n of nodes) {
+    if (n.type === 'turbine') {
+      const t = turbines.find(t => t.id === n.id);
+      total += t?.properties?.rated_power_mw || 0;
+    }
+  }
+  const turbineNodeIds = nodes.filter(n => n.type === 'turbine').map(n => n.id);
+  for (const tid of turbineNodeIds) {
+    const feedingCables = cables.filter(c =>
+      c.id !== cableId && (
+        c.properties.start_node?.id === tid ||
+        c.properties.end_node?.id === tid
+      )
+    );
+    for (const fc of feedingCables) {
+      total += calcCableLoad(fc.id, cables, turbines);
+    }
+  }
+  return total;
 }
 
 export default function CableDataTable({
   cables, cableTypes, selectedCableTypeId, onSelectCableType,
-  onDeleteCable, onUpdateCableType, onUpdateCable, turbines = []
+  onDeleteCable, onUpdateCableType, onUpdateCable, turbines = [], substations = []
 }) {
   const [showTypeSelect, setShowTypeSelect] = useState(false);
   const [editingTypeId, setEditingTypeId] = useState(null);
@@ -49,14 +59,20 @@ export default function CableDataTable({
     setEditingTypeId(null);
   };
 
-  const toggleTurbine = (cable, turbineId) => {
-    const ids = cable.properties.turbine_ids || [];
-    const newIds = ids.includes(turbineId) ? ids.filter(i => i !== turbineId) : [...ids, turbineId];
-    onUpdateCable(cable.id, { ...cable.properties, turbine_ids: newIds });
-  };
-
   const changeCableType = (cable, newTypeId) => {
     onUpdateCable(cable.id, { ...cable.properties, cable_type_id: newTypeId });
+  };
+
+  const nodeLabel = (n) => {
+    if (!n) return null;
+    if (n.type === 'turbine') return turbines.find(t => t.id === n.id)?.properties?.name || 'Turbine';
+    if (n.type === 'substation') return substations.find(s => s.id === n.id)?.properties?.name || 'Substation';
+    return null;
+  };
+
+  const nodeColor = (n) => {
+    if (!n) return '#64748b';
+    return n.type === 'turbine' ? '#10b981' : '#facc15';
   };
 
   return (
@@ -114,6 +130,12 @@ export default function CableDataTable({
         )}
       </div>
 
+      {/* Snap hint */}
+      <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg px-3 py-2 text-[10px] text-slate-500 flex items-start gap-1.5">
+        <Link className="w-3 h-3 text-yellow-400 shrink-0 mt-0.5" />
+        <span>Hover near a turbine or substation while drawing to <span className="text-yellow-300">snap & connect</span> automatically. Load is calculated from the connected topology.</span>
+      </div>
+
       {/* Summary */}
       {cables.length > 0 && (
         <div className="grid grid-cols-2 gap-2">
@@ -146,12 +168,14 @@ export default function CableDataTable({
           const cost = len * (ctype?.cost_per_m || 0);
           const capacityMVA = cableMVA(ctype);
           const capacityA = ctype?.ampacity_a || 0;
-          const usedMw = usedMW(c, turbines);
-          const usedA = usedAmps(usedMw, ctype?.voltage_kv);
+          const usedMw = calcCableLoad(c.id, cables, turbines);
+          const usedA = ctype?.voltage_kv ? +(usedMw * 1000 / (Math.sqrt(3) * ctype.voltage_kv)).toFixed(0) : 0;
           const loadPct = capacityA > 0 ? (usedA / capacityA) * 100 : 0;
           const isOverloaded = usedMw > 0 && usedA > capacityA;
           const isExpanded = expandedCableId === c.id;
-          const assignedTurbines = (c.properties.turbine_ids || []).map(tid => turbines.find(t => t.id === tid)).filter(Boolean);
+          const startN = c.properties.start_node;
+          const endN = c.properties.end_node;
+          const hasConnections = startN || endN;
 
           return (
             <div key={c.id} className={cn(
@@ -164,6 +188,7 @@ export default function CableDataTable({
                 <span className="text-xs font-semibold text-white flex-1 truncate">{c.properties.name || `Cable ${i + 1}`}</span>
                 {isOverloaded && <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
                 {usedMw > 0 && !isOverloaded && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                {hasConnections && <Link className="w-3 h-3 text-yellow-400 shrink-0" />}
                 <button onClick={() => setExpandedCableId(isExpanded ? null : c.id)}
                   className="p-0.5 text-slate-500 hover:text-white">
                   <ChevronDown className={cn("w-3 h-3 transition-transform", isExpanded && "rotate-180")} />
@@ -173,12 +198,21 @@ export default function CableDataTable({
                 </button>
               </div>
 
+              {/* Connection labels */}
+              {hasConnections && (
+                <div className="flex items-center gap-1 px-2.5 pb-1.5 text-[9px]">
+                  <span style={{ color: nodeColor(startN) }} className="font-medium">{nodeLabel(startN) || 'Free end'}</span>
+                  <span className="text-slate-600">→</span>
+                  <span style={{ color: nodeColor(endN) }} className="font-medium">{nodeLabel(endN) || 'Free end'}</span>
+                </div>
+              )}
+
               {/* Quick stats */}
               <div className="grid grid-cols-2 gap-x-2 px-2.5 pb-2 text-[10px]">
                 <span className="text-slate-500">Length: <span className="text-orange-400">{(len / 1000).toFixed(2)} km</span></span>
                 <span className="text-slate-500">Cost: <span className="text-yellow-400">£{cost.toFixed(0)}</span></span>
                 <span className="text-slate-500">Capacity: <span className="text-cyan-400">{capacityA}A</span> / <span className="text-purple-400">{capacityMVA} MVA</span></span>
-                <span className="text-slate-500">Used: <span className={cn(isOverloaded ? "text-red-400 font-bold" : "text-emerald-400")}>{usedA}A ({usedMw.toFixed(1)} MW)</span></span>
+                <span className="text-slate-500">Load: <span className={cn(isOverloaded ? "text-red-400 font-bold" : usedMw > 0 ? "text-emerald-400" : "text-slate-600")}>{usedA}A ({usedMw.toFixed(1)} MW)</span></span>
               </div>
 
               {/* Load bar */}
@@ -212,33 +246,31 @@ export default function CableDataTable({
                     </select>
                   </div>
 
-                  {/* Assign turbines */}
+                  {/* Topology connections */}
                   <div>
-                    <p className="text-[9px] text-slate-500 mb-1 uppercase tracking-wider">Assign Turbines</p>
-                    {turbines.length === 0 ? (
-                      <p className="text-[10px] text-slate-600">No turbines placed yet.</p>
+                    <p className="text-[9px] text-slate-500 mb-1 uppercase tracking-wider">Connected Nodes</p>
+                    {!hasConnections ? (
+                      <p className="text-[10px] text-slate-600">No turbines or substations snapped. Draw a new cable and hover near a turbine/substation at each endpoint to connect.</p>
                     ) : (
-                      <div className="space-y-0.5 max-h-32 overflow-y-auto">
-                        {turbines.map(t => {
-                          const checked = (c.properties.turbine_ids || []).includes(t.id);
-                          return (
-                            <label key={t.id} className={cn(
-                              "flex items-center gap-2 px-2 py-1 rounded cursor-pointer text-[10px] transition-colors",
-                              checked ? "bg-emerald-500/10 text-emerald-300" : "hover:bg-slate-700 text-slate-400"
-                            )}>
-                              <input type="checkbox" checked={checked} onChange={() => toggleTurbine(c, t.id)}
-                                className="accent-emerald-500 w-3 h-3 shrink-0" />
-                              <span className="font-medium">{t.properties.name}</span>
-                              <span className="ml-auto text-slate-500">{t.properties.rated_power_mw} MW</span>
-                            </label>
-                          );
-                        })}
+                      <div className="space-y-1">
+                        {[{ label: 'Start', node: startN }, { label: 'End', node: endN }].map(({ label, node }) => (
+                          <div key={label} className="flex items-center gap-2 text-[10px]">
+                            <span className="text-slate-600 w-8">{label}:</span>
+                            {node ? (
+                              <span className="font-medium" style={{ color: nodeColor(node) }}>
+                                {node.type === 'turbine' ? '🔵' : '⚡'} {nodeLabel(node)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-600 italic">unconnected</span>
+                            )}
+                          </div>
+                        ))}
+                        {usedMw > 0 && (
+                          <p className="text-[9px] text-slate-500 mt-1 pt-1 border-t border-slate-700">
+                            Cumulative string load: <span className={isOverloaded ? 'text-red-400 font-bold' : 'text-emerald-400'}>{usedMw.toFixed(1)} MW ({usedA}A)</span>
+                          </p>
+                        )}
                       </div>
-                    )}
-                    {assignedTurbines.length > 0 && (
-                      <p className="text-[9px] text-slate-500 mt-1">
-                        {assignedTurbines.length} turbine{assignedTurbines.length !== 1 ? 's' : ''} · {usedMw.toFixed(1)} MW total
-                      </p>
                     )}
                   </div>
                 </div>
