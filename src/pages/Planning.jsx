@@ -749,7 +749,15 @@ export default function Planning() {
       <div className="flex flex-1 min-h-0">
         {/* Map */}
         <div className="flex-1 relative min-w-0" style={{ cursor: cursorStyle }}>
-          <MapContainer center={[53.5, -8.0]} zoom={7} style={{ height: '100%', width: '100%' }} zoomControl ref={mapRef}>
+          <MapContainer center={[53.5, -8.0]} zoom={7} style={{ height: '100%', width: '100%' }} zoomControl ref={mapRef}
+            whenReady={(map) => {
+              // Create a pane above the default overlayPane (z-index 400) for cables
+              if (!map.target.getPane('cablePane')) {
+                map.target.createPane('cablePane');
+                map.target.getPane('cablePane').style.zIndex = 450;
+              }
+            }}
+          >
             {satelliteView ? (
               <TileLayer
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
@@ -854,9 +862,10 @@ export default function Planning() {
                   const visWeight = isSelected ? 5 : overloaded ? 4 : 3;
                   return (
                     <React.Fragment key={f.id}>
-                      {/* Invisible wide hit-area so cables are easy to click */}
+                      {/* Visible cable line */}
                       <Polyline positions={positions}
-                        pathOptions={{ color: 'transparent', weight: 20, opacity: 0 }}
+                        pane="cablePane"
+                        pathOptions={{ color: isSelected ? '#38bdf8' : overloaded ? '#ef4444' : (ct?.color || '#f97316'), weight: visWeight, opacity: 0.9, dashArray: overloaded ? '8 4' : undefined }}
                         bubblingMouseEvents={false}
                         eventHandlers={{
                           click: (e) => {
@@ -870,9 +879,22 @@ export default function Planning() {
                           }
                         }}
                       />
-                      {/* Visible cable line (non-interactive — hit-area above handles clicks) */}
+                      {/* Wide transparent hit-area in same elevated pane */}
                       <Polyline positions={positions}
-                        pathOptions={{ color: isSelected ? '#38bdf8' : overloaded ? '#ef4444' : (ct?.color || '#f97316'), weight: visWeight, opacity: 0.9, dashArray: overloaded ? '8 4' : undefined, interactive: false }}
+                        pane="cablePane"
+                        pathOptions={{ color: 'transparent', weight: 20, opacity: 0.001 }}
+                        bubblingMouseEvents={false}
+                        eventHandlers={{
+                          click: (e) => {
+                            if (nonSelectMode) return;
+                            L.DomEvent.stop(e);
+                            setCableMenuFeature(fSnapshot);
+                            setTurbineMenuFeature(null);
+                            setSubstationMenuFeature(null);
+                            setPolygonMenuFeature(null);
+                            setRightTab('cables');
+                          }
+                        }}
                       />
                     </React.Fragment>
                   );
