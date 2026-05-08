@@ -23,6 +23,7 @@ import TurbineTypeEditor from '@/components/planning/TurbineTypeEditor';
 import PolygonMenu from '@/components/planning/PolygonMenu';
 import { DEFAULT_TURBINE_TYPES, DEFAULT_CABLE_TYPES } from '@/lib/turbineTypes';
 import { exportKML } from '@/lib/exportKMZ';
+import { exportProjectPDF } from '@/lib/exportPDF';
 import { buildDemoProject } from '@/lib/demoProject';
 import ExerciseGuide from '@/components/planning/ExerciseGuide';
 import { EXERCISES } from '@/lib/exercises';
@@ -726,6 +727,28 @@ export default function Planning() {
           <button onClick={() => downloadJSON(layersToGeoJSON(layers), `${projectName}.geojson`)}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-400 hover:text-white">
             <Download className="w-3 h-3" /> GeoJSON
+          </button>
+          <button
+            onClick={() => exportProjectPDF({
+              projectName,
+              turbines,
+              turbineTypes,
+              cables,
+              cableTypes,
+              substations,
+              totalCapacity_mw,
+              totalAEP,
+              avgCapFactor,
+              avgWindSpeed,
+              totalCableLength,
+              totalCableCost,
+              windParams,
+              monthlyData,
+            })}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-purple-800/40 border border-purple-700/50 text-purple-300 hover:bg-purple-700/40"
+            title="Download PDF summary report"
+          >
+            <Download className="w-3 h-3" /> PDF Report
           </button>
           <button
             onClick={() => exportKML(layers, turbineTypes, cableTypes, substations, showSubstations, projectName)}
