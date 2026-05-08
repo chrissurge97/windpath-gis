@@ -47,23 +47,56 @@ export function windAtHubHeight(refSpeed, refHeight = 10, hubHeight = 100, alpha
   return +(refSpeed * Math.pow(hubHeight / refHeight, alpha)).toFixed(2);
 }
 
-// ── Simple AEP estimate for a single turbine using power curve ─────────────
-export function calcTurbineAEP(windSpeed, powerCurve) {
-  // powerCurve: [{ v, p_kw }]
-  if (!windSpeed || !powerCurve || powerCurve.length === 0) return null;
-  // Approximate: find power at that mean speed using linear interpolation
-  const sorted = [...powerCurve].sort((a, b) => a.v - b.v);
-  let power = 0;
+// ── Interpolate power curve at a given wind speed ─────────────────────────
+function interpPower(sorted, v) {
+  if (v <= sorted[0].v) return 0;
+  if (v >= sorted[sorted.length - 1].v) return sorted[sorted.length - 1].p_kw;
   for (let i = 0; i < sorted.length - 1; i++) {
-    if (windSpeed >= sorted[i].v && windSpeed <= sorted[i + 1].v) {
-      const t = (windSpeed - sorted[i].v) / (sorted[i + 1].v - sorted[i].v);
-      power = sorted[i].p_kw + t * (sorted[i + 1].p_kw - sorted[i].p_kw);
-      break;
+    if (v >= sorted[i].v && v <= sorted[i + 1].v) {
+      const t = (v - sorted[i].v) / (sorted[i + 1].v - sorted[i].v);
+      return sorted[i].p_kw + t * (sorted[i + 1].p_kw - sorted[i].p_kw);
     }
   }
-  if (windSpeed > sorted[sorted.length - 1].v) power = sorted[sorted.length - 1].p_kw;
+  return 0;
+}
+
+// ── Simple AEP estimate for a single turbine using power curve ─────────────
+export function calcTurbineAEP(windSpeed, powerCurve) {
+  if (!windSpeed || !powerCurve || powerCurve.length === 0) return null;
+  const sorted = [...powerCurve].sort((a, b) => a.v - b.v);
+  const power = interpPower(sorted, windSpeed);
   const aep_mwh = (power * 8760) / 1000;
   return { power_kw: +power.toFixed(1), aep_mwh: +aep_mwh.toFixed(1) };
+}
+
+// ── Weibull-integrated AEP for a turbine ──────────────────────────────────
+// Integrates power curve × Weibull PDF over wind speeds 0–30 m/s
+export function calcWeibullAEP(hubWindSpeed, powerCurve, k, lambda) {
+  if (!hubWindSpeed || !powerCurve || !k || !lambda) return null;
+  // Scale lambda so the Weibull mean matches hubWindSpeed
+  // Weibull mean = lambda * Gamma(1 + 1/k); scale lambda to target
+  const gamma1pk = Math.exp(lgamma(1 + 1 / k));
+  const scaledLambda = hubWindSpeed / gamma1pk;
+
+  const sorted = [...powerCurve].sort((a, b) => a.v - b.v);
+  const dv = 0.5; // integration step m/s
+  let energyKwh = 0;
+  for (let v = 0; v < 30; v += dv) {
+    const pdf = (k / scaledLambda) * Math.pow(v / scaledLambda, k - 1) * Math.exp(-Math.pow(v / scaledLambda, k));
+    const p = interpPower(sorted, v);
+    energyKwh += p * pdf * dv * 8760;
+  }
+  return { aep_mwh: +(energyKwh / 1000).toFixed(1) };
+}
+
+// Stirling approximation for log-gamma (for Weibull mean correction)
+function lgamma(x) {
+  const c = [76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];
+  let y = x, tmp = x + 5.5;
+  tmp -= (x + 0.5) * Math.log(tmp);
+  let ser = 1.000000000190015;
+  for (let j = 0; j < 6; j++) ser += c[j] / ++y;
+  return -tmp + Math.log(2.5066282746310005 * ser / x);
 }
 
 // ── GeoJSON export ─────────────────────────────────────────────────────────

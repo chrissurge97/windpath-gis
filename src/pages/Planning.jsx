@@ -14,7 +14,7 @@ import {
   ChevronDown, ArrowUp, ArrowDown, PlusCircle
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
-import { createLayer, createFeature, geoJSONToLayer, downloadJSON, layersToGeoJSON, DEFAULT_POWER_CURVE, windAtHubHeight, calcTurbineAEP } from '@/lib/gisUtils';
+import { createLayer, createFeature, geoJSONToLayer, downloadJSON, layersToGeoJSON, DEFAULT_POWER_CURVE, windAtHubHeight, calcTurbineAEP, calcWeibullAEP } from '@/lib/gisUtils';
 import { fetchElevation, fetchWindData } from '@/lib/planningUtils';
 import WindResourceRenderer from '@/components/gis/WindResourceLayer';
 import TurbineDataTable from '@/components/planning/TurbineDataTable';
@@ -110,13 +110,21 @@ function calcCableLoad(cableId, cables, turbines, visited = new Set()) {
   return total;
 }
 
-// ── Substation total load: sum all cables connecting to it ──────────────────
+// ── Substation total load: sum cables feeding INTO the substation ────────────
+// Only count cables where the substation is the END node (receiving power)
 function calcSubstationLoad(substationId, cables, turbines) {
   const connectedCables = cables.filter(c =>
     c.properties.start_node?.id === substationId ||
     c.properties.end_node?.id === substationId
   );
-  return connectedCables.reduce((sum, c) => sum + calcCableLoad(c.id, cables, turbines), 0);
+  return connectedCables.reduce((sum, c) => {
+    // Only sum cables that bring power TO this substation (not export cables leaving it)
+    const isReceiving =
+      c.properties.end_node?.id === substationId ||
+      (c.properties.start_node?.id === substationId && c.properties.end_node?.type !== 'substation');
+    if (!isReceiving) return sum;
+    return sum + calcCableLoad(c.id, cables, turbines);
+  }, 0);
 }
 
 function MapMouseHandler({ mode, turbines, substations, onSnapPreview }) {
@@ -562,8 +570,26 @@ export default function Planning() {
 
   // ── Computed stats ─────────────────────────────────────────────────────────
   const totalCapacity_mw = turbines.reduce((s, t) => s + (t.properties.rated_power_mw || selectedTurbineType?.rated_power_mw || 3.5), 0);
-  const totalAEP = turbines.reduce((s, t) => s + (t.properties.aep_mwh || 0), 0);
+  // Stored AEP (used for map KPIs — fixed at placement time)
+  const totalAEP_stored = turbines.reduce((s, t) => s + (t.properties.aep_mwh || 0), 0);
+  // Live Weibull-integrated AEP (used in Analysis tab — responds to k/λ sliders)
+  const totalAEP_live = turbines.reduce((s, t) => {
+    const hubSpd = t.properties.hub_wind_speed;
+    if (!hubSpd) return s + (t.properties.aep_mwh || 0);
+    const tt = turbineTypes.find(ty => ty.id === t.properties.turbine_type_id) || selectedTurbineType;
+    const pc = DEFAULT_POWER_CURVE.map(pt => ({
+      v: pt.v,
+      p_kw: pt.v >= (tt?.cut_in_ms || 3) && pt.v <= (tt?.cut_out_ms || 25)
+        ? Math.min((tt?.rated_power_mw || 3.5) * 1000, pt.p_kw * ((tt?.rated_power_mw || 3.5) / 3.5))
+        : 0,
+    }));
+    const res = calcWeibullAEP(hubSpd, pc, windParams.k, windParams.lambda);
+    return s + (res?.aep_mwh || t.properties.aep_mwh || 0);
+  }, 0);
+  const totalAEP = totalAEP_stored; // used for map overlay KPIs
   const avgCapFactor = totalCapacity_mw > 0 ? ((totalAEP / (totalCapacity_mw * 8760)) * 100).toFixed(1) : 0;
+  // Live cap factor for analysis tab
+  const liveCapFactor = totalCapacity_mw > 0 ? ((totalAEP_live / (totalCapacity_mw * 8760)) * 100).toFixed(1) : 0;
   const avgWindSpeed = turbines.length > 0
     ? (turbines.reduce((s, t) => s + (t.properties.hub_wind_speed || 0), 0) / turbines.length).toFixed(1)
     : null;
@@ -575,7 +601,7 @@ export default function Planning() {
 
   const monthlyFactors = [1.25, 1.15, 1.1, 0.95, 0.8, 0.7, 0.72, 0.75, 0.9, 1.05, 1.15, 1.28];
   const monthlyData = ['J','F','M','A','M','J','J','A','S','O','N','D'].map((m, i) => ({
-    m, e: totalAEP > 0 ? +((totalAEP / 12) * monthlyFactors[i]).toFixed(0) : 0,
+    m, e: totalAEP_live > 0 ? +((totalAEP_live / 12) * monthlyFactors[i]).toFixed(0) : 0,
   }));
 
   const weibullData = Array.from({ length: 25 }, (_, i) => i + 0.5).map(v => {
@@ -886,7 +912,7 @@ export default function Planning() {
               });
               const subTotalMw = calcSubstationLoad(s.id, cables, turbines);
               const subCapMw = s.properties.capacity_generation_mw || 0;
-              const subOverloaded = subTotalMw > 0 && subTotalMw > subCapMw;
+              const subOverloaded = subTotalMw > 0 && subTotalMw > subCapMw + 0.01;
               const subIcon = L.divIcon({
                 html: `<div style="width:16px;height:16px;background:${subOverloaded ? '#ef4444' : '#facc15'};border:2px solid #fff;border-radius:3px;box-shadow:0 0 6px ${subOverloaded ? '#ef444499' : '#facc1599'};display:flex;align-items:center;justify-content:center;">
                   <div style="width:6px;height:6px;background:#000;border-radius:1px;opacity:0.5"></div>
@@ -1216,7 +1242,7 @@ export default function Planning() {
             const subLayer = layers.find(l => l.type === 'substation');
             const connectedMw = calcSubstationLoad(substationMenuFeature.id, cables, turbines);
             const capMw = p.capacity_generation_mw || 0;
-            const subOver = connectedMw > 0 && connectedMw > capMw;
+            const subOver = connectedMw > 0 && connectedMw > capMw + 0.01;
             const connectedCables = cables.filter(c =>
               c.properties.start_node?.id === substationMenuFeature.id ||
               c.properties.end_node?.id === substationMenuFeature.id
@@ -1411,7 +1437,7 @@ export default function Planning() {
                   </ResponsiveContainer>
                 </div>
 
-                {totalAEP > 0 ? (
+                {totalAEP_live > 0 ? (
                   <>
                     <div>
                       <p className="text-[10px] text-slate-500 mb-1.5">Monthly Energy Profile</p>
@@ -1427,9 +1453,9 @@ export default function Planning() {
 
                     <div className="grid grid-cols-2 gap-2">
                       {[
-                        { l: 'Gross AEP', v: `${(totalAEP * 1.1 / 1000).toFixed(1)} GWh`, c: 'text-cyan-400' },
-                        { l: 'Net AEP', v: `${(totalAEP / 1000).toFixed(1)} GWh`, c: 'text-emerald-400' },
-                        { l: 'Cap. Factor', v: `${avgCapFactor}%`, c: 'text-purple-400' },
+                        { l: 'Gross AEP', v: `${(totalAEP_live * 1.1 / 1000).toFixed(1)} GWh`, c: 'text-cyan-400' },
+                        { l: 'Net AEP', v: `${(totalAEP_live / 1000).toFixed(1)} GWh`, c: 'text-emerald-400' },
+                        { l: 'Cap. Factor', v: `${liveCapFactor}%`, c: 'text-purple-400' },
                         { l: 'Avg Hub Wind', v: avgWindSpeed ? `${avgWindSpeed} m/s` : '—', c: 'text-orange-400' },
                         { l: 'Cable Length', v: `${(totalCableLength / 1000).toFixed(2)} km`, c: 'text-yellow-400' },
                         { l: 'Cable Cost', v: `€${(totalCableCost / 1000).toFixed(0)}k`, c: 'text-red-400' },
