@@ -7,6 +7,20 @@ function cableMVA(ct) {
   return +(Math.sqrt(3) * ct.voltage_kv * ct.ampacity_a / 1000).toFixed(1);
 }
 
+// Returns the cheapest cable type that can carry requiredMw at the given voltage
+function cheapestViableType(cableTypes, requiredMw, voltageKv) {
+  // Filter to same voltage, sort by cost ascending, pick first that fits
+  const candidates = cableTypes
+    .filter(ct => ct.voltage_kv === voltageKv)
+    .sort((a, b) => a.cost_per_m - b.cost_per_m);
+  for (const ct of candidates) {
+    const capacityMw = +(Math.sqrt(3) * ct.voltage_kv * ct.ampacity_a / 1000);
+    if (capacityMw >= requiredMw) return ct;
+  }
+  // If nothing fits, return highest capacity
+  return candidates[candidates.length - 1] || cableTypes[0];
+}
+
 function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = new Set()) {
   if (visited.has(cableId)) return 0;
   visited.add(cableId);
@@ -51,7 +65,8 @@ function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = n
 
 export default function CableDataTable({
   cables, cableTypes, selectedCableTypeId, onSelectCableType,
-  onDeleteCable, onUpdateCableType, onUpdateCable, turbines = [], substations = [], onFlyTo
+  onDeleteCable, onUpdateCableType, onUpdateCable, turbines = [], substations = [], onFlyTo,
+  onOptimiseCables,
 }) {
   const [showTypeSelect, setShowTypeSelect] = useState(false);
   const [editingTypeId, setEditingTypeId] = useState(null);
@@ -145,6 +160,17 @@ export default function CableDataTable({
           </div>
         )}
       </div>
+
+      {/* Optimise button */}
+      {cables.length > 0 && (
+        <button
+          onClick={onOptimiseCables}
+          className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 text-xs font-medium hover:bg-emerald-600/30 transition-colors"
+        >
+          <Zap className="w-3.5 h-3.5" />
+          Optimise All Cable Sizes
+        </button>
+      )}
 
       {/* Snap hint */}
       <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg px-3 py-2 text-[10px] text-slate-500 flex items-start gap-1.5">

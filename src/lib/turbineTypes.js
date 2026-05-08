@@ -55,6 +55,17 @@ export const DEFAULT_TURBINE_TYPES = [
 
 export const DEFAULT_CABLE_TYPES = [
   {
+    id: 'mv33-95',
+    name: '33kV 95mm² XLPE',
+    voltage_kv: 33,
+    cross_section_mm2: 95,
+    ampacity_a: 260,
+    resistance_ohm_km: 0.193,
+    cost_per_m: 85,
+    color: '#fb923c',
+    type: 'underground',
+  },
+  {
     id: 'mv33-150',
     name: '33kV 150mm² XLPE',
     voltage_kv: 33,

@@ -250,7 +250,7 @@ export default function Planning() {
   const [windFetched, setWindFetched] = useState(false);
   const [projectName, setProjectName] = useState('Wind Farm Project');
   const [savedMsg, setSavedMsg] = useState(false);
-  const [windParams, setWindParams] = useState({ k: 2.0, lambda: 8.0 });
+  const [windParams, setWindParams] = useState({ k: 2.0, lambda: 7.0 });
 
   // Map display state
   const [baseMap, setBaseMap] = useState('roads'); // 'dark' | 'satellite' | 'roads'
@@ -1495,6 +1495,22 @@ export default function Planning() {
                   updateLayer(cableLayer.id, {
                     features: cableLayer.features.map(f => f.id === id ? { ...f, properties: props } : f)
                   });
+                }}
+                onOptimiseCables={() => {
+                  if (!cableLayer) return;
+                  // For each cable, pick the cheapest cable type (same voltage family) that can carry its load
+                  const currentVoltageKv = (cableTypes.find(ct => ct.id === selectedCableTypeId) || cableTypes[0])?.voltage_kv || 33;
+                  const optimisedFeatures = cableLayer.features.map(f => {
+                    const requiredMw = calcCableLoad(f.id, cables, turbines);
+                    // Find cheapest type that can carry the load at the same voltage
+                    const sorted = [...cableTypes]
+                      .filter(ct => ct.voltage_kv === currentVoltageKv)
+                      .sort((a, b) => a.cost_per_m - b.cost_per_m);
+                    const capacityMw = (ct) => +(Math.sqrt(3) * ct.voltage_kv * ct.ampacity_a / 1000);
+                    const best = sorted.find(ct => capacityMw(ct) >= requiredMw) || sorted[sorted.length - 1];
+                    return best ? { ...f, properties: { ...f.properties, cable_type_id: best.id } } : f;
+                  });
+                  updateLayer(cableLayer.id, { features: optimisedFeatures });
                 }}
                 turbines={turbines}
                 substations={substations}
