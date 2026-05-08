@@ -77,32 +77,25 @@ function findSnapNode(latlng, turbines, substations, map) {
 
 // ── Topology: compute cumulative MW load carried by a cable ─────────────────
 // Returns total MW that flows through `cableId` (turbines upstream in string)
-function calcCableLoad(cableId, cables, turbines) {
+function calcCableLoad(cableId, cables, turbines, visited = new Set()) {
+  if (visited.has(cableId)) return 0;
+  visited.add(cableId);
+
   const cable = cables.find(c => c.id === cableId);
   if (!cable) return 0;
 
-  // Collect all turbines directly connected as start/end nodes on this cable
-  const directTurbineMW = (nodeList) => {
-    let mw = 0;
-    for (const n of nodeList) {
-      if (n.type === 'turbine') {
-        const t = turbines.find(t => t.id === n.id);
-        mw += t?.properties?.rated_power_mw || 0;
-      }
-    }
-    return mw;
-  };
-
   const nodes = [cable.properties.start_node, cable.properties.end_node].filter(Boolean);
-  // Direct turbine MW on this cable's endpoints
-  let total = directTurbineMW(nodes);
 
-  // Also add any cables feeding INTO turbine nodes of this cable
-  // i.e. if a turbine is the END of another cable, that cable's load also flows through here
-  // We do a simple recursive search (no cycle protection needed for trees)
+  let total = 0;
+  for (const n of nodes) {
+    if (n.type === 'turbine') {
+      const t = turbines.find(t => t.id === n.id);
+      total += t?.properties?.rated_power_mw || 0;
+    }
+  }
+
   const turbineNodeIds = nodes.filter(n => n.type === 'turbine').map(n => n.id);
   for (const tid of turbineNodeIds) {
-    // Find cables that have this turbine as an endpoint (other than this cable)
     const feedingCables = cables.filter(c =>
       c.id !== cableId && (
         c.properties.start_node?.id === tid ||
@@ -110,7 +103,7 @@ function calcCableLoad(cableId, cables, turbines) {
       )
     );
     for (const fc of feedingCables) {
-      total += calcCableLoad(fc.id, cables, turbines);
+      total += calcCableLoad(fc.id, cables, turbines, visited);
     }
   }
 

@@ -7,7 +7,10 @@ function cableMVA(ct) {
   return +(Math.sqrt(3) * ct.voltage_kv * ct.ampacity_a / 1000).toFixed(1);
 }
 
-function calcCableLoad(cableId, cables, turbines) {
+function calcCableLoad(cableId, cables, turbines, visited = new Set()) {
+  if (visited.has(cableId)) return 0;
+  visited.add(cableId);
+
   const cable = cables.find(c => c.id === cableId);
   if (!cable) return 0;
   const nodes = [cable.properties.start_node, cable.properties.end_node].filter(Boolean);
@@ -27,7 +30,7 @@ function calcCableLoad(cableId, cables, turbines) {
       )
     );
     for (const fc of feedingCables) {
-      total += calcCableLoad(fc.id, cables, turbines);
+      total += calcCableLoad(fc.id, cables, turbines, visited);
     }
   }
   return total;
