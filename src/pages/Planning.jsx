@@ -888,7 +888,7 @@ export default function Planning() {
                         }} />
                       {radiusConfig?.show && (
                         <Circle center={[lat, lng]} radius={radiusConfig.radius}
-                          pathOptions={{ color: '#f97316', fillColor: '#f97316', fillOpacity: 0.06, weight: 1.5, dashArray: '5 4', opacity: 0.7 }} />
+                          pathOptions={{ color: '#f97316', fillColor: '#f97316', fillOpacity: 0.06, weight: 1.5, dashArray: '5 4', opacity: 0.7, interactive: false }} />
                       )}
                     </React.Fragment>
                   );
@@ -929,9 +929,8 @@ export default function Planning() {
               const color = spd >= 10 ? '#ef4444' : spd >= 8 ? '#f59e0b' : spd >= 6 ? '#10b981' : '#3b82f6';
               return (
                 <Circle key={`wind-${t.id}`} center={[lat, lng]} radius={800}
-                  pathOptions={{ color, fillColor: color, fillOpacity: 0.18, weight: 0 }}>
-                  <Popup><span className="text-xs font-medium">{t.properties.name} — {spd} m/s hub wind</span></Popup>
-                </Circle>
+                  pathOptions={{ color, fillColor: color, fillOpacity: 0.18, weight: 0, interactive: false }}
+                />
               );
             })}
 
