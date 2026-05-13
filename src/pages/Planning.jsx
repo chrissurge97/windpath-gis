@@ -1164,7 +1164,7 @@ export default function Planning() {
                               if (isEnd) coords[coords.length - 1] = newCoords;
                               let totalLen = 0;
                               for (let i = 0; i < coords.length - 1; i++) totalLen += haversineM(coords[i][1], coords[i][0], coords[i+1][1], coords[i+1][0]);
-                              const usedMw = calcCableLoad(cable.id, updatedCables, turbines);
+                              const usedMw = calcCableLoad(cable.id, cables, turbines);
                               const ct = cableTypes.find(t => t.id === cable.properties.cable_type_id) || cableTypes[0];
                               const voltage = ct?.voltage_kv || 33;
                               const usedA = ct ? +(usedMw * 1000 / (Math.sqrt(3) * voltage)).toFixed(0) : 0;
