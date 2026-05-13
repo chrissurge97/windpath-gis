@@ -334,6 +334,7 @@ export default function Planning() {
   const [exclusionWarning, setExclusionWarning] = useState(null); // { layerName, featureName }
 
   const mapRef = useRef(null);
+  const [panesReady, setPanesReady] = useState(false);
 
   const substationLayer = layers.find(l => l.type === 'substation');
   const substations = substationLayer?.features || [];
@@ -873,6 +874,7 @@ export default function Planning() {
                 map.target.getPane('windPane').style.zIndex = 420;
                 map.target.getPane('windPane').style.pointerEvents = 'none';
               }
+              setPanesReady(true);
             }}
           >
             <MapBoundsEnforcer />
@@ -1079,7 +1081,7 @@ export default function Planning() {
             )}
 
             {/* Wind speed heatmap — rendered in dedicated windPane above polygons */}
-            {showWindLayer && turbines.map(t => {
+            {showWindLayer && panesReady && turbines.map(t => {
               const spd = t.properties.hub_wind_speed;
               if (!spd) return null;
               const [lng, lat] = t.geometry.coordinates;
