@@ -74,7 +74,7 @@ function TextLabel({ f, layer, x, y, mode, map, onSelect, onDragEnd }) {
     e.preventDefault();
     e.stopPropagation();
     dragging.current = true;
-    dragStart.current = { x: e.clientX, y: e.clientY, origX: x, origY: y };
+    dragStart.current = { x: e.clientX, y: e.clientY, origX: x, origY: y, origLng: f.geometry.coordinates[0], origLat: f.geometry.coordinates[1] };
     map.dragging.disable();
 
     const onMove = (me) => {

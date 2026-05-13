@@ -100,9 +100,15 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
   const [minimized, setMinimized] = useState(false);
   const [completedTasks, setCompletedTasks] = useState({});
 
-  const config = module ? (LESSON_CONFIG[moduleId]?.[lessonIndex] || {}) : {};
-  const tasks = config.tasks || [];
-  const highlights = config.highlight || [];
+  // Define these variables unconditionally for hooks
+  let config = {};
+  let tasks = [];
+  let highlights = [];
+  if (module) {
+    config = LESSON_CONFIG[moduleId]?.[lessonIndex] || {};
+    tasks = config.tasks || [];
+    highlights = config.highlight || [];
+  }
 
   // Expose highlights globally so Planning toolbar can read them
   useEffect(() => {
@@ -118,7 +124,7 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
     setTimeout(() => {
       mapRef.current.setView([lat, lng], config.zoom || 12, { animate: true, duration: 0.8 });
     }, 200);
-  }, [lessonIndex, module]);
+  }, [lessonIndex, module, config.center, config.zoom]);
 
   // Poll for task completion via global state set by Planning
   useEffect(() => {
@@ -140,6 +146,10 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
   useEffect(() => { setCompletedTasks({}); }, [lessonIndex]);
 
   if (!module) return null;
+
+  const lesson = module.lessons[lessonIndex];
+  const isLast = lessonIndex === module.lessons.length - 1;
+  const colors = COLOR_MAP[module.color] || COLOR_MAP.blue;
 
   const allTasksDone = tasks.length === 0 || tasks.every(t => completedTasks[t.id]);
 

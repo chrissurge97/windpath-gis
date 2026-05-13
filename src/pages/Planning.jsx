@@ -1141,13 +1141,31 @@ export default function Planning() {
                         },
                         dragend: (e) => {
                           const newLatLng = e.target.getLatLng();
+                          const newCoords = [newLatLng.lng, newLatLng.lat];
                           updateLayer(layer.id, {
                             features: layer.features.map(ft =>
                               ft.id === f.id
-                                ? { ...ft, geometry: { ...ft.geometry, coordinates: [newLatLng.lng, newLatLng.lat] } }
+                                ? { ...ft, geometry: { ...ft.geometry, coordinates: newCoords } }
                                 : ft
                             )
                           });
+                          // Update connected cables
+                          if (cableLayer) {
+                            updateLayer(cableLayer.id, {
+                              features: cableLayer.features.map(cable => {
+                                const start = cable.properties.start_node;
+                                const end = cable.properties.end_node;
+                                if (!start?.id && !end?.id) return cable;
+                                const isStart = start?.id === f.id;
+                                const isEnd = end?.id === f.id;
+                                if (!isStart && !isEnd) return cable;
+                                const coords = cable.geometry.coordinates.map(([lng, lat]) => [lng, lat]);
+                                if (isStart) coords[0] = newCoords;
+                                if (isEnd) coords[coords.length - 1] = newCoords;
+                                return { ...cable, geometry: { ...cable.geometry, coordinates: coords } };
+                              })
+                            });
+                          }
                         }
                       }} />
                   );
