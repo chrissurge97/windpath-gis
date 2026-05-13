@@ -725,7 +725,7 @@ export default function Planning() {
   return (
     <div className="flex flex-col h-full bg-slate-950">
       {/* Toolbar */}
-      <div className="flex items-center gap-1.5 px-2 py-1.5 bg-slate-900 border-b border-slate-800 shrink-0 overflow-x-auto min-h-[40px]">
+      <div className="flex items-center gap-1.5 px-2 py-1.5 bg-slate-900 border-b border-slate-800 shrink-0 flex-wrap min-h-[40px]">
         <Map className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
         <ProjectFileButtons
           currentProjectId={currentProjectId}
@@ -1047,23 +1047,7 @@ export default function Planning() {
               />
             )}
 
-            {/* Wind speed heatmap circles */}
-            {showWindLayer && panesReady && turbines.map(t => {
-              const spd = t.properties.hub_wind_speed;
-              if (!spd) return null;
-              const [lng, lat] = t.geometry.coordinates;
-              const color = spd >= 10 ? '#ef4444' : spd >= 9 ? '#f97316' : spd >= 8 ? '#f59e0b' : spd >= 7 ? '#10b981' : spd >= 6 ? '#06b6d4' : '#3b82f6';
-              return (
-                <React.Fragment key={`wind-${t.id}`}>
-                  <Circle center={[lat, lng]} radius={500}
-                    pathOptions={{ color, fillColor: color, fillOpacity: 0.55, weight: 2, opacity: 0.8, interactive: false }} />
-                  <Circle center={[lat, lng]} radius={1000}
-                    pathOptions={{ color, fillColor: color, fillOpacity: 0.22, weight: 0, opacity: 0, interactive: false }} />
-                  <Circle center={[lat, lng]} radius={1800}
-                    pathOptions={{ color, fillColor: color, fillOpacity: 0.09, weight: 0, opacity: 0, interactive: false }} />
-                </React.Fragment>
-              );
-            })}
+            {/* Wind speed heatmap — removed */}
 
             {/* Placeable Substations */}
             {showSubstations && substations.map(s => {
@@ -1535,7 +1519,7 @@ export default function Planning() {
         </div>
 
         {/* Right panel */}
-        <div className={cn("shrink-0 flex flex-col bg-slate-900 border-l border-slate-800 overflow-hidden transition-all duration-200", rightPanelOpen ? "w-80" : "w-0")}>
+        <div className={cn("shrink-0 flex flex-col bg-slate-900 border-l border-slate-800 overflow-hidden transition-all duration-200", rightPanelOpen ? "w-80" : "w-0 border-l-0")}>
           {/* Tabs */}
           <div className="flex border-b border-slate-800 shrink-0 overflow-x-auto">
             {RIGHT_TABS.map(({ id, label, icon: TabIcon }) => (

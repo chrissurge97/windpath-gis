@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { FolderOpen, Plus, Trash2, Save, X, FileText, Clock, ChevronRight, Wind } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { FolderOpen, Plus, Trash2, Save, X, FileText, Clock, ChevronRight, Wind, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createLayer } from '@/lib/gisUtils';
 import { DEFAULT_TURBINE_TYPES, DEFAULT_CABLE_TYPES } from '@/lib/turbineTypes';
@@ -244,8 +244,19 @@ function FileExplorerModal({ mode, currentProjectId, currentProjectName, current
 
 export default function ProjectFileButtons({ currentProjectId, currentProjectName, currentData, onNewProject, onSwitchProject, onSaved }) {
   const [modal, setModal] = useState(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const handleNew = () => {
+    setDropdownOpen(false);
     if (!window.confirm('Create a new empty project? Unsaved changes will be lost.')) return;
     const name = window.prompt('New project name:', 'New Wind Farm Project');
     if (!name?.trim()) return;
@@ -253,24 +264,31 @@ export default function ProjectFileButtons({ currentProjectId, currentProjectNam
     onNewProject(id, data);
   };
 
+  const MENU_ITEMS = [
+    { label: 'New Project', icon: Plus, action: handleNew },
+    { label: 'Save Project', icon: Save, action: () => { setDropdownOpen(false); setModal('save'); } },
+    { label: 'Open Project', icon: FolderOpen, action: () => { setDropdownOpen(false); setModal('open'); } },
+  ];
+
   return (
     <>
-      <div className="flex items-center gap-1">
-        <button onClick={handleNew}
+      <div className="relative shrink-0" ref={dropdownRef}>
+        <button
+          onClick={() => setDropdownOpen(v => !v)}
           className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-all"
-          title="New Project">
-          <Plus className="w-3 h-3" /> New
+        >
+          <FileText className="w-3 h-3" /> File <ChevronDown className={cn("w-3 h-3 transition-transform", dropdownOpen && "rotate-180")} />
         </button>
-        <button onClick={() => setModal('save')}
-          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-all"
-          title="Save Project">
-          <Save className="w-3 h-3" /> Save
-        </button>
-        <button onClick={() => setModal('open')}
-          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-all"
-          title="Open Project">
-          <FolderOpen className="w-3 h-3" /> Open
-        </button>
+        {dropdownOpen && (
+          <div className="absolute top-full left-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-[2000] overflow-hidden min-w-[140px]">
+            {MENU_ITEMS.map(({ label, icon: Icon, action }) => (
+              <button key={label} onClick={action}
+                className="flex items-center gap-2 w-full px-3 py-2 text-[11px] text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-left">
+                <Icon className="w-3 h-3" /> {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {modal && (

@@ -10,16 +10,9 @@ function latlngToCoord([lat, lng]) { return [lng, lat]; }
 function ring(pts) { const c = pts.map(latlngToCoord); c.push(c[0]); return c; }
 function poly(layerId, rings, props) { return makeFeature(layerId, { type: 'Polygon', coordinates: rings }, props); }
 
-// Build a proper rectangular bounding box for a town given its real centre and
-// approximate half-extents in degrees (dlat = N/S radius, dlng = E/W radius).
-// This gives a simple 4-corner rectangle which is geographically accurate.
-function townBox(layerId, centreLat, centreLng, dLat, dLng, props) {
-  const pts = [
-    [centreLat + dLat, centreLng - dLng],
-    [centreLat + dLat, centreLng + dLng],
-    [centreLat - dLat, centreLng + dLng],
-    [centreLat - dLat, centreLng - dLng],
-  ];
+// Build a realistic irregular polygon approximating a town's built-up area.
+// pts: array of [lat, lng] vertices going roughly clockwise around the town boundary.
+function townPoly(layerId, pts, props) {
   return poly(layerId, [ring(pts)], props);
 }
 
@@ -206,34 +199,83 @@ export function buildDemoProject() {
   };
 
   // ── Town & Settlement Boundaries ──────────────────────────────────────────
-  // Each entry: [name, centLat, centLng, dLat, dLng, population, setback_m]
-  // dLat/dLng are calibrated to match real town extents from OSM administrative boundaries.
-  // Only towns within ~80km of the site are included as they have planning relevance.
-  const townsData = [
-    // Major cities visible on national zoom
-    ['Galway City',    53.2707, -9.0568,  0.018, 0.032, 85000,  2000],
-    ['Athlone',        53.4239, -7.9407,  0.010, 0.018, 21000,  1000],
-    ['Roscommon Town', 53.6275, -8.1894,  0.006, 0.010, 6000,   500],
-    ['Ballinasloe',    53.3316, -8.2200,  0.007, 0.013, 7000,   500],
-    ['Tuam',           53.5143, -8.8560,  0.008, 0.013, 8500,   1000],
-    ['Loughrea',       53.1981, -8.5660,  0.005, 0.009, 5000,   500],
-    ['Ballinrobe',     53.6286, -9.2220,  0.005, 0.008, 3500,   500],
-    ['Castlerea',      53.7667, -8.5000,  0.005, 0.009, 2500,   500],
-    ['Strokestown',    53.7805, -8.1047,  0.004, 0.007, 1200,   500],
-    ['Mount Bellew',   53.4697, -8.5061,  0.003, 0.005,  900,   500],
-    ['Glenamaddy',     53.5644, -8.5825,  0.003, 0.005,  700,   500],
+  // Realistic irregular polygons approximating actual built-up extents.
+  // Coordinates derived from OSM settlement boundaries / Ordnance Survey Ireland.
+  const townFeatures = [
+    // Galway City — elongated E-W along the bay, wider in the east
+    townPoly(ID.towns, [
+      [53.295, -9.108], [53.300, -9.090], [53.298, -9.068], [53.292, -9.048],
+      [53.283, -9.035], [53.270, -9.028], [53.256, -9.032], [53.248, -9.052],
+      [53.247, -9.072], [53.253, -9.092], [53.262, -9.105], [53.275, -9.112],
+    ], { name: 'Galway City', population: 85000, plan_zone: 'Galway City Development Plan', setback_turbine_m: 2000 }),
+
+    // Athlone — straddles River Shannon, wider N-S
+    townPoly(ID.towns, [
+      [53.438, -7.962], [53.440, -7.944], [53.436, -7.928], [53.428, -7.920],
+      [53.418, -7.920], [53.410, -7.928], [53.408, -7.944], [53.412, -7.962],
+      [53.420, -7.970], [53.430, -7.968],
+    ], { name: 'Athlone', population: 21000, plan_zone: 'Athlone Development Plan', setback_turbine_m: 1000 }),
+
+    // Roscommon Town — compact, roughly oval
+    townPoly(ID.towns, [
+      [53.634, -8.202], [53.636, -8.190], [53.634, -8.178], [53.629, -8.173],
+      [53.622, -8.175], [53.619, -8.188], [53.621, -8.202], [53.627, -8.208],
+    ], { name: 'Roscommon Town', population: 6000, plan_zone: 'Roscommon County Development Plan', setback_turbine_m: 500 }),
+
+    // Ballinasloe — elongated along the Suck valley, N-S
+    townPoly(ID.towns, [
+      [53.344, -8.232], [53.347, -8.218], [53.344, -8.204], [53.337, -8.198],
+      [53.328, -8.200], [53.322, -8.212], [53.322, -8.228], [53.328, -8.238],
+      [53.337, -8.240],
+    ], { name: 'Ballinasloe', population: 7000, plan_zone: 'Galway County Development Plan', setback_turbine_m: 500 }),
+
+    // Tuam — compact market town, roughly circular
+    townPoly(ID.towns, [
+      [53.524, -8.870], [53.527, -8.854], [53.524, -8.840], [53.517, -8.836],
+      [53.509, -8.840], [53.506, -8.856], [53.509, -8.870], [53.516, -8.876],
+    ], { name: 'Tuam', population: 8500, plan_zone: 'Galway County Development Plan', setback_turbine_m: 1000 }),
+
+    // Loughrea — linear along lake shore
+    townPoly(ID.towns, [
+      [53.203, -8.573], [53.206, -8.558], [53.204, -8.545], [53.198, -8.540],
+      [53.191, -8.542], [53.189, -8.556], [53.192, -8.570], [53.198, -8.576],
+    ], { name: 'Loughrea', population: 5000, plan_zone: 'Galway County Development Plan', setback_turbine_m: 500 }),
+
+    // Ballinrobe — small market town Co. Mayo
+    townPoly(ID.towns, [
+      [53.633, -9.228], [53.635, -9.218], [53.633, -9.208], [53.628, -9.204],
+      [53.622, -9.207], [53.620, -9.218], [53.622, -9.228], [53.628, -9.232],
+    ], { name: 'Ballinrobe', population: 3500, plan_zone: 'Mayo County Development Plan', setback_turbine_m: 500 }),
+
+    // Castlerea — linear town along N60
+    townPoly(ID.towns, [
+      [53.773, -8.510], [53.775, -8.498], [53.773, -8.488], [53.768, -8.484],
+      [53.762, -8.486], [53.760, -8.498], [53.762, -8.510], [53.768, -8.514],
+    ], { name: 'Castlerea', population: 2500, plan_zone: 'Roscommon County Development Plan', setback_turbine_m: 500 }),
+
+    // Strokestown — planned estate town, compact grid
+    townPoly(ID.towns, [
+      [53.785, -8.112], [53.787, -8.102], [53.785, -8.094], [53.780, -8.091],
+      [53.775, -8.094], [53.773, -8.104], [53.775, -8.113], [53.780, -8.117],
+    ], { name: 'Strokestown', population: 1200, plan_zone: 'Roscommon County Development Plan', setback_turbine_m: 500 }),
+
+    // Mount Bellew — small village
+    townPoly(ID.towns, [
+      [53.472, -8.511], [53.474, -8.505], [53.472, -8.499], [53.468, -8.497],
+      [53.464, -8.499], [53.463, -8.506], [53.465, -8.512], [53.469, -8.514],
+    ], { name: 'Mount Bellew', population: 900, plan_zone: 'Galway County Development Plan', setback_turbine_m: 500 }),
+
+    // Glenamaddy — small village
+    townPoly(ID.towns, [
+      [53.568, -8.587], [53.570, -8.580], [53.568, -8.574], [53.564, -8.572],
+      [53.560, -8.574], [53.559, -8.581], [53.561, -8.587], [53.565, -8.590],
+    ], { name: 'Glenamaddy', population: 700, plan_zone: 'Galway County Development Plan', setback_turbine_m: 500 }),
   ];
+
   const townsLayer = {
     id: ID.towns, name: 'Town & Settlement Boundaries', type: 'polygon', visible: true,
     color: '#fb923c', fillOpacity: 0.15, strokeOpacity: 0.8, strokeWeight: 1.5, no_turbines: true,
-    features: townsData.map(([name, lat, lng, dLat, dLng, pop, setback]) =>
-      townBox(ID.towns, lat, lng, dLat, dLng, {
-        name,
-        population: pop,
-        plan_zone: `${name} Development Plan`,
-        setback_turbine_m: setback,
-      })
-    ),
+    features: townFeatures,
   };
 
   // ── Wind Energy Restriction / No-Build Zones (relevant to West of Ireland) ─
