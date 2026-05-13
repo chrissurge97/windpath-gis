@@ -27,6 +27,7 @@ import { exportKML } from '@/lib/exportKMZ';
 import { exportProjectPDF } from '@/lib/exportPDF';
 import { buildDemoProject } from '@/lib/demoProject';
 import ExerciseGuide from '@/components/planning/ExerciseGuide';
+import LessonGuide from '@/components/planning/LessonGuide';
 import { EXERCISES } from '@/lib/exercises';
 import ExportMenu from '@/components/planning/ExportMenu';
 import LayerImportExport from '@/components/planning/LayerImportExport';
@@ -222,7 +223,10 @@ export default function Planning() {
   const location = useLocation();
   const navigate = useNavigate();
   const exerciseId = location.state?.exerciseId || null;
-  const activeExercise = exerciseId ? EXERCISES[exerciseId] : null;
+  const lessonIndex = location.state?.lessonIndex ?? null;
+  // Show lesson guide if lessonIndex is present, exercise guide otherwise
+  const showLessonGuide = lessonIndex !== null;
+  const activeExercise = exerciseId && !showLessonGuide ? EXERCISES[exerciseId] : null;
 
   // ── Project system ─────────────────────────────────────────────────────────
   const [currentProjectId, setCurrentProjectId] = useState(null);
@@ -1538,6 +1542,15 @@ export default function Planning() {
               exercise={activeExercise}
               onComplete={() => {}}
               onClose={() => navigate('/learn', { state: { moduleId: exerciseId, exerciseCompleted: true } })}
+            />
+          )}
+
+          {/* Lesson Guide overlay — shown when navigated from a specific lesson */}
+          {showLessonGuide && exerciseId && (
+            <LessonGuide
+              moduleId={exerciseId}
+              initialLessonIndex={lessonIndex}
+              onClose={() => navigate('/learn', { state: { moduleId: exerciseId } })}
             />
           )}
 

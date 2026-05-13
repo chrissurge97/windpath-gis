@@ -34,17 +34,24 @@ const MODULE_BADGE = {
 
 function LessonView({ module, onComplete }) {
   const [lessonIndex, setLessonIndex] = useState(0);
+  const navigate = useNavigate();
   const colors = COLOR_MAP[module.color] || COLOR_MAP.blue;
   const lesson = module.lessons[lessonIndex];
   const isLast = lessonIndex === module.lessons.length - 1;
 
+  // Each lesson can open in the planner with its index as context
+  const openInPlanner = () => {
+    navigate('/planning', { state: { exerciseId: module.id, lessonIndex } });
+  };
+
   return (
     <div className="flex flex-col h-full">
-      {/* Progress dots */}
+      {/* Progress dots — clickable */}
       <div className="flex gap-2 mb-6">
         {module.lessons.map((_, i) => (
-          <div
+          <button
             key={i}
+            onClick={() => setLessonIndex(i)}
             className={cn(
               'h-1.5 rounded-full transition-all duration-300',
               i < lessonIndex ? cn(colors.badge, 'w-6') :
@@ -68,13 +75,26 @@ function LessonView({ module, onComplete }) {
             Lesson {lessonIndex + 1} of {module.lessons.length}
           </p>
           <h2 className="text-xl font-bold text-white mb-4">{lesson.title}</h2>
-          <div className={cn('rounded-xl border p-5 text-sm leading-relaxed text-slate-300', colors.bg, colors.border)}>
+          <div className={cn('rounded-xl border p-5 text-sm leading-relaxed text-slate-300 whitespace-pre-line', colors.bg, colors.border)}>
             {lesson.content}
           </div>
+
+          {/* Open in Planner button — shown on every lesson */}
+          <button
+            onClick={openInPlanner}
+            className={cn(
+              'mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium border transition-colors',
+              colors.border, colors.bg, colors.text,
+              'hover:brightness-125'
+            )}
+          >
+            <ExternalLink className="w-4 h-4" />
+            Open this lesson in Planner Tool
+          </button>
         </motion.div>
       </AnimatePresence>
 
-      <div className="flex gap-3 mt-6">
+      <div className="flex gap-3 mt-4">
         {lessonIndex > 0 && (
           <button
             onClick={() => setLessonIndex(i => i - 1)}
@@ -87,7 +107,7 @@ function LessonView({ module, onComplete }) {
           onClick={() => isLast ? onComplete() : setLessonIndex(i => i + 1)}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium text-white transition-colors"
         >
-          {isLast ? 'Go to Map Exercise' : 'Next Lesson'}
+          {isLast ? 'Go to Full Exercise' : 'Next Lesson'}
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
