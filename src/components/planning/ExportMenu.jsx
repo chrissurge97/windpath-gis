@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Download, ChevronDown, FileJson, Map, FileText, File } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export default function ExportMenu({ onExportGeoJSON, onExportKML, onExportPDF, onExportCSV }) {
+export default function ExportMenu({ onExportGeoJSON, onExportKML, onExportPDF, onExportCSV, onExportProject }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -13,6 +13,7 @@ export default function ExportMenu({ onExportGeoJSON, onExportKML, onExportPDF, 
   }, []);
 
   const items = [
+    { label: 'Project (GeoJSON)', desc: 'Full project with all metadata', icon: FileJson, color: 'text-cyan-400', action: onExportProject },
     { label: 'GeoJSON', desc: 'All layers — QGIS / ArcGIS compatible', icon: FileJson, color: 'text-emerald-400', action: onExportGeoJSON },
     { label: 'KML', desc: 'Google Earth / ArcGIS / QGIS', icon: Map, color: 'text-green-400', action: onExportKML },
     { label: 'CSV (per layer)', desc: 'Spreadsheet — feature attributes', icon: File, color: 'text-yellow-400', action: onExportCSV },

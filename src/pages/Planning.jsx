@@ -26,6 +26,7 @@ import PolygonMenu from '@/components/planning/PolygonMenu';
 import { DEFAULT_TURBINE_TYPES, DEFAULT_CABLE_TYPES } from '@/lib/turbineTypes';
 import { exportKML } from '@/lib/exportKMZ';
 import { exportProjectPDF } from '@/lib/exportPDF';
+import { exportProjectGeoJSON, exportProjectKMZ, downloadFile } from '@/lib/projectExport';
 import { buildDemoProject } from '@/lib/demoProject';
 import ExerciseGuide from '@/components/planning/ExerciseGuide';
 import LessonGuide from '@/components/planning/LessonGuide';
@@ -932,25 +933,10 @@ export default function Planning() {
           </button>
           <div data-lesson-id="btn-export" className={cn(highlights.includes('btn-export') && "ring-2 ring-amber-400 rounded ring-offset-1 ring-offset-slate-900 animate-pulse")}>
           <ExportMenu
+            onExportProject={() => { const geojson = exportProjectGeoJSON({ name: projectName, description: '', layers, turbineTypes, cableTypes, windParams }); downloadFile(JSON.stringify(geojson, null, 2), `${projectName}-project.geojson`, 'application/json'); }}
             onExportGeoJSON={() => downloadJSON(layersToGeoJSON(layers), `${projectName}.geojson`)}
-            onExportKML={() => exportKML(layers, turbineTypes, cableTypes, substations, showSubstations, projectName)}
-            onExportCSV={() => {
-              const rows = [['layer','feature_id','name','geometry_type','lat','lng','notes'].join(',')];
-              for (const layer of layers) {
-                for (const f of layer.features) {
-                  const g = f.geometry;
-                  let lat = '', lng = '';
-                  if (g.type === 'Point') { [lng, lat] = g.coordinates; }
-                  else if (g.type === 'Polygon') { [lng, lat] = g.coordinates[0][0]; }
-                  else if (g.type === 'LineString') { [lng, lat] = g.coordinates[0]; }
-                  const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-                  rows.push([esc(layer.name),esc(f.id),esc(f.properties?.name||''),esc(g.type),esc(lat),esc(lng),esc(f.properties?.notes||'')].join(','));
-                }
-              }
-              const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a'); a.href = url; a.download = `${projectName}.csv`; a.click(); URL.revokeObjectURL(url);
-            }}
+            onExportKML={() => { exportProjectKMZ({ name: projectName, layers }).then(kml => downloadFile(kml, `${projectName}.kml`, 'application/vnd.google-earth.kml+xml')); }}
+            onExportCSV={() => { const rows = [['layer','feature_id','name','geometry_type','lat','lng','notes'].join(',')]; for (const layer of layers) { for (const f of layer.features) { const g = f.geometry; let lat = '', lng = ''; if (g.type === 'Point') { [lng, lat] = g.coordinates; } else if (g.type === 'Polygon') { [lng, lat] = g.coordinates[0][0]; } else if (g.type === 'LineString') { [lng, lat] = g.coordinates[0]; } const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;  rows.push([esc(layer.name),esc(f.id),esc(f.properties?.name||''),esc(g.type),esc(lat),esc(lng),esc(f.properties?.notes||'')].join(',')); } } const blob = new Blob([rows.join('\n')], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${projectName}.csv`; a.click(); URL.revokeObjectURL(url); }}
             onExportPDF={() => exportProjectPDF({ projectName, turbines, turbineTypes, cables, cableTypes, substations, totalCapacity_mw, totalAEP, avgCapFactor, avgWindSpeed, totalCableLength, totalCableCost, windParams, monthlyData, layers, mapRef })}
           />
           </div>

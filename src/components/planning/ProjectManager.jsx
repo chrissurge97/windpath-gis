@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FolderOpen, Plus, Trash2, Save, X, FileText, Clock, ChevronRight, Wind, ChevronDown } from 'lucide-react';
+import { FolderOpen, Plus, Trash2, Save, X, FileText, Clock, ChevronRight, Wind, ChevronDown, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createLayer } from '@/lib/gisUtils';
 import { DEFAULT_TURBINE_TYPES, DEFAULT_CABLE_TYPES } from '@/lib/turbineTypes';
 import { buildDemoProject } from '@/lib/demoProject';
+import { setupProjectImport } from '@/components/planning/ProjectImportHandler';
 
 const PROJECTS_INDEX_KEY = 'planning_projects_index';
 const PROJECT_PREFIX = 'planning_project_';
@@ -278,10 +279,22 @@ export default function ProjectFileButtons({ currentProjectId, currentProjectNam
     onNewProject(id, data);
   };
 
+  const handleImportProject = () => {
+    setDropdownOpen(false);
+    const input = setupProjectImport((project) => {
+      const { id, data } = createNewProject(project.name);
+      const merged = { ...data, ...project };
+      saveProject(id, merged);
+      onNewProject(id, merged);
+    });
+    input.click();
+  };
+
   const MENU_ITEMS = [
     { label: 'New Project', icon: Plus, action: handleNew },
     { label: 'Save Project', icon: Save, action: () => { setDropdownOpen(false); setModal('save'); } },
     { label: 'Open Project', icon: FolderOpen, action: () => { setDropdownOpen(false); setModal('open'); } },
+    { label: 'Import Project', icon: Upload, action: handleImportProject },
   ];
 
   return (
