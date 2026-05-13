@@ -369,7 +369,11 @@ export default function Planning() {
     localStorage.setItem('app_features', JSON.stringify(nf));
   };
 
-  // Use polygon drag hook
+  const updateLayer = useCallback((id, changes) => {
+    setLayers(prev => prev.map(l => l.id === id ? { ...l, ...changes } : l));
+  }, []);
+
+  // Use polygon drag hook (after updateLayer is defined)
   usePolygonDrag(draggingPolygonId, dragStartLatlng, setDraggingPolygonId, setDragStartLatlng, layers, updateLayer, mapRef);
 
   const substationLayer = layers.find(l => l.type === 'substation');
@@ -441,10 +445,6 @@ export default function Planning() {
   const handleNewProject = (id, proj) => {
     handleSwitchProject(id, proj);
   };
-
-  const updateLayer = useCallback((id, changes) => {
-    setLayers(prev => prev.map(l => l.id === id ? { ...l, ...changes } : l));
-  }, []);
 
   // ── Map interactions ───────────────────────────────────────────────────────
   const addPoint = async (latlng) => {
