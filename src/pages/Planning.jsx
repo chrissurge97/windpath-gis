@@ -10,8 +10,8 @@ import { cn } from '@/lib/utils';
 import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
   Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target, FolderOpen,
-  Layers, Settings, X, Satellite, Navigation,
-  ChevronDown, ChevronRight, ArrowUp, ArrowDown, PlusCircle
+  Layers, Settings, X, Satellite, Navigation, Type,
+  ChevronDown, ChevronRight, ArrowUp, ArrowDown, PlusCircle, Save
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { createLayer, createFeature, geoJSONToLayer, downloadJSON, layersToGeoJSON, DEFAULT_POWER_CURVE, windAtHubHeight, calcTurbineAEP, calcWeibullAEP } from '@/lib/gisUtils';
@@ -28,6 +28,7 @@ import { exportProjectPDF } from '@/lib/exportPDF';
 import { buildDemoProject } from '@/lib/demoProject';
 import ExerciseGuide from '@/components/planning/ExerciseGuide';
 import LessonGuide from '@/components/planning/LessonGuide';
+import TextAnnotationMenu from '@/components/planning/TextAnnotationMenu';
 import { EXERCISES } from '@/lib/exercises';
 import ExportMenu from '@/components/planning/ExportMenu';
 import LayerImportExport from '@/components/planning/LayerImportExport';
@@ -182,7 +183,7 @@ function MapClickHandler({ mode, onAddPoint, onFinishPolygon, onFinishCable }) {
   const mapRef = useRef(null);
   const map = useMapEvents({
     click(e) {
-      if (!['place_turbine', 'draw_polygon', 'draw_cable', 'place_substation'].includes(mode)) return;
+      if (!['place_turbine', 'draw_polygon', 'draw_cable', 'place_substation', 'place_text'].includes(mode)) return;
       const now = Date.now();
       if (now - lastClickTime.current < 350) {
         if (mode === 'draw_polygon') { e.originalEvent.preventDefault(); onFinishPolygon(); }
@@ -308,6 +309,19 @@ export default function Planning() {
   // Exclusion zone placement warning
   const [exclusionWarning, setExclusionWarning] = useState(null); // { layerName, featureName }
 
+  // Text annotation state
+  const [textAnnotationMenu, setTextAnnotationMenu] = useState(null); // { feature, isNew }
+
+  // Lesson guide highlights — re-read every 500ms when a lesson is active
+  const [highlights, setHighlights] = useState([]);
+  useEffect(() => {
+    if (!showLessonGuide) return;
+    const id = setInterval(() => {
+      setHighlights(window.__lessonHighlights__ || []);
+    }, 300);
+    return () => clearInterval(id);
+  }, [showLessonGuide]);
+
   const [showOpenModal, setShowOpenModal] = useState(false);
   const mapRef = useRef(null);
   const [panesReady, setPanesReady] = useState(false);
@@ -332,6 +346,11 @@ export default function Planning() {
 
   const selectedTurbineType = turbineTypes.find(t => t.id === selectedTurbineTypeId) || turbineTypes[0];
   const selectedCableType = cableTypes.find(t => t.id === selectedCableTypeId) || cableTypes[0];
+
+  // ── Notify lesson guide of current mode/tab for task tracking ───────────
+  useEffect(() => {
+    window.__lessonGuideState__ = { mode, tab: rightTab, ts: Date.now() };
+  }, [mode, rightTab]);
 
   // ── Auto-load lesson project from navigation state ────────────────────────
   useEffect(() => {
@@ -393,6 +412,29 @@ export default function Planning() {
       const point = snap ? [snap.lat, snap.lng] : [latlng.lat, latlng.lng];
       setDrawingPoints(prev => [...prev, point]);
       setDrawingSnapNodes(prev => [...prev, snap || null]);
+      return;
+    }
+
+    if (mode === 'place_text') {
+      // Find target layer — use selected layer or first polygon layer
+      const polyLayers = layers.filter(l => !['turbine', 'cable', 'wind_resource', 'substation'].includes(l.type));
+      const targetLayer = polyLayers.find(l => l.id === selectedLayerId) || polyLayers[0];
+      if (!targetLayer) return;
+      const f = createFeature(targetLayer.id,
+        { type: 'Point', coordinates: [latlng.lng, latlng.lat] },
+        {
+          _featureType: 'text',
+          text: 'New Text',
+          color: '#ffffff',
+          fontSize: 14,
+          fontFamily: 'sans-serif',
+          layerId: targetLayer.id,
+        }
+      );
+      updateLayer(targetLayer.id, { features: [...targetLayer.features, f] });
+      // Immediately open the edit menu for this new annotation
+      setTextAnnotationMenu({ feature: f, layerId: targetLayer.id });
+      setMode('select');
       return;
     }
 
@@ -702,13 +744,14 @@ export default function Planning() {
     return { v: v.toFixed(0), f: +(pdf * 100).toFixed(2) };
   }), [windParams]);
 
-  const cursorStyle = { select: 'default', draw_polygon: 'crosshair', place_turbine: 'cell', draw_cable: 'crosshair' }[mode] || 'default';
+  const cursorStyle = { select: 'default', draw_polygon: 'crosshair', place_turbine: 'cell', draw_cable: 'crosshair', place_text: 'text', place_substation: 'cell' }[mode] || 'default';
 
   const DRAW_TOOLS = [
     { id: 'draw_polygon', label: 'Polygon', icon: Pentagon },
     { id: 'place_turbine', label: 'Place Turbine', icon: Wind },
     { id: 'draw_cable', label: 'Draw Cable', icon: Zap },
     { id: 'place_substation', label: 'Substation', icon: Target },
+    { id: 'place_text', label: 'Place Text', icon: Type },
   ];
   const activeDrawTool = DRAW_TOOLS.find(t => t.id === mode);
 
@@ -763,14 +806,16 @@ export default function Planning() {
       {/* Toolbar */}
       <div className="flex items-center gap-1.5 px-2 py-1.5 bg-slate-900 border-b border-slate-800 shrink-0 flex-wrap min-h-[40px]">
         <Map className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-        <ProjectFileButtons
-          currentProjectId={currentProjectId}
-          currentProjectName={projectName}
-          currentData={{ id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams }}
-          onSwitchProject={handleSwitchProject}
-          onNewProject={handleNewProject}
-          onSaved={(name) => setProjectName(name)}
-        />
+        <div data-lesson-id="btn-file" className={cn(highlights.includes('btn-file') && "ring-2 ring-amber-400 rounded ring-offset-1 ring-offset-slate-900 animate-pulse")}>
+          <ProjectFileButtons
+            currentProjectId={currentProjectId}
+            currentProjectName={projectName}
+            currentData={{ id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams }}
+            onSwitchProject={handleSwitchProject}
+            onNewProject={handleNewProject}
+            onSaved={(name) => setProjectName(name)}
+          />
+        </div>
         <input
           value={projectName}
           onChange={e => setProjectName(e.target.value)}
@@ -780,9 +825,12 @@ export default function Planning() {
         <div className="h-4 w-px bg-slate-700 mx-0.5 shrink-0" />
 
         {/* Select button */}
-        <button onClick={() => { setMode('select'); setDrawingPoints([]); setDrawingSnapNodes([]); setSnapPreview(null); setTurbineMenuFeature(null); setPolygonMenuFeature(null); setEditingPolygonId(null); }}
+        <button
+          data-lesson-id="btn-select"
+          onClick={() => { setMode('select'); setDrawingPoints([]); setDrawingSnapNodes([]); setSnapPreview(null); setTurbineMenuFeature(null); setPolygonMenuFeature(null); setEditingPolygonId(null); setTextAnnotationMenu(null); }}
           className={cn("flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-all border shrink-0",
-            mode === 'select' ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700"
+            mode === 'select' ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700",
+            highlights.includes('btn-select') && "ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900 animate-pulse"
           )}>
           <MousePointer className="w-3 h-3" /> Select
         </button>
@@ -793,7 +841,8 @@ export default function Planning() {
             onClick={() => setDrawToolsOpen(v => !v)}
             className={cn(
               "flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-all border",
-              activeDrawTool ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700"
+              activeDrawTool ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700",
+              highlights.some(h => DRAW_TOOLS.some(dt => `btn-${dt.id}` === h)) && "ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900 animate-pulse"
             )}
           >
             {activeDrawTool ? <activeDrawTool.icon className="w-3 h-3" /> : <Pentagon className="w-3 h-3" />}
@@ -812,7 +861,7 @@ export default function Planning() {
                   setPolygonMenuFeature(null);
                   setEditingPolygonId(null);
                   setDrawToolsOpen(false);
-                  if (id === 'draw_polygon') {
+                  if (id === 'draw_polygon' || id === 'place_text') {
                     const first = layers.find(l => !['turbine','cable','wind_resource','substation'].includes(l.type));
                     if (first) setSelectedLayerId(first.id);
                   }
@@ -856,9 +905,15 @@ export default function Planning() {
           }} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500/40 shrink-0">
             <Trash2 className="w-3 h-3" /> Clear
           </button>
-          <button onClick={handleImport} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-white shrink-0">
+          <button
+            data-lesson-id="btn-import"
+            onClick={handleImport}
+            className={cn("flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-white shrink-0",
+              highlights.includes('btn-import') && "ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900 animate-pulse"
+            )}>
             <Upload className="w-3 h-3" /> Import
           </button>
+          <div data-lesson-id="btn-export" className={cn(highlights.includes('btn-export') && "ring-2 ring-amber-400 rounded ring-offset-1 ring-offset-slate-900 animate-pulse")}>
           <ExportMenu
             onExportGeoJSON={() => downloadJSON(layersToGeoJSON(layers), `${projectName}.geojson`)}
             onExportKML={() => exportKML(layers, turbineTypes, cableTypes, substations, showSubstations, projectName)}
@@ -881,6 +936,7 @@ export default function Planning() {
             }}
             onExportPDF={() => exportProjectPDF({ projectName, turbines, turbineTypes, cables, cableTypes, substations, totalCapacity_mw, totalAEP, avgCapFactor, avgWindSpeed, totalCableLength, totalCableCost, windParams, monthlyData, layers, mapRef })}
           />
+          </div>
         </div>
       </div>
 
@@ -1073,6 +1129,7 @@ export default function Planning() {
                   const icon = turbineIcon(tt?.color || layer.color, isSelected);
                   return (
                     <Marker key={f.id} position={[lat, lng]} icon={icon}
+                      draggable={mode === 'select'}
                       eventHandlers={{
                         click: (e) => {
                           if (mode === 'select') {
@@ -1080,10 +1137,62 @@ export default function Planning() {
                             setSelectedFeatureId(f.id);
                             openTurbineMenu(f);
                           }
+                        },
+                        dragend: (e) => {
+                          const newLatLng = e.target.getLatLng();
+                          updateLayer(layer.id, {
+                            features: layer.features.map(ft =>
+                              ft.id === f.id
+                                ? { ...ft, geometry: { ...ft.geometry, coordinates: [newLatLng.lng, newLatLng.lat] } }
+                                : ft
+                            )
+                          });
                         }
                       }} />
                   );
                 }
+
+                // Text annotation points
+                if (f.geometry.type === 'Point' && f.properties._featureType === 'text') {
+                  const [lng, lat] = f.geometry.coordinates;
+                  const { text = '', color = '#fff', fontSize = 14, fontFamily = 'sans-serif' } = f.properties;
+                  const isSelected = textAnnotationMenu?.feature?.id === f.id;
+                  const textIcon = L.divIcon({
+                    html: `<div style="white-space:nowrap;font-family:${fontFamily};font-size:${fontSize}px;color:${color};font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.8),0 0 8px rgba(0,0,0,0.6);cursor:${mode === 'select' ? 'move' : 'default'};${isSelected ? 'outline:2px dashed #a855f7;outline-offset:3px;border-radius:2px;' : ''}">${text}</div>`,
+                    className: '',
+                    iconSize: [text.length * fontSize * 0.6, fontSize * 1.4],
+                    iconAnchor: [0, fontSize * 0.7],
+                  });
+                  const fSnap = f;
+                  return (
+                    <Marker key={f.id} position={[lat, lng]} icon={textIcon}
+                      draggable={mode === 'select'}
+                      eventHandlers={{
+                        click: (e) => {
+                          if (mode === 'select') {
+                            L.DomEvent.stopPropagation(e);
+                            setTextAnnotationMenu({ feature: fSnap, layerId: layer.id });
+                            setTurbineMenuFeature(null);
+                            setPolygonMenuFeature(null);
+                            setCableMenuFeature(null);
+                            setSubstationMenuFeature(null);
+                          }
+                        },
+                        dragend: (e) => {
+                          const newLatLng = e.target.getLatLng();
+                          updateLayer(layer.id, {
+                            features: layer.features.map(ft =>
+                              ft.id === fSnap.id
+                                ? { ...ft, geometry: { ...ft.geometry, coordinates: [newLatLng.lng, newLatLng.lat] } }
+                                : ft
+                            )
+                          });
+                        }
+                      }}
+                    />
+                  );
+                }
+
                 return null;
               });
             })}
@@ -1132,11 +1241,24 @@ export default function Planning() {
                 </div>`,
                 className: '', iconSize: [16, 16], iconAnchor: [8, 8],
               });
+              const sSnap = s;
               return (
                 <Marker key={`sub-${s.id}`} position={[lat, lng]} icon={subIcon}
+                  draggable={mode === 'select'}
                   eventHandlers={{
                     click: (e) => {
-                      if (mode === 'select') { L.DomEvent.stopPropagation(e); setSubstationMenuFeature(s); setTurbineMenuFeature(null); setPolygonMenuFeature(null); }
+                      if (mode === 'select') { L.DomEvent.stopPropagation(e); setSubstationMenuFeature(sSnap); setTurbineMenuFeature(null); setPolygonMenuFeature(null); }
+                    },
+                    dragend: (e) => {
+                      const newLatLng = e.target.getLatLng();
+                      if (!substationLayer) return;
+                      updateLayer(substationLayer.id, {
+                        features: substationLayer.features.map(f =>
+                          f.id === sSnap.id
+                            ? { ...f, geometry: { ...f.geometry, coordinates: [newLatLng.lng, newLatLng.lat] } }
+                            : f
+                        )
+                      });
                     }
                   }}>
                   <Popup>
@@ -1203,6 +1325,7 @@ export default function Planning() {
               {mode === 'place_turbine' && `Placing: ${selectedTurbineType?.manufacturer} ${selectedTurbineType?.model} — click map`}
               {mode === 'draw_cable' && `Click to add waypoints • Hover near turbine/substation to snap • Double-click to finish (${selectedCableType?.name})`}
               {mode === 'place_substation' && `Click map to place a substation — then click it to edit attributes`}
+              {mode === 'place_text' && `Click the map to place a text annotation`}
             </div>
           )}
 
@@ -1506,6 +1629,46 @@ export default function Planning() {
             );
           })()}
 
+          {/* Text Annotation Menu */}
+          {textAnnotationMenu && (
+            <TextAnnotationMenu
+              feature={textAnnotationMenu.feature}
+              layers={layers}
+              onApply={(vals) => {
+                const { layerId: newLayerId, ...rest } = vals;
+                const oldLayerId = textAnnotationMenu.layerId;
+                const f = textAnnotationMenu.feature;
+                // If layer changed, move the feature
+                if (newLayerId !== oldLayerId) {
+                  const oldLayer = layers.find(l => l.id === oldLayerId);
+                  const newLayer = layers.find(l => l.id === newLayerId);
+                  if (oldLayer && newLayer) {
+                    updateLayer(oldLayerId, { features: oldLayer.features.filter(ft => ft.id !== f.id) });
+                    const updated = { ...f, properties: { ...f.properties, ...rest, layerId: newLayerId } };
+                    updateLayer(newLayerId, { features: [...newLayer.features, updated] });
+                    setTextAnnotationMenu({ feature: updated, layerId: newLayerId });
+                  }
+                } else {
+                  const layer = layers.find(l => l.id === oldLayerId);
+                  if (layer) {
+                    updateLayer(oldLayerId, {
+                      features: layer.features.map(ft =>
+                        ft.id === f.id ? { ...ft, properties: { ...ft.properties, ...rest, layerId: newLayerId } } : ft
+                      )
+                    });
+                  }
+                  setTextAnnotationMenu(null);
+                }
+              }}
+              onDelete={() => {
+                const layer = layers.find(l => l.id === textAnnotationMenu.layerId);
+                if (layer) updateLayer(layer.id, { features: layer.features.filter(ft => ft.id !== textAnnotationMenu.feature.id) });
+                setTextAnnotationMenu(null);
+              }}
+              onClose={() => setTextAnnotationMenu(null)}
+            />
+          )}
+
           {/* Edit vertices hint */}
           {editingPolygonId && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-sm text-white text-xs font-medium px-4 py-2 rounded-full border border-slate-600 flex items-center gap-3">
@@ -1559,6 +1722,7 @@ export default function Planning() {
             <LessonGuide
               moduleId={lessonModuleId}
               initialLessonIndex={lessonIndex}
+              mapRef={mapRef}
               onClose={() => navigate('/learn', { state: { moduleId: lessonModuleId } })}
             />
           )}
@@ -1573,7 +1737,8 @@ export default function Planning() {
             {RIGHT_TABS.map(({ id, label, icon: TabIcon }) => (
               <button key={id} onClick={() => setRightTab(id)}
                 className={cn("flex-1 flex items-center justify-center gap-1 py-2.5 text-[10px] font-medium transition-colors whitespace-nowrap px-1 shrink-0",
-                  rightTab === id ? "text-white border-b-2 border-emerald-500" : "text-slate-500 hover:text-slate-300"
+                  rightTab === id ? "text-white border-b-2 border-emerald-500" : "text-slate-500 hover:text-slate-300",
+                  highlights.includes(`tab-${id}`) && "ring-1 ring-amber-400 ring-inset animate-pulse bg-amber-500/10"
                 )}
               >
                 <TabIcon className="w-3 h-3 shrink-0" /> {label}
