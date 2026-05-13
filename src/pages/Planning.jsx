@@ -8,6 +8,7 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { cn } from '@/lib/utils';
+import { usePolygonDrag } from '@/hooks/usePolygonDrag';
 import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
   Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target, FolderOpen,
@@ -315,6 +316,10 @@ export default function Planning() {
 
   // Vertex edit mode: featureId -> [[lat,lng],...]
   const [editingPolygonId, setEditingPolygonId] = useState(null);
+  
+  // Polygon drag state
+  const [draggingPolygonId, setDraggingPolygonId] = useState(null);
+  const [dragStartLatlng, setDragStartLatlng] = useState(null);
 
   // Cable snap state: stores snapped node for start/end of current cable
   const [drawingSnapNodes, setDrawingSnapNodes] = useState([]); // array of { type, id, lat, lng } or null per point
@@ -363,6 +368,9 @@ export default function Planning() {
     setFeatures(nf);
     localStorage.setItem('app_features', JSON.stringify(nf));
   };
+
+  // Use polygon drag hook
+  usePolygonDrag(draggingPolygonId, dragStartLatlng, setDraggingPolygonId, setDragStartLatlng, layers, updateLayer, mapRef);
 
   const substationLayer = layers.find(l => l.type === 'substation');
   const substations = substationLayer?.features || [];
@@ -1035,46 +1043,54 @@ export default function Planning() {
                 const pathOpts = { color: layer.color, fillColor: layer.color, fillOpacity: layer.fillOpacity, weight: layer.strokeWeight || 2, opacity: layer.strokeOpacity || 0.9 };
 
                 if (f.geometry.type === 'Polygon') {
-                  // Don't render inner closing vertex (last == first)
-                  const ring = f.geometry.coordinates[0];
-                  const positions = ring.slice(0, -1).map(([lng, lat]) => [lat, lng]);
-                  const isEditing = editingPolygonId === f.id;
-                  const polyColor = layer.type === 'polygon' ? (layer.color || '#06b6d4') : pathOpts.color;
-                  const polyOpts = { ...pathOpts, color: polyColor, fillColor: polyColor,
-                    weight: isEditing ? 2.5 : pathOpts.weight,
-                    dashArray: isEditing ? '6 4' : undefined };
-                  // In non-select modes, let clicks bubble through to the map handler
-                  const nonSelectMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation'].includes(mode);
-                  return (
-                    <React.Fragment key={f.id}>
-                      <Polygon positions={positions} pathOptions={polyOpts}
-                        bubblingMouseEvents={nonSelectMode}
-                        eventHandlers={{
-                          click: (e) => {
-                            if (nonSelectMode) return; // let it bubble
+                // Don't render inner closing vertex (last == first)
+                const ring = f.geometry.coordinates[0];
+                const positions = ring.slice(0, -1).map(([lng, lat]) => [lat, lng]);
+                const isEditing = editingPolygonId === f.id;
+                const isDragging = draggingPolygonId === f.id;
+                const polyColor = layer.type === 'polygon' ? (layer.color || '#06b6d4') : pathOpts.color;
+                const polyOpts = { ...pathOpts, color: polyColor, fillColor: polyColor,
+                  weight: isEditing || isDragging ? 2.5 : pathOpts.weight,
+                  dashArray: isEditing ? '6 4' : isDragging ? '4 2' : undefined };
+                // In drawing modes, let clicks bubble through to the map handler
+                const nonSelectMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation'].includes(mode);
+                return (
+                  <React.Fragment key={f.id}>
+                    <Polygon positions={positions} pathOptions={polyOpts}
+                      bubblingMouseEvents={nonSelectMode}
+                      eventHandlers={{
+                        click: (e) => {
+                          if (nonSelectMode) return; // let it bubble for drawing
+                          L.DomEvent.stopPropagation(e);
+                          if (isEditing) {
+                            insertPolygonVertex(f.id, layer.id, e.latlng.lat, e.latlng.lng);
+                          } else {
+                            openPolygonMenu(f, layer.id);
+                          }
+                        },
+                        mousedown: (e) => {
+                          if (mode === 'select' && !isEditing) {
                             L.DomEvent.stopPropagation(e);
-                            if (isEditing) {
-                              insertPolygonVertex(f.id, layer.id, e.latlng.lat, e.latlng.lng);
-                            } else {
-                              openPolygonMenu(f, layer.id);
-                            }
-                          },
-                          mousemove: (e) => {
-                            if (nonSelectMode) return;
-                            const container = e.target._map?.getContainer();
-                            const rect = container?.getBoundingClientRect();
-                            if (!rect) return;
-                            setLayerTooltip({
-                              x: e.originalEvent.clientX - rect.left,
-                              y: e.originalEvent.clientY - rect.top,
-                              layerName: layer.name,
-                              featureName: f.properties?.name || '',
-                              description: f.properties?.designation || f.properties?.reason || f.properties?.zone || f.properties?.type || f.properties?.notes || '',
-                            });
-                          },
-                          mouseout: () => setLayerTooltip(null),
-                        }}
-                      />
+                            setDraggingPolygonId(f.id);
+                            setDragStartLatlng(e.latlng);
+                          }
+                        },
+                        mousemove: (e) => {
+                          if (nonSelectMode) return;
+                          const container = e.target._map?.getContainer();
+                          const rect = container?.getBoundingClientRect();
+                          if (!rect) return;
+                          setLayerTooltip({
+                            x: e.originalEvent.clientX - rect.left,
+                            y: e.originalEvent.clientY - rect.top,
+                            layerName: layer.name,
+                            featureName: f.properties?.name || '',
+                            description: f.properties?.designation || f.properties?.reason || f.properties?.zone || f.properties?.type || f.properties?.notes || '',
+                          });
+                        },
+                        mouseout: () => setLayerTooltip(null),
+                      }}
+                    />
                       {/* Vertex edit handles */}
                       {isEditing && positions.map(([lat, lng], vi) => {
                         const vIcon = L.divIcon({
