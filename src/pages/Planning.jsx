@@ -8,7 +8,7 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { cn } from '@/lib/utils';
-import { usePolygonDrag } from '@/hooks/usePolygonDrag';
+
 import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
   Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target, FolderOpen,
@@ -279,6 +279,7 @@ export default function Planning() {
   const [editingLayerName, setEditingLayerName] = useState('');
   const [showNewZoneDialog, setShowNewZoneDialog] = useState(false);
   const [mode, setMode] = useState('select');
+  const [movingPolygonId, setMovingPolygonId] = useState(null);
   const [drawingPoints, setDrawingPoints] = useState([]);
   const [selectedFeatureId, setSelectedFeatureId] = useState(null);
   const [rightTab, setRightTab] = useState('turbines');
@@ -373,8 +374,7 @@ export default function Planning() {
     setLayers(prev => prev.map(l => l.id === id ? { ...l, ...changes } : l));
   }, []);
 
-  // Use polygon drag hook (after updateLayer is defined)
-  usePolygonDrag(draggingPolygonId, dragStartLatlng, setDraggingPolygonId, setDragStartLatlng, layers, updateLayer, mapRef);
+
 
   const substationLayer = layers.find(l => l.type === 'substation');
   const substations = substationLayer?.features || [];
@@ -447,6 +447,24 @@ export default function Planning() {
   };
 
   // ── Map interactions ───────────────────────────────────────────────────────
+  const movePolygon = (featureId, deltaLat, deltaLng) => {
+    for (const layer of layers) {
+      const feature = layer.features.find(f => f.id === featureId);
+      if (feature && feature.geometry.type === 'Polygon') {
+        const ring = feature.geometry.coordinates[0];
+        const newRing = ring.map(([lng, lat]) => [lng + deltaLng, lat + deltaLat]);
+        updateLayer(layer.id, {
+          features: layer.features.map(f =>
+            f.id === featureId
+              ? { ...f, geometry: { ...f.geometry, coordinates: [newRing] } }
+              : f
+          )
+        });
+        break;
+      }
+    }
+  };
+
   const addPoint = async (latlng) => {
     if (mode === 'draw_polygon') {
       setDrawingPoints(prev => [...prev, [latlng.lat, latlng.lng]]);
@@ -933,6 +951,11 @@ export default function Planning() {
             Finish ({drawingPoints.length}pts)
           </button>
         )}
+        {mode === 'move_polygon' && movingPolygonId && (
+          <button onClick={() => { setMode('select'); setMovingPolygonId(null); }} className="px-2 py-1 rounded text-[11px] bg-cyan-600/20 text-cyan-400 border border-cyan-500/40 shrink-0">
+            Done Moving
+          </button>
+        )}
         {loadingWind && (
           <span className="flex items-center gap-1 text-[11px] text-amber-400 shrink-0">
             <RefreshCw className="w-3 h-3 animate-spin" /> Fetching…
@@ -1047,11 +1070,11 @@ export default function Planning() {
                 const ring = f.geometry.coordinates[0];
                 const positions = ring.slice(0, -1).map(([lng, lat]) => [lat, lng]);
                 const isEditing = editingPolygonId === f.id;
-                const isDragging = draggingPolygonId === f.id;
+                const isMoving = movingPolygonId === f.id;
                 const polyColor = layer.type === 'polygon' ? (layer.color || '#06b6d4') : pathOpts.color;
                 const polyOpts = { ...pathOpts, color: polyColor, fillColor: polyColor,
-                  weight: isEditing || isDragging ? 2.5 : pathOpts.weight,
-                  dashArray: isEditing ? '6 4' : isDragging ? '4 2' : undefined };
+                  weight: isEditing || isMoving ? 2.5 : pathOpts.weight,
+                  dashArray: isEditing ? '6 4' : isMoving ? '3 3' : undefined };
                 // In drawing modes, let clicks bubble through to the map handler
                 const nonSelectMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation'].includes(mode);
                 return (
@@ -1507,7 +1530,13 @@ export default function Planning() {
               }}
               onClose={() => { setPolygonMenuFeature(null); setPolygonMenuLayerId(null); }}
               onEditVertices={() => {
-                setEditingPolygonId(polygonMenuFeature.id);
+                // Click twice: first activates edit mode, second activates move mode
+                if (editingPolygonId === polygonMenuFeature.id) {
+                  setMode('move_polygon');
+                  setMovingPolygonId(polygonMenuFeature.id);
+                } else {
+                  setEditingPolygonId(polygonMenuFeature.id);
+                }
                 setPolygonMenuFeature(null);
                 setPolygonMenuLayerId(null);
               }}

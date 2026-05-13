@@ -163,12 +163,12 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
       <button
         onClick={() => setMinimized(false)}
         className={cn(
-          "absolute bottom-4 left-4 z-[1500] w-12 h-12 rounded-full shadow-2xl flex items-center justify-center transition-all group hover:scale-110",
-          colors.bg, "border-2", colors.border
+          "absolute bottom-4 left-4 z-[1500] w-12 h-12 rounded-full shadow-2xl flex items-center justify-center transition-all group hover:scale-110 bg-gradient-to-br",
+          `from-${module.color}-600 to-${module.color}-800`
         )}
         title={`${module.title} — Lesson ${lessonIndex + 1}/${module.lessons.length}`}
       >
-        <BookOpen className={cn('w-5 h-5', colors.text)} />
+        <BookOpen className="w-5 h-5 text-white" />
       </button>
     );
   }

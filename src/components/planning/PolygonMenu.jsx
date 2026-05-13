@@ -167,12 +167,21 @@ export default function PolygonMenu({ feature, layer, onApply, onDelete, onClose
         </button>
       </div>
       {onEditVertices && (
-        <button
-          onClick={onEditVertices}
-          className="w-full py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-medium rounded-lg transition-colors border border-slate-600"
-        >
-          ✏ Edit / Move Vertices
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onEditVertices}
+            className="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-medium rounded-lg transition-colors border border-slate-600"
+          >
+            ✏ Edit Vertices
+          </button>
+          <button
+            onClick={() => onEditVertices()}
+            className="flex-1 py-1.5 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 border border-cyan-500/40 text-xs font-medium rounded-lg transition-colors"
+            title="Drag mode: click and drag the polygon to move it"
+          >
+            🖱 Move
+          </button>
+        </div>
       )}
     </div>
   );
