@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { usePlanningProject } from '@/lib/PlanningContext';
 import {
   MapContainer, TileLayer, Marker, Popup, Circle, Polygon, Polyline,
   useMapEvents
@@ -225,6 +226,7 @@ function MapBoundsEnforcer() {
 export default function Planning() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { currentProjectId, currentProject, switchProject, clearProject } = usePlanningProject();
   const exerciseId = location.state?.exerciseId || null;
   const lessonIndex = location.state?.lessonIndex ?? null;
   const lessonProjectId = location.state?.lessonProjectId || null;
@@ -234,7 +236,6 @@ export default function Planning() {
   const activeExercise = exerciseId && !showLessonGuide ? EXERCISES[exerciseId] : null;
 
   // ── Project system ─────────────────────────────────────────────────────────
-  const [currentProjectId, setCurrentProjectId] = useState(null);
 
   const loadCurrentProject = (id) => {
     if (!id) return null;
@@ -246,7 +247,7 @@ export default function Planning() {
     return proj;
   };
 
-  const initProj = {};
+  const initProj = currentProject || {};
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [layers, setLayers] = useState(() => initProj.layers || [
@@ -354,6 +355,13 @@ export default function Planning() {
     window.__lessonGuideState__ = { mode, tab: rightTab, ts: Date.now() };
   }, [mode, rightTab]);
 
+  // ── Clear project on lesson entry or exercise start ────────────────────────
+  useEffect(() => {
+    if (showLessonGuide || activeExercise) {
+      clearProject();
+    }
+  }, [showLessonGuide, activeExercise, clearProject]);
+
   // ── Auto-load lesson project from navigation state ────────────────────────
   useEffect(() => {
     if (!lessonProjectId) return;
@@ -374,7 +382,7 @@ export default function Planning() {
 
   // ── Project switching ──────────────────────────────────────────────────────
   const handleSwitchProject = (id, proj) => {
-    setCurrentProjectId(id);
+    switchProject(id, proj);
     setLayers(proj.layers || []);
     setTurbineTypes(proj.turbineTypes || DEFAULT_TURBINE_TYPES);
     setCableTypes(proj.cableTypes || DEFAULT_CABLE_TYPES);
