@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { createLayer, createFeature, geoJSONToLayer, downloadJSON, layersToGeoJSON, DEFAULT_POWER_CURVE, windAtHubHeight, calcTurbineAEP, calcWeibullAEP } from '@/lib/gisUtils';
+import RightPanelTabs from '@/components/planning/RightPanelTabs';
 import { checkExclusionZones } from '@/lib/geoUtils';
 import { fetchElevation, fetchWindData } from '@/lib/planningUtils';
 import WindResourceRenderer from '@/components/gis/WindResourceLayer';
@@ -787,13 +788,7 @@ export default function Planning() {
   ];
   const activeDrawTool = DRAW_TOOLS.find(t => t.id === mode);
 
-  const RIGHT_TABS = [
-    { id: 'turbines', label: 'Turbines', icon: Wind },
-    { id: 'cables', label: 'Cables', icon: Zap },
-    { id: 'analysis', label: 'Analysis', icon: BarChart2 },
-    { id: 'layers', label: 'Layers', icon: Layers },
-    { id: 'types', label: 'Types', icon: Settings },
-  ];
+
 
   // ── No project open — show welcome screen ─────────────────────────────────
   if (!currentProjectId) {
@@ -1749,19 +1744,7 @@ export default function Planning() {
 
         {/* Right panel */}
         <div className={cn("shrink-0 flex flex-col bg-slate-900 border-l border-slate-800 overflow-hidden transition-all duration-200", rightPanelOpen ? "w-80" : "w-0 border-l-0")}>
-          {/* Tabs */}
-          <div className="flex border-b border-slate-800 shrink-0 overflow-x-auto">
-            {RIGHT_TABS.map(({ id, label, icon: TabIcon }) => (
-              <button key={id} onClick={() => setRightTab(id)}
-                className={cn("flex-1 flex items-center justify-center gap-1 py-2.5 text-[10px] font-medium transition-colors whitespace-nowrap px-1 shrink-0",
-                  rightTab === id ? "text-white border-b-2 border-emerald-500" : "text-slate-500 hover:text-slate-300",
-                  highlights.includes(`tab-${id}`) && "ring-1 ring-amber-400 ring-inset animate-pulse bg-amber-500/10"
-                )}
-              >
-                <TabIcon className="w-3 h-3 shrink-0" /> {label}
-              </button>
-            ))}
-          </div>
+          <RightPanelTabs rightTab={rightTab} setRightTab={setRightTab} features={features} highlights={highlights} rightPanelOpen={rightPanelOpen} />
 
           <div className="flex-1 overflow-y-auto p-3">
             {/* TURBINES TAB */}
