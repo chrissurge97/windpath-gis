@@ -68,6 +68,11 @@ function TextLabel({ f, layer, x, y, mode, map, onSelect, onDragEnd }) {
   const divRef = useRef(null);
   const { text = '', color = '#fff', fontSize = 14, fontFamily = 'sans-serif' } = f.properties;
   const isSelect = mode === 'select';
+  
+  // Scale text size based on zoom level (16px at zoom 12, scales up/down with zoom)
+  const zoom = map.getZoom();
+  const baseZoom = 12;
+  const scaledFontSize = fontSize * Math.pow(2, zoom - baseZoom) / 2;
 
   const handleMouseDown = (e) => {
     if (!isSelect) return;
@@ -116,7 +121,7 @@ function TextLabel({ f, layer, x, y, mode, map, onSelect, onDragEnd }) {
         transform: `translate(${x}px, ${y}px)`,
         whiteSpace: 'nowrap',
         fontFamily,
-        fontSize: `${fontSize}px`,
+        fontSize: `${scaledFontSize}px`,
         color,
         fontWeight: 600,
         lineHeight: 1,
