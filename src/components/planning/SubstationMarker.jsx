@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { Trash2, X } from 'lucide-react';
+import { checkExclusionZones } from '@/lib/geoUtils';
 
 export default function SubstationMarker({
   s,
@@ -20,6 +21,7 @@ export default function SubstationMarker({
   setTurbineMenuFeature,
   setPolygonMenuFeature,
 }) {
+  const [exclusionWarning, setExclusionWarning] = useState(null);
   const [lng, lat] = s.geometry.coordinates;
   const subTotalMw = calcSubstationLoad(s.id, cables, turbines);
   const subCapMw = s.properties.capacity_generation_mw || 0;
@@ -48,6 +50,13 @@ export default function SubstationMarker({
           const newLatLng = e.target.getLatLng();
           const newCoords = [newLatLng.lng, newLatLng.lat];
           if (!substationLayer) return;
+          // Check exclusion zones
+          const exclusionHit = checkExclusionZones(newLatLng.lat, newLatLng.lng, layers);
+          if (exclusionHit) {
+            setExclusionWarning({ layerName: exclusionHit.layer.name, featureName: exclusionHit.feature.properties?.name || exclusionHit.layer.name });
+            setTimeout(() => setExclusionWarning(null), 5000);
+            return; // Don't allow the move
+          }
           // Update substation
           updateLayer(substationLayer.id, {
             features: substationLayer.features.map(f =>
@@ -87,6 +96,37 @@ export default function SubstationMarker({
           </p>}
         </div>
       </Popup>
+      {exclusionWarning && (
+        <div style={{
+          position: 'fixed',
+          top: '70px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1600,
+          pointerEvents: 'none'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'start',
+            gap: '12px',
+            backgroundColor: 'rgba(127, 29, 29, 0.95)',
+            border: '1px solid rgba(239, 68, 68, 0.7)',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+            maxWidth: '400px'
+          }}>
+            <div style={{ color: '#f87171', fontSize: '18px', marginTop: '2px' }}>⛔</div>
+            <div>
+              <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#fca5a5', marginBottom: '4px' }}>Substation Cannot Be Moved</p>
+              <p style={{ fontSize: '12px', color: '#f87171', marginBottom: '4px' }}>
+                <span style={{ fontWeight: 'bold', color: '#fef2f2' }}>{exclusionWarning.featureName}</span> is in a restricted zone <span style={{ color: '#dc2626' }}>({exclusionWarning.layerName})</span>.
+              </p>
+              <p style={{ fontSize: '11px', color: '#dc2626' }}>Move the substation outside this constraint zone.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </Marker>
   );
 }

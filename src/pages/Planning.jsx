@@ -441,6 +441,13 @@ export default function Planning() {
     }
 
     if (mode === 'place_substation') {
+      // Check exclusion zones first
+      const exclusionHit = checkExclusionZones(latlng.lat, latlng.lng, layers);
+      if (exclusionHit) {
+        setExclusionWarning({ layerName: exclusionHit.layer.name, featureName: exclusionHit.feature.properties?.name || exclusionHit.layer.name });
+        setTimeout(() => setExclusionWarning(null), 5000);
+        return;
+      }
       const subLayer = layers.find(l => l.type === 'substation');
       if (!subLayer) return;
       const f = createFeature(subLayer.id,
@@ -1143,6 +1150,15 @@ export default function Planning() {
                         dragend: (e) => {
                           const newLatLng = e.target.getLatLng();
                           const newCoords = [newLatLng.lng, newLatLng.lat];
+                          // Check exclusion zones for turbines
+                          if (layer.type === 'turbine') {
+                            const exclusionHit = checkExclusionZones(newLatLng.lat, newLatLng.lng, layers);
+                            if (exclusionHit) {
+                              setExclusionWarning({ layerName: exclusionHit.layer.name, featureName: exclusionHit.feature.properties?.name || exclusionHit.layer.name });
+                              setTimeout(() => setExclusionWarning(null), 5000);
+                              return; // Don't allow the move
+                            }
+                          }
                           updateLayer(layer.id, {
                             features: layer.features.map(ft =>
                               ft.id === f.id
