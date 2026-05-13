@@ -74,7 +74,7 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progressList.length]);
 
-  const { completedCount, totalModules, nextModule, NextIcon, earnedBadges, level, xpInLevel, levelPercent } = useMemo(() => {
+  const { completedCount, totalModules, nextModuleId, nextModule, NextIcon, earnedBadges, level, xpInLevel, levelPercent } = useMemo(() => {
     const completedModules = progress.completed_modules || [];
     const completedCount = completedModules.length;
     const totalModules = MODULES.length;
