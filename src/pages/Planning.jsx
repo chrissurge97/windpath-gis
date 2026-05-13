@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
   Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target,
-  Save, Layers, Settings, X, Satellite, Navigation,
+  Layers, Settings, X, Satellite, Navigation,
   ChevronDown, ArrowUp, ArrowDown, PlusCircle
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
@@ -30,7 +30,7 @@ import ExerciseGuide from '@/components/planning/ExerciseGuide';
 import { EXERCISES } from '@/lib/exercises';
 import ExportMenu from '@/components/planning/ExportMenu';
 import LayerImportExport from '@/components/planning/LayerImportExport';
-import ProjectManager, { saveProject, loadProject, createNewProject, loadProjectIndex } from '@/components/planning/ProjectManager';
+import ProjectFileButtons, { saveProject, loadProject, createNewProject, loadProjectIndex } from '@/components/planning/ProjectManager';
 
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -289,7 +289,7 @@ export default function Planning() {
   const [loadingWind, setLoadingWind] = useState(false);
   const [windFetched, setWindFetched] = useState(false);
   const [projectName, setProjectName] = useState(() => initProj.name || 'Wind Farm Project');
-  const [savedMsg, setSavedMsg] = useState(false);
+
   const [windParams, setWindParams] = useState({ k: 2.0, lambda: 7.0 });
 
   // Map display state
@@ -743,11 +743,13 @@ export default function Planning() {
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-slate-800 flex-wrap shrink-0">
         <Map className="w-4 h-4 text-emerald-400 shrink-0" />
-        <ProjectManager
+        <ProjectFileButtons
           currentProjectId={currentProjectId}
           currentProjectName={projectName}
+          currentData={{ id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams }}
           onSwitchProject={handleSwitchProject}
           onNewProject={handleNewProject}
+          onSaved={(name) => setProjectName(name)}
         />
         <input
           value={projectName}
@@ -845,17 +847,7 @@ export default function Planning() {
             }}
             onExportPDF={() => exportProjectPDF({ projectName, turbines, turbineTypes, cables, cableTypes, substations, totalCapacity_mw, totalAEP, avgCapFactor, avgWindSpeed, totalCableLength, totalCableCost, windParams, monthlyData, layers, mapEl: mapRef.current?.getContainer ? mapRef.current.getContainer() : null })}
           />
-          <button
-            onClick={() => {
-              saveProject(currentProjectId, { id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams });
-              setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2000);
-            }}
-            className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all",
-              savedMsg ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-white border-slate-600 hover:bg-slate-700"
-            )}
-          >
-            <Save className="w-3 h-3" /> {savedMsg ? 'Saved!' : 'Save'}
-          </button>
+
         </div>
       </div>
 
@@ -1051,8 +1043,8 @@ export default function Planning() {
                             }
                           }
                         }} />
-                      {radiusConfig?.show && (
-                        <Circle center={[lat, lng]} radius={radiusConfig.radius}
+                      {turbineRadii[f.id]?.show === true && (
+                        <Circle center={[lat, lng]} radius={turbineRadii[f.id].radius || 500}
                           pathOptions={{ color: '#f97316', fillColor: '#f97316', fillOpacity: 0.06, weight: 1.5, dashArray: '5 4', opacity: 0.7, interactive: false }} />
                       )}
                     </React.Fragment>
@@ -1094,12 +1086,12 @@ export default function Planning() {
               const color = spd >= 10 ? '#ef4444' : spd >= 9 ? '#f97316' : spd >= 8 ? '#f59e0b' : spd >= 7 ? '#10b981' : spd >= 6 ? '#06b6d4' : '#3b82f6';
               return (
                 <React.Fragment key={`wind-${t.id}`}>
-                  <Circle center={[lat, lng]} radius={200} pane="windPane"
-                    pathOptions={{ color, fillColor: color, fillOpacity: 0.55, weight: 1.5, opacity: 0.8, interactive: false }} />
-                  <Circle center={[lat, lng]} radius={500} pane="windPane"
-                    pathOptions={{ color, fillColor: color, fillOpacity: 0.20, weight: 0, opacity: 0, interactive: false }} />
-                  <Circle center={[lat, lng]} radius={900} pane="windPane"
-                    pathOptions={{ color, fillColor: color, fillOpacity: 0.08, weight: 0, opacity: 0, interactive: false }} />
+                  <Circle center={[lat, lng]} radius={600} pane="windPane"
+                    pathOptions={{ color, fillColor: color, fillOpacity: 0.65, weight: 2, opacity: 1, interactive: false }} />
+                  <Circle center={[lat, lng]} radius={1200} pane="windPane"
+                    pathOptions={{ color, fillColor: color, fillOpacity: 0.30, weight: 0, opacity: 0, interactive: false }} />
+                  <Circle center={[lat, lng]} radius={2000} pane="windPane"
+                    pathOptions={{ color, fillColor: color, fillOpacity: 0.12, weight: 0, opacity: 0, interactive: false }} />
                 </React.Fragment>
               );
             })}
