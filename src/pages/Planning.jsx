@@ -224,8 +224,10 @@ export default function Planning() {
   const navigate = useNavigate();
   const exerciseId = location.state?.exerciseId || null;
   const lessonIndex = location.state?.lessonIndex ?? null;
+  const lessonProjectId = location.state?.lessonProjectId || null;
+  const lessonModuleId = location.state?.moduleId || null;
   // Show lesson guide if lessonIndex is present, exercise guide otherwise
-  const showLessonGuide = lessonIndex !== null;
+  const showLessonGuide = lessonIndex !== null && lessonProjectId !== null;
   const activeExercise = exerciseId && !showLessonGuide ? EXERCISES[exerciseId] : null;
 
   // ── Project system ─────────────────────────────────────────────────────────
@@ -330,6 +332,13 @@ export default function Planning() {
 
   const selectedTurbineType = turbineTypes.find(t => t.id === selectedTurbineTypeId) || turbineTypes[0];
   const selectedCableType = cableTypes.find(t => t.id === selectedCableTypeId) || cableTypes[0];
+
+  // ── Auto-load lesson project from navigation state ────────────────────────
+  useEffect(() => {
+    if (!lessonProjectId) return;
+    const proj = loadProject(lessonProjectId);
+    if (proj) handleSwitchProject(lessonProjectId, proj);
+  }, [lessonProjectId]);
 
   // ── Persist (debounced) ────────────────────────────────────────────────────
   const saveTimer = useRef(null);
@@ -1546,11 +1555,11 @@ export default function Planning() {
           )}
 
           {/* Lesson Guide overlay — shown when navigated from a specific lesson */}
-          {showLessonGuide && exerciseId && (
+          {showLessonGuide && lessonModuleId && (
             <LessonGuide
-              moduleId={exerciseId}
+              moduleId={lessonModuleId}
               initialLessonIndex={lessonIndex}
-              onClose={() => navigate('/learn', { state: { moduleId: exerciseId } })}
+              onClose={() => navigate('/learn', { state: { moduleId: lessonModuleId } })}
             />
           )}
 

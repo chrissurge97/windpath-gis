@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MODULES, BADGES } from '@/lib/trainingModules';
+import { saveLessonProject } from '@/lib/lessonProjects';
 import { EXERCISES } from '@/lib/exercises';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -39,9 +40,10 @@ function LessonView({ module, onComplete }) {
   const lesson = module.lessons[lessonIndex];
   const isLast = lessonIndex === module.lessons.length - 1;
 
-  // Each lesson can open in the planner with its index as context
+  // Each lesson can open in the planner — saves a sandboxed lesson project first
   const openInPlanner = () => {
-    navigate('/planning', { state: { exerciseId: module.id, lessonIndex } });
+    const project = saveLessonProject(module.id, lessonIndex);
+    navigate('/planning', { state: { lessonProjectId: project.id, moduleId: module.id, lessonIndex } });
   };
 
   return (
