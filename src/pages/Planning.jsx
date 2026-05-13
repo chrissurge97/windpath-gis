@@ -9,7 +9,7 @@ import 'leaflet/dist/leaflet.css';
 import { cn } from '@/lib/utils';
 import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
-  Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target,
+  Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target, FolderOpen,
   Layers, Settings, X, Satellite, Navigation,
   ChevronDown, ChevronRight, ArrowUp, ArrowDown, PlusCircle
 } from 'lucide-react';
@@ -30,7 +30,7 @@ import ExerciseGuide from '@/components/planning/ExerciseGuide';
 import { EXERCISES } from '@/lib/exercises';
 import ExportMenu from '@/components/planning/ExportMenu';
 import LayerImportExport from '@/components/planning/LayerImportExport';
-import ProjectFileButtons, { saveProject, loadProject, createNewProject, loadProjectIndex } from '@/components/planning/ProjectManager';
+import ProjectFileButtons, { saveProject, loadProject, createNewProject, loadProjectIndex, OpenProjectModal } from '@/components/planning/ProjectManager';
 
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -225,37 +225,10 @@ export default function Planning() {
   const activeExercise = exerciseId ? EXERCISES[exerciseId] : null;
 
   // ── Project system ─────────────────────────────────────────────────────────
-  const [currentProjectId, setCurrentProjectId] = useState(() => {
-    // Load or create the first project
-    const index = loadProjectIndex();
-    if (index.length > 0) return index[0].id;
-    // Migrate legacy data if any
-    try {
-      const legacy = localStorage.getItem('planning_v3_ire');
-      if (legacy) {
-        const d = JSON.parse(legacy);
-        const id = `proj_legacy_${Date.now()}`;
-        const proj = {
-          id,
-          name: 'My Project',
-          layers: d.layers || [],
-          turbineTypes: d.turbineTypes || DEFAULT_TURBINE_TYPES,
-          cableTypes: d.cableTypes || DEFAULT_CABLE_TYPES,
-          windParams: { k: 2.0, lambda: 7.0 },
-        };
-        // Migrate: add substation layer if missing
-        if (!proj.layers.find(l => l.type === 'substation')) {
-          proj.layers.push(createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 }));
-        }
-        saveProject(id, proj);
-        return id;
-      }
-    } catch {}
-    const { id } = createNewProject('My Project');
-    return id;
-  });
+  const [currentProjectId, setCurrentProjectId] = useState(null);
 
   const loadCurrentProject = (id) => {
+    if (!id) return null;
     const proj = loadProject(id);
     if (!proj) return null;
     if (!proj.layers.find(l => l.type === 'substation')) {
@@ -264,7 +237,7 @@ export default function Planning() {
     return proj;
   };
 
-  const initProj = loadCurrentProject(currentProjectId) || {};
+  const initProj = {};
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [layers, setLayers] = useState(() => initProj.layers || [
@@ -329,6 +302,7 @@ export default function Planning() {
   // Exclusion zone placement warning
   const [exclusionWarning, setExclusionWarning] = useState(null); // { layerName, featureName }
 
+  const [showOpenModal, setShowOpenModal] = useState(false);
   const mapRef = useRef(null);
   const [panesReady, setPanesReady] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
@@ -356,6 +330,7 @@ export default function Planning() {
   // ── Persist (debounced) ────────────────────────────────────────────────────
   const saveTimer = useRef(null);
   useEffect(() => {
+    if (!currentProjectId) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       saveProject(currentProjectId, { id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams });
@@ -731,6 +706,44 @@ export default function Planning() {
     { id: 'layers', label: 'Layers', icon: Layers },
     { id: 'types', label: 'Types', icon: Settings },
   ];
+
+  // ── No project open — show welcome screen ─────────────────────────────────
+  if (!currentProjectId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-slate-950 gap-6">
+        <div className="text-center mb-2">
+          <Wind className="w-10 h-10 text-emerald-400 mx-auto mb-3 opacity-80" />
+          <h1 className="text-2xl font-bold text-white mb-1">Wind Farm Planning Tool</h1>
+          <p className="text-slate-500 text-sm">Open an existing project or create a new one to begin.</p>
+        </div>
+        <div className="flex flex-col gap-3 w-64">
+          <button
+            onClick={() => {
+              const name = window.prompt('New project name:', 'New Wind Farm Project');
+              if (!name?.trim()) return;
+              const { id, data } = createNewProject(name.trim());
+              handleNewProject(id, data);
+            }}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            <Plus className="w-4 h-4" /> New Project
+          </button>
+          <button
+            onClick={() => setShowOpenModal(true)}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-semibold rounded-xl transition-colors"
+          >
+            <Map className="w-4 h-4" /> Open Project
+          </button>
+        </div>
+        {showOpenModal && (
+          <OpenProjectModal
+            onOpen={(id, proj) => { setShowOpenModal(false); handleSwitchProject(id, proj); }}
+            onClose={() => setShowOpenModal(false)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-slate-950">

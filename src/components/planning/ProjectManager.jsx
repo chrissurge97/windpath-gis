@@ -242,6 +242,20 @@ function FileExplorerModal({ mode, currentProjectId, currentProjectName, current
   );
 }
 
+export function OpenProjectModal({ onOpen, onClose }) {
+  return (
+    <FileExplorerModal
+      mode="open"
+      currentProjectId={null}
+      currentProjectName=""
+      currentData={{}}
+      onClose={onClose}
+      onOpen={onOpen}
+      onSaved={() => {}}
+    />
+  );
+}
+
 export default function ProjectFileButtons({ currentProjectId, currentProjectName, currentData, onNewProject, onSwitchProject, onSaved }) {
   const [modal, setModal] = useState(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
