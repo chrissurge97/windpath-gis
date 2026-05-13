@@ -870,7 +870,7 @@ export default function Planning() {
         </button>
 
         {/* Drawing tools dropdown */}
-        <div className="relative shrink-0" ref={drawToolsRef}>
+        <div className="relative shrink-0 z-[2100]" ref={drawToolsRef}>
           <button
             onClick={() => setDrawToolsOpen(v => !v)}
             className={cn(
@@ -884,7 +884,7 @@ export default function Planning() {
             <ChevronDown className={cn("w-3 h-3 transition-transform", drawToolsOpen && "rotate-180")} />
           </button>
           {drawToolsOpen && (
-            <div className="absolute top-full left-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-[2000] overflow-hidden min-w-[150px]">
+            <div className="absolute top-full left-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-[2000] overflow-hidden min-w-[150px] pointer-events-auto">
               {DRAW_TOOLS.map(({ id, label, icon: DIcon }) => (
                 <button key={id} onClick={() => {
                   setMode(id);
@@ -900,8 +900,8 @@ export default function Planning() {
                     if (first) setSelectedLayerId(first.id);
                   }
                 }}
-                  className={cn("flex items-center gap-2 w-full px-3 py-2 text-[11px] font-medium transition-colors text-left",
-                    mode === id ? "bg-emerald-500/20 text-emerald-400" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  className={cn("flex items-center gap-2 w-full px-3 py-2 text-[11px] font-medium transition-colors text-left hover:bg-slate-800 pointer-events-auto",
+                    mode === id ? "bg-emerald-500/20 text-emerald-400" : "text-slate-300 hover:text-white"
                   )}>
                   <DIcon className="w-3 h-3" /> {label}
                 </button>
