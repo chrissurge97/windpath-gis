@@ -3,22 +3,15 @@
 // ─────────────────────────────────────────────────────────────────
 
 /**
- * Fetch real elevation from Open-Elevation API (free, no key)
+ * Fetch real elevation from Open-Meteo SRTM (free, no key, reliable)
  */
 export async function fetchElevation(lat, lng) {
   try {
-    const res = await fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`);
+    const res = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`);
     const data = await res.json();
-    return data?.results?.[0]?.elevation ?? null;
+    return data?.elevation?.[0] ?? null;
   } catch {
-    // Fallback: SRTM via open-meteo elevation endpoint
-    try {
-      const res = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`);
-      const data = await res.json();
-      return data?.elevation?.[0] ?? null;
-    } catch {
-      return null;
-    }
+    return null;
   }
 }
 

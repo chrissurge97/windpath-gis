@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
   Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target,
-  Save, Layers, Settings, X, Satellite, Mountain, Navigation,
+  Save, Layers, Settings, X, Satellite, Navigation,
   ChevronDown, ArrowUp, ArrowDown, PlusCircle
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
@@ -28,6 +28,8 @@ import { exportProjectPDF } from '@/lib/exportPDF';
 import { buildDemoProject } from '@/lib/demoProject';
 import ExerciseGuide from '@/components/planning/ExerciseGuide';
 import { EXERCISES } from '@/lib/exercises';
+import ExportMenu from '@/components/planning/ExportMenu';
+import LayerImportExport from '@/components/planning/LayerImportExport';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -258,7 +260,6 @@ export default function Planning() {
   const [showBaseMapMenu, setShowBaseMapMenu] = useState(false);
   const satelliteView = baseMap === 'satellite';
   const roadsView = baseMap === 'roads';
-  const [showElevation, setShowElevation] = useState(false);
   const [showWindLayer, setShowWindLayer] = useState(true);
   const [showSubstations, setShowSubstations] = useState(true);
 
@@ -688,7 +689,7 @@ export default function Planning() {
         />
         <div className="h-4 w-px bg-slate-700 mx-1" />
 
-        {TOOLBAR_MODES.map(({ id, label, icon: Icon }) => (
+        {TOOLBAR_MODES.map(({ id, label, icon: TbIcon }) => (
           <button key={id} onClick={() => {
             setMode(id);
             setDrawingPoints([]);
@@ -708,7 +709,7 @@ export default function Planning() {
               mode === id ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700"
             )}
           >
-            <Icon className="w-3 h-3" /> {label}
+            <TbIcon className="w-3 h-3" /> {label}
           </button>
         ))}
 
@@ -756,41 +757,28 @@ export default function Planning() {
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-400 hover:text-white">
             <Upload className="w-3 h-3" /> Import
           </button>
-          <button onClick={() => downloadJSON(layersToGeoJSON(layers), `${projectName}.geojson`)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-400 hover:text-white">
-            <Download className="w-3 h-3" /> GeoJSON
-          </button>
-          <button
-            onClick={() => exportProjectPDF({
-              projectName,
-              turbines,
-              turbineTypes,
-              cables,
-              cableTypes,
-              substations,
-              totalCapacity_mw,
-              totalAEP,
-              avgCapFactor,
-              avgWindSpeed,
-              totalCableLength,
-              totalCableCost,
-              windParams,
-              monthlyData,
-              layers,
-              mapEl: mapRef.current?.getContainer ? mapRef.current.getContainer() : null,
-            })}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-purple-800/40 border border-purple-700/50 text-purple-300 hover:bg-purple-700/40"
-            title="Download PDF summary report"
-          >
-            <Download className="w-3 h-3" /> PDF Report
-          </button>
-          <button
-            onClick={() => exportKML(layers, turbineTypes, cableTypes, substations, showSubstations, projectName)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-emerald-800/40 border border-emerald-700/50 text-emerald-300 hover:bg-emerald-700/40"
-            title="Export as KML — opens in ArcGIS, QGIS, Google Earth (georeferenced)"
-          >
-            <Download className="w-3 h-3" /> KML
-          </button>
+          <ExportMenu
+            onExportGeoJSON={() => downloadJSON(layersToGeoJSON(layers), `${projectName}.geojson`)}
+            onExportKML={() => exportKML(layers, turbineTypes, cableTypes, substations, showSubstations, projectName)}
+            onExportCSV={() => {
+              const rows = [['layer','feature_id','name','geometry_type','lat','lng','notes'].join(',')];
+              for (const layer of layers) {
+                for (const f of layer.features) {
+                  const g = f.geometry;
+                  let lat = '', lng = '';
+                  if (g.type === 'Point') { [lng, lat] = g.coordinates; }
+                  else if (g.type === 'Polygon') { [lng, lat] = g.coordinates[0][0]; }
+                  else if (g.type === 'LineString') { [lng, lat] = g.coordinates[0]; }
+                  const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+                  rows.push([esc(layer.name),esc(f.id),esc(f.properties?.name||''),esc(g.type),esc(lat),esc(lng),esc(f.properties?.notes||'')].join(','));
+                }
+              }
+              const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a'); a.href = url; a.download = `${projectName}.csv`; a.click(); URL.revokeObjectURL(url);
+            }}
+            onExportPDF={() => exportProjectPDF({ projectName, turbines, turbineTypes, cables, cableTypes, substations, totalCapacity_mw, totalAEP, avgCapFactor, avgWindSpeed, totalCableLength, totalCableCost, windParams, monthlyData, layers, mapEl: mapRef.current?.getContainer ? mapRef.current.getContainer() : null })}
+          />
           <button
             onClick={() => { localStorage.setItem(STORAGE_KEY, JSON.stringify({ layers, turbineTypes, cableTypes })); setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2000); }}
             className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all",
@@ -836,13 +824,6 @@ export default function Planning() {
                 url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png"
                 attribution=""
                 opacity={0.7}
-              />
-            )}
-            {showElevation && (
-              <TileLayer
-                url="https://services.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}"
-                attribution="Shaded Relief &copy; Esri"
-                opacity={0.5}
               />
             )}
             <MapClickHandler mode={mode} onAddPoint={addPoint} onFinishPolygon={finishPolygon} onFinishCable={finishCable} />
@@ -1024,17 +1005,24 @@ export default function Planning() {
               />
             )}
 
-            {/* Wind speed heatmap circles */}
+            {/* Wind speed heatmap — gradient circles with multiple rings for depth */}
             {showWindLayer && turbines.map(t => {
               const spd = t.properties.hub_wind_speed;
               if (!spd) return null;
               const [lng, lat] = t.geometry.coordinates;
-              const color = spd >= 10 ? '#ef4444' : spd >= 8 ? '#f59e0b' : spd >= 6 ? '#10b981' : '#3b82f6';
-              return (
-                <Circle key={`wind-${t.id}`} center={[lat, lng]} radius={800}
-                  pathOptions={{ color, fillColor: color, fillOpacity: 0.18, weight: 0, interactive: false }}
+              // Colour gradient: blue → cyan → green → amber → red
+              const color = spd >= 10 ? '#ef4444' : spd >= 9 ? '#f97316' : spd >= 8 ? '#f59e0b' : spd >= 7 ? '#10b981' : spd >= 6 ? '#06b6d4' : '#3b82f6';
+              const rings = [
+                { r: 300, opacity: 0.40 },
+                { r: 600, opacity: 0.22 },
+                { r: 1000, opacity: 0.12 },
+                { r: 1500, opacity: 0.06 },
+              ];
+              return rings.map(({ r, opacity }, ri) => (
+                <Circle key={`wind-${t.id}-${ri}`} center={[lat, lng]} radius={r}
+                  pathOptions={{ color, fillColor: color, fillOpacity: opacity, weight: ri === 0 ? 1 : 0, opacity: ri === 0 ? 0.5 : 0, interactive: false }}
                 />
-              );
+              ));
             })}
 
             {/* Placeable Substations */}
@@ -1086,37 +1074,32 @@ export default function Planning() {
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg bg-slate-900 border-slate-700 text-slate-300 hover:text-white w-full"
               >
                 {baseMap === 'satellite' ? <Satellite className="w-3 h-3 text-blue-400" /> : baseMap === 'roads' ? <Navigation className="w-3 h-3 text-green-400" /> : <Map className="w-3 h-3 text-slate-400" />}
+
                 <span className="flex-1 text-left">{baseMap === 'satellite' ? 'Satellite' : baseMap === 'roads' ? 'Roads' : 'Dark'}</span>
                 <ChevronDown className={cn("w-3 h-3 text-slate-500 transition-transform", showBaseMapMenu && "rotate-180")} />
               </button>
               {showBaseMapMenu && (
                 <div className="absolute top-full right-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl overflow-hidden min-w-[110px] z-[1200]">
                   {[
-                    { id: 'dark', label: 'Dark', Ic: Map },
-                    { id: 'satellite', label: 'Satellite', Ic: Satellite },
-                    { id: 'roads', label: 'Roads', Ic: Navigation },
-                  ].map(({ id, label, Ic }) => (
+                    { id: 'dark', label: 'Dark', icon: Map },
+                    { id: 'satellite', label: 'Satellite', icon: Satellite },
+                    { id: 'roads', label: 'Roads', icon: Navigation },
+                  ].map(({ id, label, icon: BmIcon }) => (
                     <button key={id} onClick={() => { setBaseMap(id); setShowBaseMapMenu(false); }}
                       className={cn("flex items-center gap-2 w-full px-3 py-2 text-[10px] font-medium transition-colors",
                         baseMap === id ? "bg-emerald-500/20 text-emerald-300" : "text-slate-400 hover:bg-slate-800 hover:text-white"
                       )}>
-                      <Ic className="w-3 h-3" /> {label}
+                      <BmIcon className="w-3 h-3" /> {label}
                     </button>
                   ))}
                 </div>
               )}
             </div>
-            <button onClick={() => setShowElevation(v => !v)}
-              className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
-                showElevation ? "bg-amber-500/30 text-amber-300 border-amber-500/50" : "bg-slate-900 text-slate-400 border-slate-700 hover:text-white"
-              )}>
-              <Mountain className="w-3 h-3" /> Elevation
-            </button>
             <button onClick={() => setShowWindLayer(v => !v)}
               className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
                 showWindLayer ? "bg-cyan-600 text-white border-cyan-500" : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
               )}>
-              <Wind className="w-3 h-3" /> Wind
+              <Wind className="w-3 h-3" /> Wind Heat Map
             </button>
             <button onClick={() => setShowSubstations(v => !v)}
               className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
@@ -1126,6 +1109,29 @@ export default function Planning() {
               {`Substations${substations.length > 0 ? ` (${substations.length})` : ''}`}
             </button>
           </div>
+
+          {/* Wind heat map legend */}
+          {showWindLayer && turbines.some(t => t.properties.hub_wind_speed) && (
+            <div className="absolute bottom-6 right-3 z-[1100] bg-slate-900/90 border border-slate-700 rounded-xl px-3 py-2.5 shadow-xl">
+              <p className="text-[9px] text-slate-400 uppercase tracking-wider mb-1.5 font-semibold">Hub Wind Speed (m/s)</p>
+              <div className="space-y-1">
+                {[
+                  { color: '#ef4444', label: '≥ 10.0 m/s', desc: 'Excellent' },
+                  { color: '#f97316', label: '9–10 m/s', desc: 'Very good' },
+                  { color: '#f59e0b', label: '8–9 m/s', desc: 'Good' },
+                  { color: '#10b981', label: '7–8 m/s', desc: 'Moderate' },
+                  { color: '#06b6d4', label: '6–7 m/s', desc: 'Poor' },
+                  { color: '#3b82f6', label: '< 6.0 m/s', desc: 'Very poor' },
+                ].map(({ color, label, desc }) => (
+                  <div key={label} className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full shrink-0 opacity-80" style={{ background: color }} />
+                    <span className="text-[10px] text-slate-300 font-medium">{label}</span>
+                    <span className="text-[9px] text-slate-500">{desc}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Mode hint */}
           {mode !== 'select' && (
@@ -1518,13 +1524,13 @@ export default function Planning() {
         <div className="w-80 shrink-0 flex flex-col bg-slate-900 border-l border-slate-800 overflow-hidden">
           {/* Tabs */}
           <div className="flex border-b border-slate-800 shrink-0 overflow-x-auto">
-            {RIGHT_TABS.map(({ id, label, icon: Icon }) => (
+            {RIGHT_TABS.map(({ id, label, icon: TabIcon }) => (
               <button key={id} onClick={() => setRightTab(id)}
                 className={cn("flex-1 flex items-center justify-center gap-1 py-2.5 text-[10px] font-medium transition-colors whitespace-nowrap px-1 shrink-0",
                   rightTab === id ? "text-white border-b-2 border-emerald-500" : "text-slate-500 hover:text-slate-300"
                 )}
               >
-                <Icon className="w-3 h-3 shrink-0" /> {label}
+                <TabIcon className="w-3 h-3 shrink-0" /> {label}
               </button>
             ))}
           </div>
@@ -1677,6 +1683,11 @@ export default function Planning() {
                   </button>
                 </div>
                 <p className="text-[9px] text-slate-600">Higher layers render on top. Use ↑↓ to reorder.</p>
+                <LayerImportExport
+                  layers={layers}
+                  onAddLayer={(layer) => setLayers(prev => [...prev, layer])}
+                  projectName={projectName}
+                />
                 {layers.map((layer, idx) => (
                   <div key={layer.id} onClick={() => {
                     setSelectedLayerId(layer.id);

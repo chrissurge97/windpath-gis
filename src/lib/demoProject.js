@@ -20,6 +20,8 @@ const ID = {
   forestry: uuid(), aviation: uuid(), heritage: uuid(),
   // New layers
   bog: uuid(), upland: uuid(), radar: uuid(), setback500: uuid(), coastal: uuid(),
+  // Irish public data layers
+  esbGrid: uuid(), gasNetwork: uuid(), waterMains: uuid(), irishASSI: uuid(),
 };
 
 const TURBINE_TYPE_ID = 'v136-4.2';
@@ -40,8 +42,8 @@ const turbinePositions = [
   { name: 'T09', lat: 53.434, lng: -8.770, wind_speed_ms: 7.8, hub_wind_speed: 8.9, aep_mwh: 15900 },
   { name: 'T10', lat: 53.430, lng: -8.765, wind_speed_ms: 7.9, hub_wind_speed: 9.0, aep_mwh: 16100 },
   { name: 'T11', lat: 53.426, lng: -8.760, wind_speed_ms: 8.1, hub_wind_speed: 9.2, aep_mwh: 16700 },
-  // T12 moved north to clear OHL buffer
-  { name: 'T12', lat: 53.432, lng: -8.758, wind_speed_ms: 8.2, hub_wind_speed: 9.4, aep_mwh: 17200 },
+  // T12 moved well north of OHL buffer (buffer runs lat 53.4175–53.4440, T12 now at 53.446)
+  { name: 'T12', lat: 53.446, lng: -8.756, wind_speed_ms: 8.2, hub_wind_speed: 9.4, aep_mwh: 17200 },
 ];
 
 const SUB_LAT = 53.422, SUB_LNG = -8.720;
@@ -679,11 +681,105 @@ export function buildDemoProject() {
 
   const cableLayer = { id: ID.cable, name: 'Cables', type: 'cable', visible: true, color: '#f97316', fillOpacity: 0.8, strokeOpacity: 0.9, strokeWeight: 2, schema: [], features: cableFeatures };
 
+  // ── ESB Grid Infrastructure (110kV / 220kV / 400kV) ──────────────────────
+  // Representative lines for Ireland — based on publicly available ESB Networks data
+  const esbGridLayer = {
+    id: ID.esbGrid, name: 'ESB Grid Infrastructure', type: 'cable', visible: false,
+    color: '#fbbf24', fillOpacity: 0.9, strokeOpacity: 0.85, strokeWeight: 2, no_turbines: false,
+    features: [
+      // 110kV: Dublin–Athlone corridor
+      makeFeature(ID.esbGrid, { type: 'LineString', coordinates: [[-6.27,53.35],[-7.09,53.42],[-7.95,53.42],[-8.44,53.43]] }, { name: 'Dublin–Athlone 110kV Line', voltage_kv: 110, operator: 'ESB Networks', notes: 'Strategic east–west transmission corridor' }),
+      // 220kV: Moneypoint–Laois
+      makeFeature(ID.esbGrid, { type: 'LineString', coordinates: [[-9.52,52.59],[-8.92,52.65],[-8.35,52.88],[-7.85,53.05],[-7.25,53.01]] }, { name: 'Moneypoint–Laois 220kV Line', voltage_kv: 220, operator: 'ESB Networks', notes: 'Major west–east 220kV transmission' }),
+      // 400kV: North–South interconnector (proposed + existing)
+      makeFeature(ID.esbGrid, { type: 'LineString', coordinates: [[-6.05,54.59],[-6.35,54.12],[-6.55,53.88],[-6.72,53.52],[-6.35,53.35]] }, { name: 'North–South 400kV Interconnector', voltage_kv: 400, operator: 'EirGrid / SONI', notes: 'Critical cross-border transmission link. Under reinforcement 2024.' }),
+      // 110kV: Galway–Mayo
+      makeFeature(ID.esbGrid, { type: 'LineString', coordinates: [[-9.05,53.27],[-8.78,53.43],[-8.45,53.62],[-8.95,53.85],[-9.28,53.95]] }, { name: 'Galway–Mayo 110kV Line', voltage_kv: 110, operator: 'ESB Networks', notes: 'Key west coast transmission' }),
+      // Near Ballycraggan — 38kV line
+      makeFeature(ID.esbGrid, { type: 'LineString', coordinates: [[-8.72,53.42],[-8.76,53.42],[-8.82,53.42],[-8.88,53.45]] }, { name: 'Maam Cross 38kV Line (near site)', voltage_kv: 38, operator: 'ESB Networks', notes: 'Existing 38kV line. Grid connection point for Ballycraggan project.' }),
+      // 220kV: Cork–Wexford
+      makeFeature(ID.esbGrid, { type: 'LineString', coordinates: [[-8.49,51.9],[-7.72,52.05],[-7.1,52.25],[-6.46,52.34]] }, { name: 'Cork–Wexford 220kV Line', voltage_kv: 220, operator: 'ESB Networks', notes: 'South coast transmission corridor' }),
+    ],
+  };
+
+  // ── Gas Network (Bord Gáis / GNI) ─────────────────────────────────────────
+  // Based on Gas Networks Ireland published transmission system map
+  const gasNetworkLayer = {
+    id: ID.gasNetwork, name: 'Gas Network (GNI Transmission)', type: 'cable', visible: false,
+    color: '#a3e635', fillOpacity: 0.9, strokeOpacity: 0.8, strokeWeight: 2, no_turbines: false,
+    features: [
+      // North–South pipeline: Lurgan–Turlough Hill
+      makeFeature(ID.gasNetwork, { type: 'LineString', coordinates: [[-6.32,54.47],[-6.85,54.12],[-7.29,53.78],[-7.85,53.52],[-8.22,53.28],[-8.48,52.98]] }, { name: 'BGE North–South Transmission Pipeline', diameter_mm: 600, pressure_bar: 70, operator: 'Gas Networks Ireland', notes: 'High pressure transmission main. 60m working corridor each side.' }),
+      // East–West: Dublin–Galway
+      makeFeature(ID.gasNetwork, { type: 'LineString', coordinates: [[-6.25,53.35],[-7.10,53.42],[-8.02,53.42],[-8.72,53.28],[-9.05,53.27]] }, { name: 'Dublin–Galway Gas Transmission Main', diameter_mm: 450, pressure_bar: 70, operator: 'Gas Networks Ireland', notes: 'Main west coast gas supply. 200m consultation zone for wind developments.' }),
+      // Cork–Limerick
+      makeFeature(ID.gasNetwork, { type: 'LineString', coordinates: [[-8.49,51.9],[-8.62,52.18],[-8.62,52.65]] }, { name: 'Cork–Limerick Gas Transmission', diameter_mm: 350, pressure_bar: 70, operator: 'Gas Networks Ireland', notes: 'Buried high pressure pipeline. Notify GNI for any works within 200m.' }),
+      // Interconnector: Moffat–Dublin
+      makeFeature(ID.gasNetwork, { type: 'LineString', coordinates: [[-6.35,53.55],[-6.18,53.72],[-6.12,53.92],[-5.85,54.22],[-5.52,54.58]] }, { name: 'Scotland–Ireland Gas Interconnector', diameter_mm: 500, pressure_bar: 85, operator: 'Gas Networks Ireland / National Grid UK', notes: 'Sub-sea and onshore interconnector. Landfall at Ballylumford, Co. Antrim.' }),
+    ],
+  };
+
+  // ── Water & Wastewater Infrastructure (Irish Water / Uisce Éireann) ────────
+  const waterMainsLayer = {
+    id: ID.waterMains, name: 'Water Infrastructure (Uisce Éireann)', type: 'cable', visible: false,
+    color: '#38bdf8', fillOpacity: 0.9, strokeOpacity: 0.75, strokeWeight: 1.5, no_turbines: false,
+    features: [
+      // Eastern Regional Water Supply Scheme
+      makeFeature(ID.waterMains, { type: 'LineString', coordinates: [[-6.25,53.35],[-6.72,53.35],[-7.12,53.42],[-7.58,53.48],[-8.02,53.48]] }, { name: 'Eastern Regional Water Supply Scheme (ERWSS)', diameter_mm: 900, operator: 'Irish Water / Uisce Éireann', notes: 'Strategic 900mm water main. 15m protection corridor. Consult Irish Water.' }),
+      // Vartry Water Supply Scheme — Co. Wicklow
+      makeFeature(ID.waterMains, { type: 'LineString', coordinates: [[-6.25,53.28],[-6.15,53.18],[-6.08,52.98],[-6.15,52.72]] }, { name: 'Vartry Water Supply Scheme', diameter_mm: 600, operator: 'Irish Water', notes: 'Public water supply to Dublin. Notify Irish Water for works within 10m.' }),
+      // Western Region Water Supply
+      makeFeature(ID.waterMains, { type: 'LineString', coordinates: [[-8.72,53.28],[-8.45,53.48],[-8.12,53.62],[-8.02,53.88],[-8.28,54.12]] }, { name: 'Western Region Water Supply Scheme', diameter_mm: 450, operator: 'Irish Water / Mayo Co. Council', notes: 'Regional supply main. Co-ordinate with Irish Water pre-planning.' }),
+      // Shannon Group Water Scheme
+      makeFeature(ID.waterMains, { type: 'LineString', coordinates: [[-8.98,52.68],[-8.58,52.72],[-8.22,52.85],[-7.88,53.02],[-7.52,53.18]] }, { name: 'Shannon Group Water Scheme', diameter_mm: 500, operator: 'Irish Water', notes: 'Group water scheme mains. Verify exact routing with Irish Water records office.' }),
+    ],
+  };
+
+  // ── Inland ASSIs (Northern Ireland) + NHAs expanded ───────────────────────
+  const irishASSILayer = {
+    id: ID.irishASSI, name: 'ASSIs (NI) / NHAs (ROI) — National', type: 'polygon', visible: false,
+    color: '#86efac', fillOpacity: 0.18, strokeOpacity: 0.8, strokeWeight: 1.5, no_turbines: true,
+    features: [
+      // Garron Plateau ASSI — Co. Antrim
+      poly(ID.irishASSI, [ring([
+        [55.062, -6.122], [55.088, -6.085], [55.112, -6.098],
+        [55.108, -6.145], [55.085, -6.165], [55.058, -6.148],
+      ])], { name: 'Garron Plateau ASSI — Co. Antrim', designation: 'Area of Special Scientific Interest (NI)', habitat: 'Upland blanket bog, heath', authority: 'NIEA', notes: 'NIEA consultation required. 15m buffer.' }),
+      // Cuilcagh Mountain ASSI — Co. Fermanagh
+      poly(ID.irishASSI, [ring([
+        [54.198, -7.822], [54.225, -7.790], [54.248, -7.802],
+        [54.242, -7.845], [54.218, -7.865], [54.192, -7.848],
+      ])], { name: 'Cuilcagh Mountain ASSI / SAC', designation: 'ASSI / Ramsar / SAC', habitat: 'Blanket bog, upland heath, flush communities', authority: 'NIEA / NPWS', notes: 'Cross-border site. Both NI and RoI planning authorities.' }),
+      // Bog of Allen NHA — Co. Kildare/Offaly
+      poly(ID.irishASSI, [ring([
+        [53.255, -7.082], [53.282, -7.048], [53.308, -7.062],
+        [53.302, -7.108], [53.275, -7.128], [53.250, -7.110],
+      ])], { name: 'Bog of Allen NHA — Co. Kildare/Offaly', designation: 'National Heritage Area / pSAC', habitat: 'Raised bog, fen, wetland grassland', authority: 'NPWS', notes: 'Ramsar Wetland. No wind turbines within NHA boundary.' }),
+      // Slieve Bloom NHA
+      poly(ID.irishASSI, [ring([
+        [53.082, -7.618], [53.108, -7.588], [53.132, -7.600],
+        [53.128, -7.648], [53.105, -7.668], [53.078, -7.652],
+      ])], { name: 'Slieve Bloom Mountains NHA', designation: 'NHA / pNHA', habitat: 'Upland bog, heathland, woodland', authority: 'NPWS', notes: 'Part of broader Slieve Bloom Wind Restriction Area.' }),
+      // Derryclare Lough SAC — Connemara
+      poly(ID.irishASSI, [ring([
+        [53.452, -9.752], [53.478, -9.720], [53.498, -9.732],
+        [53.492, -9.775], [53.468, -9.795], [53.445, -9.778],
+      ])], { name: 'Derryclare Lough SAC — Connemara', designation: 'SAC / NHA', habitat: 'Oligotrophic lake, blanket bog, upland heath', authority: 'NPWS', notes: 'Freshwater Pearl Mussel population. No ground disturbance within 50m of watercourse.' }),
+      // Clara Bog NHA — Co. Offaly
+      poly(ID.irishASSI, [ring([
+        [53.328, -7.618], [53.352, -7.590], [53.370, -7.602],
+        [53.365, -7.642], [53.342, -7.660], [53.322, -7.645],
+      ])], { name: 'Clara Bog NHA / SAC — Co. Offaly', designation: 'SAC / NHA / Ramsar', habitat: 'Raised bog (best example in Ireland)', authority: 'NPWS', notes: 'Absolute protection. No wind development in or adjacent to Clara Bog.' }),
+    ],
+  };
+
   const layers = [
     // Background / national layers (render first)
     floodLayer, naturaLayer, nobuildLayer, forestryLayer,
     aviationLayer, radarLayer, heritageLayer, townsLayer,
     uplandLayer, setback500Layer, coastalLayer,
+    // Irish public infrastructure (off by default)
+    esbGridLayer, gasNetworkLayer, waterMainsLayer, irishASSILayer,
     // Site-level layers
     visualLayer, boundaryLayer, assiLayer, peatLayer,
     exclusionLayer, residentialLayer, accessLayer,
