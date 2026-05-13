@@ -11,7 +11,7 @@ import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
   Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target,
   Layers, Settings, X, Satellite, Navigation,
-  ChevronDown, ArrowUp, ArrowDown, PlusCircle
+  ChevronDown, ChevronRight, ArrowUp, ArrowDown, PlusCircle
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { createLayer, createFeature, geoJSONToLayer, downloadJSON, layersToGeoJSON, DEFAULT_POWER_CURVE, windAtHubHeight, calcTurbineAEP, calcWeibullAEP } from '@/lib/gisUtils';
@@ -205,8 +205,6 @@ function MapClickHandler({ mode, onAddPoint, onFinishPolygon, onFinishCable }) {
   return null;
 }
 
-const STORAGE_KEY = 'planning_v3_ire';
-
 // Ireland bounding box
 const IRELAND_BOUNDS = [[51.2, -10.8], [55.6, -5.4]];
 
@@ -233,7 +231,7 @@ export default function Planning() {
     if (index.length > 0) return index[0].id;
     // Migrate legacy data if any
     try {
-      const legacy = localStorage.getItem(STORAGE_KEY);
+      const legacy = localStorage.getItem('planning_v3_ire');
       if (legacy) {
         const d = JSON.parse(legacy);
         const id = `proj_legacy_${Date.now()}`;
@@ -310,9 +308,6 @@ export default function Planning() {
   const [turbineMenuFeature, setTurbineMenuFeature] = useState(null);
   const [turbineMenuTypeId, setTurbineMenuTypeId] = useState(null);
   const [turbineMenuName, setTurbineMenuName] = useState('');
-  const [turbineMenuRadius, setTurbineMenuRadius] = useState(500);
-  const [turbineMenuShowRadius, setTurbineMenuShowRadius] = useState(false);
-  const [turbineRadii, setTurbineRadii] = useState({}); // featureId -> { radius, show }
   const [turbineMenuCustomFields, setTurbineMenuCustomFields] = useState({}); // { label: value }
   const [turbineMenuPolygonId, setTurbineMenuPolygonId] = useState('');
 
@@ -335,6 +330,7 @@ export default function Planning() {
 
   const mapRef = useRef(null);
   const [panesReady, setPanesReady] = useState(false);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
 
   const substationLayer = layers.find(l => l.type === 'substation');
   const substations = substationLayer?.features || [];
@@ -370,6 +366,13 @@ export default function Planning() {
     setPolygonMenuFeature(null);
     setCableMenuFeature(null);
     setSubstationMenuFeature(null);
+    // If loading demo, fly to site
+    if (id === '__demo__') {
+      const demo = buildDemoProject();
+      setTimeout(() => {
+        if (mapRef.current) mapRef.current.setView(demo.center, demo.zoom, { animate: true });
+      }, 150);
+    }
   };
 
   const handleNewProject = (id, proj) => {
@@ -605,9 +608,6 @@ export default function Planning() {
     setTurbineMenuFeature(f);
     setTurbineMenuTypeId(f.properties.turbine_type_id || turbineTypes[0]?.id);
     setTurbineMenuName(f.properties.name || '');
-    const existing = turbineRadii[f.id];
-    setTurbineMenuRadius(existing?.radius || 500);
-    setTurbineMenuShowRadius(existing?.show || false);
     setTurbineMenuCustomFields(f.properties.custom_fields || {});
     setTurbineMenuPolygonId(f.properties.assigned_polygon_id || '');
   };
@@ -625,10 +625,6 @@ export default function Planning() {
       custom_fields: turbineMenuCustomFields,
       assigned_polygon_id: turbineMenuPolygonId || null,
     });
-    setTurbineRadii(prev => ({
-      ...prev,
-      [turbineMenuFeature.id]: { radius: turbineMenuRadius, show: turbineMenuShowRadius },
-    }));
     setTurbineMenuFeature(null);
   };
 
@@ -647,19 +643,6 @@ export default function Planning() {
       mapRef.current.flyToBounds(L.latLngBounds(latlngs), { padding: [60, 60], animate: true, duration: 0.8 });
     }
   }, []);
-
-  const handleLoadDemo = () => {
-    if (!window.confirm('Load the Ballycraggan Wind Farm demo? This will replace your current project.')) return;
-    const demo = buildDemoProject();
-    setLayers(demo.layers);
-    setProjectName(demo.projectName);
-    setWindParams(demo.windParams);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ layers: demo.layers, turbineTypes, cableTypes }));
-    // Fly map to demo site
-    setTimeout(() => {
-      if (mapRef.current) mapRef.current.setView(demo.center, demo.zoom, { animate: true });
-    }, 100);
-  };
 
   const handleImport = () => {
     const input = document.createElement('input');
@@ -742,8 +725,8 @@ export default function Planning() {
   return (
     <div className="flex flex-col h-full bg-slate-950">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-slate-800 flex-wrap shrink-0">
-        <Map className="w-4 h-4 text-emerald-400 shrink-0" />
+      <div className="flex items-center gap-1.5 px-2 py-1.5 bg-slate-900 border-b border-slate-800 shrink-0 overflow-x-auto min-h-[40px]">
+        <Map className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
         <ProjectFileButtons
           currentProjectId={currentProjectId}
           currentProjectName={projectName}
@@ -755,10 +738,10 @@ export default function Planning() {
         <input
           value={projectName}
           onChange={e => setProjectName(e.target.value)}
-          className="bg-transparent text-sm font-medium text-white border-none outline-none w-36"
+          className="bg-slate-800/60 text-[11px] font-medium text-white border border-slate-700 rounded px-2 py-1 outline-none w-32 shrink-0"
           placeholder="Project name"
         />
-        <div className="h-4 w-px bg-slate-700 mx-1" />
+        <div className="h-4 w-px bg-slate-700 mx-0.5 shrink-0" />
 
         {TOOLBAR_MODES.map(({ id, label, icon: TbIcon }) => (
           <button key={id} onClick={() => {
@@ -769,14 +752,13 @@ export default function Planning() {
             setTurbineMenuFeature(null);
             setPolygonMenuFeature(null);
             setEditingPolygonId(null);
-            // Auto-select first polygon layer when entering draw_polygon mode
             if (id === 'draw_polygon') {
               const first = layers.find(l => !['turbine','cable','wind_resource','substation'].includes(l.type));
               if (first) setSelectedLayerId(first.id);
             }
           }}
             className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border",
+              "flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-all border shrink-0",
               mode === id ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700"
             )}
           >
@@ -785,45 +767,35 @@ export default function Planning() {
         ))}
 
         {mode === 'draw_polygon' && drawingPoints.length >= 2 && (
-          <button onClick={finishPolygon}
-            className="px-2.5 py-1.5 rounded-lg text-xs bg-cyan-600/20 text-cyan-400 border border-cyan-500/40">
-            Finish ({drawingPoints.length} pts)
+          <button onClick={finishPolygon} className="px-2 py-1 rounded text-[11px] bg-cyan-600/20 text-cyan-400 border border-cyan-500/40 shrink-0">
+            Finish ({drawingPoints.length}pts)
           </button>
         )}
         {mode === 'draw_cable' && drawingPoints.length >= 2 && (
-          <button onClick={finishCable}
-            className="px-2.5 py-1.5 rounded-lg text-xs bg-orange-600/20 text-orange-400 border border-orange-500/40">
-            Finish Cable ({drawingPoints.length} pts)
+          <button onClick={finishCable} className="px-2 py-1 rounded text-[11px] bg-orange-600/20 text-orange-400 border border-orange-500/40 shrink-0">
+            Finish ({drawingPoints.length}pts)
           </button>
         )}
-
         {loadingWind && (
-          <span className="flex items-center gap-1.5 text-xs text-amber-400">
-            <RefreshCw className="w-3 h-3 animate-spin" /> Fetching real data...
+          <span className="flex items-center gap-1 text-[11px] text-amber-400 shrink-0">
+            <RefreshCw className="w-3 h-3 animate-spin" /> Fetching…
           </span>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
-          <button onClick={handleLoadDemo}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-emerald-900/40 border border-emerald-700/50 text-emerald-300 hover:bg-emerald-800/50 font-medium">
-            <Wind className="w-3 h-3" /> Load Demo
-          </button>
+        <div className="ml-auto flex items-center gap-1 shrink-0">
           <button onClick={() => {
             if (!window.confirm('Clear all features from this project?')) return;
-            const empty = [
+            setLayers([
               createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }),
               createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }),
               createLayer({ name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8 }),
               createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 }),
-            ];
-            setLayers(empty);
+            ]);
             setWindParams({ k: 2.0, lambda: 7.0 });
-          }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-slate-700/60 border border-slate-600 text-slate-400 hover:text-red-400 hover:border-red-500/40">
+          }} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500/40 shrink-0">
             <Trash2 className="w-3 h-3" /> Clear
           </button>
-          <button onClick={handleImport}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-400 hover:text-white">
+          <button onClick={handleImport} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-white shrink-0">
             <Upload className="w-3 h-3" /> Import
           </button>
           <ExportMenu
@@ -848,7 +820,6 @@ export default function Planning() {
             }}
             onExportPDF={() => exportProjectPDF({ projectName, turbines, turbineTypes, cables, cableTypes, substations, totalCapacity_mw, totalAEP, avgCapFactor, avgWindSpeed, totalCableLength, totalCableCost, windParams, monthlyData, layers, mapEl: mapRef.current?.getContainer ? mapRef.current.getContainer() : null })}
           />
-
         </div>
       </div>
 
@@ -856,6 +827,14 @@ export default function Planning() {
       <div className="flex flex-1 min-h-0">
         {/* Map */}
         <div className="flex-1 relative min-w-0" style={{ cursor: cursorStyle }}>
+          {/* Right panel collapse toggle */}
+          <button
+            onClick={() => setRightPanelOpen(v => !v)}
+            className="absolute top-1/2 -translate-y-1/2 right-0 z-[1050] bg-slate-800 border border-slate-600 rounded-l-lg px-1 py-3 text-slate-400 hover:text-white hover:bg-slate-700 transition-all shadow-lg"
+            title={rightPanelOpen ? 'Collapse panel' : 'Expand panel'}
+          >
+            {rightPanelOpen ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3 -rotate-90" />}
+          </button>
           <MapContainer
             center={[53.5, -8.0]} zoom={7}
             minZoom={6} maxZoom={19}
@@ -868,11 +847,6 @@ export default function Planning() {
               if (!map.target.getPane('cablePane')) {
                 map.target.createPane('cablePane');
                 map.target.getPane('cablePane').style.zIndex = 450;
-              }
-              if (!map.target.getPane('windPane')) {
-                map.target.createPane('windPane');
-                map.target.getPane('windPane').style.zIndex = 420;
-                map.target.getPane('windPane').style.pointerEvents = 'none';
               }
               setPanesReady(true);
             }}
@@ -1032,24 +1006,17 @@ export default function Planning() {
                   const isSelected = f.id === selectedFeatureId;
                   const tt = turbineTypes.find(t => t.id === f.properties.turbine_type_id) || selectedTurbineType;
                   const icon = turbineIcon(tt?.color || layer.color, isSelected);
-                  const radiusConfig = turbineRadii[f.id];
                   return (
-                    <React.Fragment key={f.id}>
-                      <Marker position={[lat, lng]} icon={icon}
-                        eventHandlers={{
-                          click: (e) => {
-                            if (mode === 'select') {
-                              L.DomEvent.stopPropagation(e);
-                              setSelectedFeatureId(f.id);
-                              openTurbineMenu(f);
-                            }
+                    <Marker key={f.id} position={[lat, lng]} icon={icon}
+                      eventHandlers={{
+                        click: (e) => {
+                          if (mode === 'select') {
+                            L.DomEvent.stopPropagation(e);
+                            setSelectedFeatureId(f.id);
+                            openTurbineMenu(f);
                           }
-                        }} />
-                      {turbineRadii[f.id]?.show === true && (
-                        <Circle center={[lat, lng]} radius={turbineRadii[f.id].radius || 500}
-                          pathOptions={{ color: '#f97316', fillColor: '#f97316', fillOpacity: 0.06, weight: 1.5, dashArray: '5 4', opacity: 0.7, interactive: false }} />
-                      )}
-                    </React.Fragment>
+                        }
+                      }} />
                   );
                 }
                 return null;
@@ -1080,7 +1047,7 @@ export default function Planning() {
               />
             )}
 
-            {/* Wind speed heatmap — rendered in dedicated windPane above polygons */}
+            {/* Wind speed heatmap circles */}
             {showWindLayer && panesReady && turbines.map(t => {
               const spd = t.properties.hub_wind_speed;
               if (!spd) return null;
@@ -1088,12 +1055,12 @@ export default function Planning() {
               const color = spd >= 10 ? '#ef4444' : spd >= 9 ? '#f97316' : spd >= 8 ? '#f59e0b' : spd >= 7 ? '#10b981' : spd >= 6 ? '#06b6d4' : '#3b82f6';
               return (
                 <React.Fragment key={`wind-${t.id}`}>
-                  <Circle center={[lat, lng]} radius={600} pane="windPane"
-                    pathOptions={{ color, fillColor: color, fillOpacity: 0.65, weight: 2, opacity: 1, interactive: false }} />
-                  <Circle center={[lat, lng]} radius={1200} pane="windPane"
-                    pathOptions={{ color, fillColor: color, fillOpacity: 0.30, weight: 0, opacity: 0, interactive: false }} />
-                  <Circle center={[lat, lng]} radius={2000} pane="windPane"
-                    pathOptions={{ color, fillColor: color, fillOpacity: 0.12, weight: 0, opacity: 0, interactive: false }} />
+                  <Circle center={[lat, lng]} radius={500}
+                    pathOptions={{ color, fillColor: color, fillOpacity: 0.55, weight: 2, opacity: 0.8, interactive: false }} />
+                  <Circle center={[lat, lng]} radius={1000}
+                    pathOptions={{ color, fillColor: color, fillOpacity: 0.22, weight: 0, opacity: 0, interactive: false }} />
+                  <Circle center={[lat, lng]} radius={1800}
+                    pathOptions={{ color, fillColor: color, fillOpacity: 0.09, weight: 0, opacity: 0, interactive: false }} />
                 </React.Fragment>
               );
             })}
@@ -1319,32 +1286,7 @@ export default function Planning() {
                   </div>
                 </div>
 
-                {/* Setback radius */}
-                <div className="mb-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] text-slate-400">Setback / Assessment Radius</label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" checked={turbineMenuShowRadius} onChange={e => setTurbineMenuShowRadius(e.target.checked)} className="accent-orange-500 w-3 h-3" />
-                      <span className="text-[10px] text-slate-400">Show on map</span>
-                    </label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input type="range" min={100} max={5000} step={50} value={turbineMenuRadius}
-                      onChange={e => setTurbineMenuRadius(+e.target.value)}
-                      className="flex-1 accent-orange-500 h-1" />
-                    <span className="text-[10px] text-orange-400 font-medium w-14 text-right">{turbineMenuRadius}m</span>
-                  </div>
-                  <div className="flex gap-1.5 mt-1.5 flex-wrap">
-                    {[500, 1000, 2000, 3000].map(r => (
-                      <button key={r} onClick={() => setTurbineMenuRadius(r)}
-                        className={cn("px-2 py-0.5 rounded text-[10px] border transition-colors",
-                          turbineMenuRadius === r ? "bg-orange-500/20 border-orange-500/40 text-orange-400" : "bg-slate-800 border-slate-700 text-slate-500 hover:text-white"
-                        )}>
-                        {r >= 1000 ? `${r/1000}km` : `${r}m`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+
 
                 {/* Actions */}
                 <div className="flex gap-2">
@@ -1355,7 +1297,6 @@ export default function Planning() {
                   <button
                     onClick={() => {
                       turbineLayer && deleteFeature(turbineLayer.id, turbineMenuFeature.id);
-                      setTurbineRadii(prev => { const n = { ...prev }; delete n[turbineMenuFeature.id]; return n; });
                       setTurbineMenuFeature(null);
                     }}
                     className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs rounded-lg transition-colors">
@@ -1594,7 +1535,7 @@ export default function Planning() {
         </div>
 
         {/* Right panel */}
-        <div className="w-80 shrink-0 flex flex-col bg-slate-900 border-l border-slate-800 overflow-hidden">
+        <div className={cn("shrink-0 flex flex-col bg-slate-900 border-l border-slate-800 overflow-hidden transition-all duration-200", rightPanelOpen ? "w-80" : "w-0")}>
           {/* Tabs */}
           <div className="flex border-b border-slate-800 shrink-0 overflow-x-auto">
             {RIGHT_TABS.map(({ id, label, icon: TabIcon }) => (
