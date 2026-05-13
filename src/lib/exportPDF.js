@@ -79,15 +79,23 @@ async function addMapPage(doc, mapEl, layers, projectName) {
   // Capture map using html2canvas
   if (mapEl) {
     try {
+      // Scroll the map container to top-left before capture to avoid offset issues
+      const rect = mapEl.getBoundingClientRect();
       const canvas = await html2canvas(mapEl, {
         useCORS: true,
         allowTaint: true,
-        scale: 1.5,
+        scale: 3.5,
         backgroundColor: '#0f172a',
         logging: false,
+        x: 0,
+        y: 0,
+        scrollX: 0,
+        scrollY: 0,
+        width: mapEl.offsetWidth,
+        height: mapEl.offsetHeight,
       });
-      const imgData = canvas.toDataURL('image/jpeg', 0.88);
-      doc.addImage(imgData, 'JPEG', mapX, mapY, mapW, mapH);
+      const imgData = canvas.toDataURL('image/png');
+      doc.addImage(imgData, 'PNG', mapX, mapY, mapW, mapH);
     } catch (e) {
       // fallback: grey placeholder
       setFill(doc, '#1e293b');
@@ -143,37 +151,35 @@ async function addMapPage(doc, mapEl, layers, projectName) {
     ly += Math.max(8, lines.length * 5);
   };
 
-  // Fixed items
-  legLine('Turbine', '#10b981', 'circle');
-  legLine('Cable (33kV)', '#f97316', 'line');
-  legLine('Substation', '#facc15', 'rect');
+  // Fixed infrastructure items — only if those layer types exist and are visible
+  const visibleTypes = new Set((layers || []).filter(l => l.visible).map(l => l.type));
+  if (visibleTypes.has('turbine')) legLine('Turbine', '#10b981', 'circle');
+  if (visibleTypes.has('cable')) {
+    const cableLayer = (layers || []).find(l => l.type === 'cable' && l.visible);
+    legLine('Cable', cableLayer?.color || '#f97316', 'line');
+  }
+  if (visibleTypes.has('substation')) legLine('Substation', '#facc15', 'rect');
 
-  // Polygon layers from the layers array
+  // Visible polygon layers only — one entry per layer (not per feature)
   const polyLayers = (layers || []).filter(l =>
+    l.visible &&
     !['turbine', 'cable', 'substation', 'wind_resource'].includes(l.type) &&
     l.features?.some(f => f.geometry?.type === 'Polygon')
   );
 
   if (polyLayers.length > 0) {
     ly += 3;
-    setFill(doc, '#0f172a');
-    doc.rect(legX + 2, ly - 3, LEGEND_W - 4, 0.5, 'F');
+    setDrawColor(doc, '#334155');
+    doc.setLineWidth(0.3);
+    doc.line(legX + 4, ly - 1, legX + LEGEND_W - 4, ly - 1);
     setTextColor(doc, '#64748b');
     doc.setFontSize(6.5);
     doc.setFont('helvetica', 'bold');
-    doc.text('ZONES / POLYGONS', legX + LEGEND_W / 2, ly + 1, { align: 'center' });
-    ly += 7;
+    doc.text('ZONES / POLYGONS', legX + LEGEND_W / 2, ly + 3, { align: 'center' });
+    ly += 8;
 
     for (const layer of polyLayers) {
-      // Collect unique polygon names from this layer
-      const names = [...new Set(
-        layer.features
-          .filter(f => f.geometry?.type === 'Polygon')
-          .map(f => f.properties?.name || layer.name)
-      )];
-      for (const name of names) {
-        legLine(name, layer.color || '#06b6d4', 'rect');
-      }
+      legLine(layer.name, layer.color || '#06b6d4', 'rect');
     }
   }
 
