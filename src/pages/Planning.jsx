@@ -386,8 +386,11 @@ export default function Planning() {
   useEffect(() => {
     if (!lessonProjectId) return;
     const proj = loadProject(lessonProjectId);
-    if (proj) handleSwitchProject(lessonProjectId, proj);
-  }, [lessonProjectId]);
+    if (proj) {
+      switchProject(lessonProjectId, proj);
+      handleSwitchProject(lessonProjectId, proj);
+    }
+  }, [lessonProjectId, switchProject]);
 
   // ── Persist (debounced) ────────────────────────────────────────────────────
   const saveTimer = useRef(null);
