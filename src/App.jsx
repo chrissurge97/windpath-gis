@@ -10,7 +10,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import Dashboard from '@/pages/Dashboard';
 import Learn from '@/pages/Learn';
 import Planning from '@/pages/Planning';
-import Progress from '@/pages/Progress';
+
 import DataTables from '@/pages/DataTables';
 
 const AuthenticatedApp = () => {
@@ -43,7 +43,7 @@ const AuthenticatedApp = () => {
         <Route path="/" element={<Dashboard />} />
         <Route path="/learn" element={<Learn />} />
         <Route path="/planning" element={<Planning />} />
-        <Route path="/progress" element={<Progress />} />
+
         <Route path="/data" element={<DataTables />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
