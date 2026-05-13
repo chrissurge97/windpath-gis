@@ -12,12 +12,14 @@ export default function PolygonMenu({ feature, layer, onApply, onDelete, onClose
   const [color, setColor] = useState(layer?.color || '#06b6d4');
   const [fillOpacity, setFillOpacity] = useState(layer?.fillOpacity ?? 0.15);
   const [notes, setNotes] = useState(feature?.properties?.notes || '');
+  const [noTurbines, setNoTurbines] = useState(layer?.no_turbines ?? false);
 
   useEffect(() => {
     setName(feature?.properties?.name || '');
     setColor(layer?.color || '#06b6d4');
     setFillOpacity(layer?.fillOpacity ?? 0.15);
     setNotes(feature?.properties?.notes || '');
+    setNoTurbines(layer?.no_turbines ?? false);
   }, [feature?.id]);
 
   if (!feature || !layer) return null;
@@ -99,15 +101,39 @@ export default function PolygonMenu({ feature, layer, onApply, onDelete, onClose
         <textarea
           value={notes}
           onChange={e => setNotes(e.target.value)}
-          rows={3}
+          rows={2}
           className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-white outline-none resize-none"
           placeholder="Add any notes, land reference, status, area details…"
         />
       </div>
 
+      {/* No-turbine zone toggle */}
+      <div className="mb-3">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <div
+            onClick={() => setNoTurbines(v => !v)}
+            className={cn(
+              "w-8 h-4 rounded-full transition-colors relative shrink-0",
+              noTurbines ? "bg-red-500" : "bg-slate-600"
+            )}
+          >
+            <div className={cn(
+              "absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform",
+              noTurbines ? "translate-x-4" : "translate-x-0.5"
+            )} />
+          </div>
+          <div>
+            <span className={cn("text-xs font-semibold", noTurbines ? "text-red-400" : "text-slate-400")}>
+              {noTurbines ? "⛔ No-Turbine Zone" : "Turbine Placement Allowed"}
+            </span>
+            <p className="text-[9px] text-slate-600 leading-tight">Blocks turbine placement within this polygon</p>
+          </div>
+        </label>
+      </div>
+
       <div className="flex gap-2 mb-2">
         <button
-          onClick={() => onApply({ name, color, fillOpacity, notes })}
+          onClick={() => onApply({ name, color, fillOpacity, notes, no_turbines: noTurbines })}
           className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition-colors"
         >
           Apply

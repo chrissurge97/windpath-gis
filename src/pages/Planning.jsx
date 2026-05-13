@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { createLayer, createFeature, geoJSONToLayer, downloadJSON, layersToGeoJSON, DEFAULT_POWER_CURVE, windAtHubHeight, calcTurbineAEP, calcWeibullAEP } from '@/lib/gisUtils';
+import { checkExclusionZones } from '@/lib/geoUtils';
 import { fetchElevation, fetchWindData } from '@/lib/planningUtils';
 import WindResourceRenderer from '@/components/gis/WindResourceLayer';
 import TurbineDataTable from '@/components/planning/TurbineDataTable';
@@ -291,6 +292,9 @@ export default function Planning() {
   // Layer hover tooltip
   const [layerTooltip, setLayerTooltip] = useState(null); // { x, y, layerName, description }
 
+  // Exclusion zone placement warning
+  const [exclusionWarning, setExclusionWarning] = useState(null); // { layerName, featureName }
+
   const mapRef = useRef(null);
 
   const substationLayer = layers.find(l => l.type === 'substation');
@@ -346,6 +350,14 @@ export default function Planning() {
     }
 
     if (mode === 'place_turbine') {
+      // Check exclusion zones first
+      const exclusionHit = checkExclusionZones(latlng.lat, latlng.lng, layers);
+      if (exclusionHit) {
+        setExclusionWarning({ layerName: exclusionHit.layer.name, featureName: exclusionHit.feature.properties?.name || exclusionHit.layer.name });
+        setTimeout(() => setExclusionWarning(null), 5000);
+        return;
+      }
+
       setLoadingWind(true);
       let elevation = null;
       let wind_speed_ms = null;
@@ -454,14 +466,15 @@ export default function Planning() {
     });
   };
 
-  const applyPolygonMenu = ({ name, color, fillOpacity, notes }) => {
+  const applyPolygonMenu = ({ name, color, fillOpacity, notes, no_turbines }) => {
     if (!polygonMenuFeature || !polygonMenuLayerId) return;
     const layer = layers.find(l => l.id === polygonMenuLayerId);
     if (!layer) return;
-    // Update feature properties
+    // Update feature properties + layer-level no_turbines flag
     updateLayer(polygonMenuLayerId, {
       color,
       fillOpacity,
+      no_turbines: no_turbines ?? layer.no_turbines ?? false,
       features: layer.features.map(f =>
         f.id === polygonMenuFeature.id
           ? { ...f, properties: { ...f.properties, name, notes } }
@@ -1458,6 +1471,23 @@ export default function Planning() {
             </div>
           )}
 
+          {/* Exclusion zone warning */}
+          {exclusionWarning && (
+            <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[1600] pointer-events-none">
+              <div className="flex items-start gap-3 bg-red-900/95 border border-red-500/70 rounded-xl px-4 py-3 shadow-2xl max-w-sm">
+                <div className="text-red-400 text-lg shrink-0 mt-0.5">⛔</div>
+                <div>
+                  <p className="text-sm font-bold text-red-300">Turbine Placement Blocked</p>
+                  <p className="text-xs text-red-400 mt-0.5">
+                    <span className="font-semibold text-white">{exclusionWarning.featureName}</span> is marked as a no-turbine zone
+                    <span className="text-red-500"> ({exclusionWarning.layerName})</span>.
+                  </p>
+                  <p className="text-[10px] text-red-500 mt-1">Move the turbine outside this constraint zone to place it.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Layer hover tooltip */}
           {layerTooltip && (
             <div
@@ -1667,6 +1697,7 @@ export default function Planning() {
                     )}>
                     <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: layer.color }} />
                     <span className="flex-1 text-xs text-slate-300 truncate">{layer.name}</span>
+                    {layer.no_turbines && <span className="text-[9px] text-red-400 shrink-0" title="No turbines allowed">⛔</span>}
                     <span className="text-[10px] text-slate-600 shrink-0">{layer.features.length}</span>
                     {/* Z-order controls */}
                     <div className="flex flex-col gap-0 shrink-0">
