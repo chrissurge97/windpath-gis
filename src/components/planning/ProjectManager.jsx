@@ -294,7 +294,7 @@ export default function ProjectFileButtons({ currentProjectId, currentProjectNam
           <FileText className="w-3 h-3" /> File <ChevronDown className={cn("w-3 h-3 transition-transform", dropdownOpen && "rotate-180")} />
         </button>
         {dropdownOpen && (
-          <div className="absolute top-full left-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-[2000] overflow-hidden min-w-[140px]">
+          <div className="absolute top-full left-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-[9999] overflow-hidden min-w-[140px]">
             {MENU_ITEMS.map(({ label, icon: Icon, action }) => (
               <button key={label} onClick={action}
                 className="flex items-center gap-2 w-full px-3 py-2 text-[11px] text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-left">

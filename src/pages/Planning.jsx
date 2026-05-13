@@ -29,6 +29,7 @@ import { buildDemoProject } from '@/lib/demoProject';
 import ExerciseGuide from '@/components/planning/ExerciseGuide';
 import LessonGuide from '@/components/planning/LessonGuide';
 import TextAnnotationMenu from '@/components/planning/TextAnnotationMenu';
+import TextOverlay from '@/components/planning/TextOverlay';
 import { EXERCISES } from '@/lib/exercises';
 import ExportMenu from '@/components/planning/ExportMenu';
 import LayerImportExport from '@/components/planning/LayerImportExport';
@@ -1152,46 +1153,8 @@ export default function Planning() {
                   );
                 }
 
-                // Text annotation points
-                if (f.geometry.type === 'Point' && f.properties._featureType === 'text') {
-                  const [lng, lat] = f.geometry.coordinates;
-                  const { text = '', color = '#fff', fontSize = 14, fontFamily = 'sans-serif' } = f.properties;
-                  const isSelected = textAnnotationMenu?.feature?.id === f.id;
-                  const textIcon = L.divIcon({
-                    html: `<div style="white-space:nowrap;font-family:${fontFamily};font-size:${fontSize}px;color:${color};font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.8),0 0 8px rgba(0,0,0,0.6);cursor:${mode === 'select' ? 'move' : 'default'};${isSelected ? 'outline:2px dashed #a855f7;outline-offset:3px;border-radius:2px;' : ''}">${text}</div>`,
-                    className: '',
-                    iconSize: [text.length * fontSize * 0.6, fontSize * 1.4],
-                    iconAnchor: [0, fontSize * 0.7],
-                  });
-                  const fSnap = f;
-                  return (
-                    <Marker key={f.id} position={[lat, lng]} icon={textIcon}
-                      draggable={mode === 'select'}
-                      eventHandlers={{
-                        click: (e) => {
-                          if (mode === 'select') {
-                            L.DomEvent.stopPropagation(e);
-                            setTextAnnotationMenu({ feature: fSnap, layerId: layer.id });
-                            setTurbineMenuFeature(null);
-                            setPolygonMenuFeature(null);
-                            setCableMenuFeature(null);
-                            setSubstationMenuFeature(null);
-                          }
-                        },
-                        dragend: (e) => {
-                          const newLatLng = e.target.getLatLng();
-                          updateLayer(layer.id, {
-                            features: layer.features.map(ft =>
-                              ft.id === fSnap.id
-                                ? { ...ft, geometry: { ...ft.geometry, coordinates: [newLatLng.lng, newLatLng.lat] } }
-                                : ft
-                            )
-                          });
-                        }
-                      }}
-                    />
-                  );
-                }
+                // Text annotations are rendered via TextOverlay (fixed pixel size)
+                if (f.geometry.type === 'Point' && f.properties._featureType === 'text') return null;
 
                 return null;
               });
@@ -1222,6 +1185,30 @@ export default function Planning() {
             )}
 
             {/* Wind speed heatmap — removed */}
+
+            {/* Text Annotations — fixed pixel size overlay */}
+            <TextOverlay
+              layers={layers}
+              mode={mode}
+              onSelect={(f, layerId) => {
+                setTextAnnotationMenu({ feature: f, layerId });
+                setTurbineMenuFeature(null);
+                setPolygonMenuFeature(null);
+                setCableMenuFeature(null);
+                setSubstationMenuFeature(null);
+              }}
+              onDragEnd={(featureId, layerId, newLng, newLat) => {
+                const layer = layers.find(l => l.id === layerId);
+                if (!layer) return;
+                updateLayer(layerId, {
+                  features: layer.features.map(ft =>
+                    ft.id === featureId
+                      ? { ...ft, geometry: { ...ft.geometry, coordinates: [newLng, newLat] } }
+                      : ft
+                  )
+                });
+              }}
+            />
 
             {/* Placeable Substations */}
             {showSubstations && substations.map(s => {

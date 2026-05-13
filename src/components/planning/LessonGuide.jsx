@@ -100,33 +100,29 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
   const [minimized, setMinimized] = useState(false);
   const [completedTasks, setCompletedTasks] = useState({});
 
-  if (!module) return null;
-
-  const lesson = module.lessons[lessonIndex];
-  const isLast = lessonIndex === module.lessons.length - 1;
-  const colors = COLOR_MAP[module.color] || COLOR_MAP.blue;
-  const config = LESSON_CONFIG[moduleId]?.[lessonIndex] || {};
+  const config = module ? (LESSON_CONFIG[moduleId]?.[lessonIndex] || {}) : {};
   const tasks = config.tasks || [];
   const highlights = config.highlight || [];
 
   // Expose highlights globally so Planning toolbar can read them
   useEffect(() => {
+    if (!module) return;
     window.__lessonHighlights__ = highlights;
     return () => { window.__lessonHighlights__ = []; };
-  }, [highlights.join(',')]);
+  }, [highlights.join(','), module]);
 
   // Snap map to lesson location
   useEffect(() => {
-    if (!config.center || !mapRef?.current) return;
+    if (!module || !config.center || !mapRef?.current) return;
     const [lat, lng] = config.center;
     setTimeout(() => {
       mapRef.current.setView([lat, lng], config.zoom || 12, { animate: true, duration: 0.8 });
     }, 200);
-  }, [lessonIndex]);
+  }, [lessonIndex, module]);
 
   // Poll for task completion via global state set by Planning
   useEffect(() => {
-    if (!tasks.length) return;
+    if (!module || !tasks.length) return;
     const poll = setInterval(() => {
       const state = window.__lessonGuideState__;
       if (!state) return;
@@ -138,10 +134,12 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
       if (changed) setCompletedTasks(next);
     }, 300);
     return () => clearInterval(poll);
-  }, [tasks, completedTasks]);
+  }, [tasks, completedTasks, module]);
 
   // Reset tasks on lesson change
   useEffect(() => { setCompletedTasks({}); }, [lessonIndex]);
+
+  if (!module) return null;
 
   const allTasksDone = tasks.length === 0 || tasks.every(t => completedTasks[t.id]);
 
@@ -154,14 +152,13 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
     return (
       <button
         onClick={() => setMinimized(false)}
-        className="absolute bottom-20 right-4 z-[1500] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl px-3 py-2.5 flex items-center gap-2 hover:bg-slate-800 transition-all group"
+        className={cn(
+          "absolute bottom-4 left-4 z-[1500] w-12 h-12 rounded-full shadow-2xl flex items-center justify-center transition-all group hover:scale-110",
+          colors.bg, "border-2", colors.border
+        )}
+        title={`${module.title} — Lesson ${lessonIndex + 1}/${module.lessons.length}`}
       >
-        <BookOpen className={cn('w-4 h-4 shrink-0', colors.text)} />
-        <div className="flex flex-col items-start">
-          <span className="text-xs text-white font-semibold leading-tight">{module.title}</span>
-          <span className="text-[10px] text-slate-400">Lesson {lessonIndex + 1}/{module.lessons.length}</span>
-        </div>
-        <Maximize2 className="w-3.5 h-3.5 text-slate-400 group-hover:text-white ml-1 transition-colors" />
+        <BookOpen className={cn('w-5 h-5', colors.text)} />
       </button>
     );
   }

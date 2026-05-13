@@ -511,7 +511,10 @@ export async function exportProjectPDF({
   const map = mapRef?.current;
   let originalCenter = null, originalZoom = null;
 
-  if (map && turbines.length > 0) {
+  const mapContainer = map?.getContainer();
+  const hasMapSize = mapContainer && mapContainer.offsetWidth > 0 && mapContainer.offsetHeight > 0;
+
+  if (map && hasMapSize && turbines.length > 0) {
     originalCenter = map.getCenter();
     originalZoom = map.getZoom();
     const bounds = getWindFarmBounds(turbines, substations);
@@ -524,13 +527,13 @@ export async function exportProjectPDF({
         { animate: false, padding: [0, 0] }
       );
       // Wait for tiles to fully load
-      await new Promise(r => setTimeout(r, 1200));
+      await new Promise(r => setTimeout(r, 1800));
     }
   }
 
-  await addMapPage(doc, map, layers, projectName);
+  await addMapPage(doc, hasMapSize ? map : null, layers, projectName);
 
-  if (map && originalCenter !== null) {
+  if (map && hasMapSize && originalCenter !== null) {
     map.setView(originalCenter, originalZoom, { animate: false });
   }
 
