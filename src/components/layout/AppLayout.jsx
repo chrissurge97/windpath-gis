@@ -24,12 +24,14 @@ export default function AppLayout() {
   const { data: user } = useQuery({
     queryKey: ['me'],
     queryFn: () => base44.auth.me(),
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: progressList } = useQuery({
     queryKey: ['userProgress'],
     queryFn: () => base44.entities.UserProgress.list(),
     initialData: [],
+    staleTime: 30 * 1000,
   });
 
   const progress = progressList[0] || { xp: 0, level: 1 };

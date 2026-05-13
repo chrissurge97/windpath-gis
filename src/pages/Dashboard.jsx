@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, memo } from 'react';
 import { Link } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -20,7 +20,7 @@ const COLOR_MAP = {
   yellow: 'from-yellow-500/20 to-yellow-600/10 border-yellow-500/30 text-yellow-400',
 };
 
-function StatCard({ label, value, sub, icon: Icon, color }) {
+const StatCard = memo(function StatCard({ label, value, sub, icon: Icon, color }) {
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
       <div className="flex items-start justify-between">
@@ -35,7 +35,7 @@ function StatCard({ label, value, sub, icon: Icon, color }) {
       </div>
     </div>
   );
-}
+});
 
 export default function Dashboard() {
   const queryClient = useQueryClient();
@@ -43,43 +43,50 @@ export default function Dashboard() {
   const { data: user } = useQuery({
     queryKey: ['me'],
     queryFn: () => base44.auth.me(),
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: progressList } = useQuery({
     queryKey: ['userProgress'],
     queryFn: () => base44.entities.UserProgress.list(),
     initialData: [],
+    staleTime: 30 * 1000,
   });
 
-  const progress = progressList[0] || {
+  const progress = useMemo(() => progressList[0] || {
     xp: 0, level: 1, completed_modules: [], badges: [],
     completed_quizzes: [], quiz_scores: {}, current_module: 'land_acquisition'
-  };
+  }, [progressList]);
 
   const createProgress = useMutation({
     mutationFn: (data) => base44.entities.UserProgress.create(data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['userProgress'] }),
   });
 
-  // Auto-create progress record on first visit
-  React.useEffect(() => {
-    if (progressList.length === 0 && progressList !== undefined) {
+  // Auto-create progress record on first visit — only fires when list is confirmed empty
+  useEffect(() => {
+    if (progressList.length === 0 && !createProgress.isPending) {
       createProgress.mutate({
         xp: 0, level: 1, completed_modules: [], badges: [],
         completed_quizzes: [], quiz_scores: {}, current_module: 'land_acquisition'
       });
     }
-  }, [progressList]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progressList.length]);
 
-  const completedCount = progress.completed_modules?.length || 0;
-  const totalModules = MODULES.length;
-  const nextModuleId = MODULES.find(m => !progress.completed_modules?.includes(m.id))?.id || MODULES[0].id;
-  const nextModule = MODULES.find(m => m.id === nextModuleId);
-  const NextIcon = ICON_MAP[nextModule?.icon] || BookOpen;
-  const earnedBadges = progress.badges || [];
-  const level = progress.level || 1;
-  const xpInLevel = (progress.xp || 0) % 200;
-  const levelPercent = (xpInLevel / 200) * 100;
+  const { completedCount, totalModules, nextModule, NextIcon, earnedBadges, level, xpInLevel, levelPercent } = useMemo(() => {
+    const completedModules = progress.completed_modules || [];
+    const completedCount = completedModules.length;
+    const totalModules = MODULES.length;
+    const nextModuleId = MODULES.find(m => !completedModules.includes(m.id))?.id || MODULES[0].id;
+    const nextModule = MODULES.find(m => m.id === nextModuleId);
+    const NextIcon = ICON_MAP[nextModule?.icon] || BookOpen;
+    const earnedBadges = progress.badges || [];
+    const level = progress.level || 1;
+    const xpInLevel = (progress.xp || 0) % 200;
+    const levelPercent = (xpInLevel / 200) * 100;
+    return { completedCount, totalModules, nextModuleId, nextModule, NextIcon, earnedBadges, level, xpInLevel, levelPercent };
+  }, [progress]);
 
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-8 max-w-6xl mx-auto">
