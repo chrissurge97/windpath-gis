@@ -1285,6 +1285,7 @@ export default function Planning() {
                 setSubstationMenuFeature={setSubstationMenuFeature}
                 setTurbineMenuFeature={setTurbineMenuFeature}
                 setPolygonMenuFeature={setPolygonMenuFeature}
+                layers={layers}
               />
             ))}
           </MapContainer>

@@ -11,7 +11,6 @@ export default function SubstationMarker({
   cables,
   turbines,
   substationLayer,
-  layers,
   cableTypes,
   haversineM,
   calcCableLoad,
@@ -20,6 +19,7 @@ export default function SubstationMarker({
   setSubstationMenuFeature,
   setTurbineMenuFeature,
   setPolygonMenuFeature,
+  layers,
 }) {
   const [exclusionWarning, setExclusionWarning] = useState(null);
   const [lng, lat] = s.geometry.coordinates;
