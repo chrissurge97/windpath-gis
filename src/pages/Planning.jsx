@@ -288,6 +288,9 @@ export default function Planning() {
   const [drawingSnapNodes, setDrawingSnapNodes] = useState([]); // array of { type, id, lat, lng } or null per point
   const [snapPreview, setSnapPreview] = useState(null); // node being hovered near
 
+  // Layer hover tooltip
+  const [layerTooltip, setLayerTooltip] = useState(null); // { x, y, layerName, description }
+
   const mapRef = useRef(null);
 
   const substationLayer = layers.find(l => l.type === 'substation');
@@ -720,6 +723,22 @@ export default function Planning() {
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-emerald-900/40 border border-emerald-700/50 text-emerald-300 hover:bg-emerald-800/50 font-medium">
             <Wind className="w-3 h-3" /> Load Demo
           </button>
+          <button onClick={() => {
+            if (!window.confirm('Clear all project data and start fresh?')) return;
+            const empty = [
+              createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }),
+              createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }),
+              createLayer({ name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8 }),
+              createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 }),
+            ];
+            setLayers(empty);
+            setProjectName('Wind Farm Project');
+            setWindParams({ k: 2.0, lambda: 7.0 });
+            localStorage.removeItem(STORAGE_KEY);
+          }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-slate-700/60 border border-slate-600 text-slate-400 hover:text-red-400 hover:border-red-500/40">
+            <Trash2 className="w-3 h-3" /> Clear
+          </button>
           <button onClick={handleImport}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-400 hover:text-white">
             <Upload className="w-3 h-3" /> Import
@@ -848,7 +867,21 @@ export default function Planning() {
                             } else {
                               openPolygonMenu(f, layer.id);
                             }
-                          }
+                          },
+                          mousemove: (e) => {
+                            if (nonSelectMode) return;
+                            const container = e.target._map?.getContainer();
+                            const rect = container?.getBoundingClientRect();
+                            if (!rect) return;
+                            setLayerTooltip({
+                              x: e.originalEvent.clientX - rect.left,
+                              y: e.originalEvent.clientY - rect.top,
+                              layerName: layer.name,
+                              featureName: f.properties?.name || '',
+                              description: f.properties?.designation || f.properties?.reason || f.properties?.zone || f.properties?.type || f.properties?.notes || '',
+                            });
+                          },
+                          mouseout: () => setLayerTooltip(null),
                         }}
                       />
                       {/* Vertex edit handles */}
@@ -1068,15 +1101,13 @@ export default function Planning() {
             </button>
             <button onClick={() => setShowWindLayer(v => !v)}
               className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
-                showWindLayer ? "bg-cyan-500/30 text-cyan-300 border-cyan-500/50" : "bg-slate-900 text-slate-400 border-slate-700 hover:text-white"
+                showWindLayer ? "bg-cyan-600 text-white border-cyan-500" : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
               )}>
               <Wind className="w-3 h-3" /> Wind
             </button>
             <button onClick={() => setShowSubstations(v => !v)}
               className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
-                showSubstations && substations.length > 0 ? "bg-yellow-500/30 text-yellow-300 border-yellow-500/50" :
-                showSubstations ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" :
-                "bg-slate-900 text-slate-400 border-slate-700 hover:text-white"
+                showSubstations ? "bg-yellow-500 text-slate-900 border-yellow-400 font-semibold" : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
               )}>
               <Zap className="w-3 h-3" />
               {`Substations${substations.length > 0 ? ` (${substations.length})` : ''}`}
@@ -1427,6 +1458,20 @@ export default function Planning() {
             </div>
           )}
 
+          {/* Layer hover tooltip */}
+          {layerTooltip && (
+            <div
+              className="absolute z-[1500] pointer-events-none"
+              style={{ left: layerTooltip.x + 14, top: layerTooltip.y - 10 }}
+            >
+              <div className="bg-slate-900/95 border border-slate-600 rounded-lg px-3 py-2 shadow-xl max-w-[220px]">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">{layerTooltip.layerName}</p>
+                {layerTooltip.featureName && <p className="text-xs font-bold text-white leading-snug">{layerTooltip.featureName}</p>}
+                {layerTooltip.description && <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{layerTooltip.description}</p>}
+              </div>
+            </div>
+          )}
+
           {/* Exercise Guide overlay */}
           {activeExercise && (
             <ExerciseGuide
@@ -1436,21 +1481,7 @@ export default function Planning() {
             />
           )}
 
-          {/* KPI strip overlay */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] flex gap-2 flex-wrap justify-center">
-            {[
-              { label: 'Turbines', value: turbines.length, color: 'text-emerald-400' },
-              { label: 'Capacity', value: `${totalCapacity_mw.toFixed(1)} MW`, color: 'text-cyan-400' },
-              { label: 'Est. AEP', value: totalAEP > 0 ? `${(totalAEP / 1000).toFixed(1)} GWh` : '—', color: 'text-purple-400' },
-              { label: 'Cap. Factor', value: totalAEP > 0 ? `${avgCapFactor}%` : '—', color: 'text-orange-400' },
-              { label: 'Cable Cost', value: totalCableCost > 0 ? `€${(totalCableCost / 1000).toFixed(0)}k` : '—', color: 'text-yellow-400' },
-            ].map(({ label, value, color }) => (
-              <div key={label} className="bg-slate-900/90 backdrop-blur-sm border border-slate-700 rounded-lg px-3 py-1.5 text-center">
-                <p className={cn("text-sm font-bold leading-tight", color)}>{value}</p>
-                <p className="text-[10px] text-slate-500">{label}</p>
-              </div>
-            ))}
-          </div>
+
         </div>
 
         {/* Right panel */}
