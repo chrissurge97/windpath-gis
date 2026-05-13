@@ -1558,7 +1558,7 @@ export default function Planning() {
                   <div className="bg-slate-800 rounded px-2 py-1.5 col-span-2"><p className="text-slate-500">Remaining capacity</p><p className={cn("font-bold", overloaded ? "text-red-400" : "text-emerald-400")}>{overloaded ? 'OVERLOADED' : `${remainingA}A / ${remainingMW} MW spare`}</p></div>
                   <div className="bg-slate-800 rounded px-2 py-1.5"><p className="text-slate-500">From</p><p className="text-slate-300 font-medium truncate">{nodeLabel(cf.properties.start_node)}</p></div>
                   <div className="bg-slate-800 rounded px-2 py-1.5"><p className="text-slate-500">To</p><p className="text-slate-300 font-medium truncate">{nodeLabel(cf.properties.end_node)}</p></div>
-                  <div className="bg-slate-800 rounded px-2 py-1.5"><p className="text-slate-500">Cost</p><p className="text-yellow-400 font-medium">£{((cf.properties.length_m || 0) * (ct?.cost_per_m || 0)).toFixed(0)}</p></div>
+                  <div className="bg-slate-800 rounded px-2 py-1.5"><p className="text-slate-500">Cost</p><p className="text-yellow-400 font-medium">€{(((cf.properties.length_m || 0) * (ct?.cost_per_m || 0)) * 1.17).toFixed(0)}</p></div>
                   <div className="bg-slate-800 rounded px-2 py-1.5"><p className="text-slate-500">Voltage</p><p className="text-purple-400 font-medium">{ct?.voltage_kv} kV</p></div>
                 </div>
                 <div className="flex gap-2">
@@ -1870,7 +1870,7 @@ export default function Planning() {
                         { l: 'Cap. Factor', v: `${liveCapFactor}%`, c: 'text-purple-400' },
                         { l: 'Avg Hub Wind', v: avgWindSpeed ? `${avgWindSpeed} m/s` : '—', c: 'text-orange-400' },
                         { l: 'Cable Length', v: `${(totalCableLength / 1000).toFixed(2)} km`, c: 'text-yellow-400' },
-                        { l: 'Cable Cost', v: `€${(totalCableCost / 1000).toFixed(0)}k`, c: 'text-red-400' },
+                        { l: 'Cable Cost', v: `€${((totalCableCost * 1.17) / 1000).toFixed(0)}k`, c: 'text-red-400' },
                       ].map(({ l, v, c }) => (
                         <div key={l} className="bg-slate-800/60 rounded-lg p-2 text-center">
                           <p className={cn("text-sm font-bold", c)}>{v}</p>
