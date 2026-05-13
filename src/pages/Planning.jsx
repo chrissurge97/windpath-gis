@@ -38,6 +38,7 @@ import { EXERCISES } from '@/lib/exercises';
 import ExportMenu from '@/components/planning/ExportMenu';
 import LayerImportExport from '@/components/planning/LayerImportExport';
 import LayerList from '@/components/planning/LayerList';
+import NewZoneDialog from '@/components/planning/NewZoneDialog';
 import ProjectFileButtons, { saveProject, loadProject, createNewProject, loadProjectIndex, OpenProjectModal } from '@/components/planning/ProjectManager';
 import ConfigMenuWrapper from '@/components/planning/ConfigMenuWrapper';
 import { loadCustomTurbines } from '@/components/planning/TurbineWizard';
@@ -275,6 +276,7 @@ export default function Planning() {
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [editingLayerId, setEditingLayerId] = useState(null);
   const [editingLayerName, setEditingLayerName] = useState('');
+  const [showNewZoneDialog, setShowNewZoneDialog] = useState(false);
   const [mode, setMode] = useState('select');
   const [drawingPoints, setDrawingPoints] = useState([]);
   const [selectedFeatureId, setSelectedFeatureId] = useState(null);
@@ -1480,6 +1482,7 @@ export default function Planning() {
             <PolygonMenu
               feature={polygonMenuFeature}
               layer={layers.find(l => l.id === polygonMenuLayerId)}
+              layers={layers}
               onApply={applyPolygonMenu}
               onDelete={() => {
                 deleteFeature(polygonMenuLayerId, polygonMenuFeature.id);
@@ -1491,6 +1494,15 @@ export default function Planning() {
                 setEditingPolygonId(polygonMenuFeature.id);
                 setPolygonMenuFeature(null);
                 setPolygonMenuLayerId(null);
+              }}
+              onChangeLayer={(newLayerId) => {
+                const oldLayer = layers.find(l => l.id === polygonMenuLayerId);
+                const newLayer = layers.find(l => l.id === newLayerId);
+                if (oldLayer && newLayer) {
+                  updateLayer(polygonMenuLayerId, { features: oldLayer.features.filter(f => f.id !== polygonMenuFeature.id) });
+                  updateLayer(newLayerId, { features: [...newLayer.features, polygonMenuFeature] });
+                  setPolygonMenuLayerId(newLayerId);
+                }
               }}
             />
           )}
@@ -1894,10 +1906,7 @@ export default function Planning() {
             {/* LAYERS TAB */}
             {rightTab === 'layers' && (
               <div className="space-y-3">
-                <button onClick={() => {
-                  const l = createLayer({ name: 'New Zone', type: 'polygon', color: '#8b5cf6' });
-                  setLayers(prev => [...prev, l]);
-                }} className="w-full py-2 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-medium rounded-lg flex items-center justify-center gap-1.5 transition-colors">
+                <button onClick={() => setShowNewZoneDialog(true)} className="w-full py-2 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-medium rounded-lg flex items-center justify-center gap-1.5 transition-colors">
                   <Plus className="w-3.5 h-3.5" /> Add Zone
                 </button>
                 <LayerImportExport
@@ -1929,6 +1938,16 @@ export default function Planning() {
         </div>
       </div>
       <ConfigMenuWrapper isOpen={showConfigMenu} onClose={() => setShowConfigMenu(false)} features={features} onFeatureToggle={handleFeatureToggle} onTurbineAdded={(t) => setTurbineTypes(prev => [...prev, t])} onCableAdded={(c) => setCableTypes(prev => [...prev, c])} />
-    </div>
-  );
-}
+
+      {showNewZoneDialog && (
+        <NewZoneDialog
+          onClose={() => setShowNewZoneDialog(false)}
+          onCreate={({ name, color }) => {
+            const l = createLayer({ name, type: 'polygon', color });
+            setLayers(prev => [...prev, l]);
+          }}
+        />
+      )}
+      </div>
+      );
+      }

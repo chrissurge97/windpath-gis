@@ -7,12 +7,13 @@ const PRESET_COLORS = [
   '#ec4899', '#f97316', '#3b82f6', '#84cc16', '#ffffff',
 ];
 
-export default function PolygonMenu({ feature, layer, onApply, onDelete, onClose, onEditVertices }) {
+export default function PolygonMenu({ feature, layer, onApply, onDelete, onClose, onEditVertices, layers, onChangeLayer }) {
   const [name, setName] = useState(feature?.properties?.name || '');
   const [color, setColor] = useState(layer?.color || '#06b6d4');
   const [fillOpacity, setFillOpacity] = useState(layer?.fillOpacity ?? 0.15);
   const [notes, setNotes] = useState(feature?.properties?.notes || '');
   const [noTurbines, setNoTurbines] = useState(layer?.no_turbines ?? false);
+  const [selectedLayerId, setSelectedLayerId] = useState(layer?.id || '');
 
   useEffect(() => {
     setName(feature?.properties?.name || '');
@@ -32,6 +33,26 @@ export default function PolygonMenu({ feature, layer, onApply, onDelete, onClose
           <X className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Zone / Layer Selection */}
+      {layers && layers.length > 0 && (
+        <div className="mb-3">
+          <label className="text-[10px] text-slate-400 block mb-1">Zone</label>
+          <select
+            value={selectedLayerId}
+            onChange={e => {
+              const newLayerId = e.target.value;
+              setSelectedLayerId(newLayerId);
+              if (onChangeLayer) onChangeLayer(newLayerId);
+            }}
+            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-sm text-white outline-none"
+          >
+            {layers.filter(l => !['turbine', 'cable', 'substation', 'wind_resource'].includes(l.type)).map(l => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Name */}
       <div className="mb-3">
