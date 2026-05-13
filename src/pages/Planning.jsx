@@ -1150,22 +1150,36 @@ export default function Planning() {
                                 : ft
                             )
                           });
-                          // Update connected cables
+                          // Update connected cables endpoints, lengths, and sizes
                           if (cableLayer) {
-                            updateLayer(cableLayer.id, {
-                              features: cableLayer.features.map(cable => {
-                                const start = cable.properties.start_node;
-                                const end = cable.properties.end_node;
-                                if (!start?.id && !end?.id) return cable;
-                                const isStart = start?.id === f.id;
-                                const isEnd = end?.id === f.id;
-                                if (!isStart && !isEnd) return cable;
-                                const coords = cable.geometry.coordinates.map(([lng, lat]) => [lng, lat]);
-                                if (isStart) coords[0] = newCoords;
-                                if (isEnd) coords[coords.length - 1] = newCoords;
-                                return { ...cable, geometry: { ...cable.geometry, coordinates: coords } };
-                              })
+                            const updatedCables = cableLayer.features.map(cable => {
+                              const start = cable.properties.start_node;
+                              const end = cable.properties.end_node;
+                              if (!start?.id && !end?.id) return cable;
+                              const isStart = start?.id === f.id;
+                              const isEnd = end?.id === f.id;
+                              if (!isStart && !isEnd) return cable;
+                              const coords = cable.geometry.coordinates.map(([lng, lat]) => [lng, lat]);
+                              if (isStart) coords[0] = newCoords;
+                              if (isEnd) coords[coords.length - 1] = newCoords;
+                              let totalLen = 0;
+                              for (let i = 0; i < coords.length - 1; i++) totalLen += haversineM(coords[i][1], coords[i][0], coords[i+1][1], coords[i+1][0]);
+                              const usedMw = calcCableLoad(cable.id, updatedCables, turbines);
+                              const ct = cableTypes.find(t => t.id === cable.properties.cable_type_id) || cableTypes[0];
+                              const voltage = ct?.voltage_kv || 33;
+                              const usedA = ct ? +(usedMw * 1000 / (Math.sqrt(3) * voltage)).toFixed(0) : 0;
+                              let newCableTypeId = cable.properties.cable_type_id;
+                              if (usedMw > 0 && usedA > (ct?.ampacity_a || 0)) {
+                                const sorted = cableTypes.filter(c => c.voltage_kv === voltage).sort((a, b) => a.ampacity_a - b.ampacity_a);
+                                const suitable = sorted.find(c => {
+                                  const cap = Math.sqrt(3) * c.voltage_kv * c.ampacity_a / 1000;
+                                  return cap >= usedMw;
+                                });
+                                if (suitable) newCableTypeId = suitable.id;
+                              }
+                              return { ...cable, geometry: { ...cable.geometry, coordinates: coords }, properties: { ...cable.properties, length_m: +totalLen.toFixed(0), cable_type_id: newCableTypeId } };
                             });
+                            updateLayer(cableLayer.id, { features: updatedCables });
                           }
                         }
                       }} />
