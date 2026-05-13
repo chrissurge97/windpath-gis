@@ -218,13 +218,17 @@ function MapClickHandler({ mode, onAddPoint, onFinishPolygon, onFinishCable }) {
 // Ireland bounding box
 const IRELAND_BOUNDS = [[51.2, -10.8], [55.6, -5.4]];
 
-// Enforces map stays within Ireland bounds
-function MapBoundsEnforcer() {
+// Enforces map stays within Ireland bounds (respects irelandMapLock feature)
+function MapBoundsEnforcer({ enabled }) {
   const map = useMapEvents({});
   useEffect(() => {
-    map.setMaxBounds(IRELAND_BOUNDS);
-    map.options.maxBoundsViscosity = 1.0;
-  }, [map]);
+    if (enabled) {
+      map.setMaxBounds(IRELAND_BOUNDS);
+      map.options.maxBoundsViscosity = 1.0;
+    } else {
+      map.setMaxBounds(null);
+    }
+  }, [map, enabled]);
   return null;
 }
 
@@ -987,7 +991,7 @@ export default function Planning() {
               setPanesReady(true);
             }}
           >
-            <MapBoundsEnforcer />
+            <MapBoundsEnforcer enabled={features.irelandMapLock} />
             {satelliteView ? (
               <TileLayer
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
