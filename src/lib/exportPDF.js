@@ -79,25 +79,30 @@ async function addMapPage(doc, mapEl, layers, projectName) {
   // Capture map using html2canvas
   if (mapEl) {
     try {
-      // Scroll the map container to top-left before capture to avoid offset issues
       const rect = mapEl.getBoundingClientRect();
       const canvas = await html2canvas(mapEl, {
         useCORS: true,
         allowTaint: true,
-        scale: 3.5,
+        scale: 3,
         backgroundColor: '#0f172a',
         logging: false,
-        x: 0,
-        y: 0,
-        scrollX: 0,
-        scrollY: 0,
-        width: mapEl.offsetWidth,
-        height: mapEl.offsetHeight,
+        // Use the element's position in the viewport — this is what fixes layer shifting.
+        // html2canvas needs to know where in the page the element sits so it can
+        // correctly offset every child (tiles, SVG panes, canvas layers, etc.)
+        x: rect.left + window.scrollX,
+        y: rect.top + window.scrollY,
+        scrollX: -window.scrollX,
+        scrollY: -window.scrollY,
+        windowWidth: document.documentElement.scrollWidth,
+        windowHeight: document.documentElement.scrollHeight,
+        width: rect.width,
+        height: rect.height,
+        foreignObjectRendering: false,
+        imageTimeout: 0,
       });
       const imgData = canvas.toDataURL('image/png');
       doc.addImage(imgData, 'PNG', mapX, mapY, mapW, mapH);
     } catch (e) {
-      // fallback: grey placeholder
       setFill(doc, '#1e293b');
       doc.rect(mapX, mapY, mapW, mapH, 'F');
       setTextColor(doc, '#475569');

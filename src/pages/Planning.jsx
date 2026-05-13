@@ -829,7 +829,11 @@ export default function Planning() {
         <div className="flex-1 relative min-w-0" style={{ cursor: cursorStyle }}>
           {/* Right panel collapse toggle */}
           <button
-            onClick={() => setRightPanelOpen(v => !v)}
+            onClick={() => {
+              setRightPanelOpen(v => !v);
+              // After CSS transition (200ms), tell Leaflet to recalculate its size
+              setTimeout(() => { mapRef.current?.invalidateSize(); }, 220);
+            }}
             className="absolute top-1/2 -translate-y-1/2 right-0 z-[1050] bg-slate-800 border border-slate-600 rounded-l-lg px-1 py-3 text-slate-400 hover:text-white hover:bg-slate-700 transition-all shadow-lg"
             title={rightPanelOpen ? 'Collapse panel' : 'Expand panel'}
           >
