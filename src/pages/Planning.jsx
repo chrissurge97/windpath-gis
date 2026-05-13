@@ -37,6 +37,7 @@ import SubstationMarker from '@/components/planning/SubstationMarker';
 import { EXERCISES } from '@/lib/exercises';
 import ExportMenu from '@/components/planning/ExportMenu';
 import LayerImportExport from '@/components/planning/LayerImportExport';
+import LayerList from '@/components/planning/LayerList';
 import ProjectFileButtons, { saveProject, loadProject, createNewProject, loadProjectIndex, OpenProjectModal } from '@/components/planning/ProjectManager';
 import ConfigMenuWrapper from '@/components/planning/ConfigMenuWrapper';
 import { loadCustomTurbines } from '@/components/planning/TurbineWizard';
@@ -272,6 +273,8 @@ export default function Planning() {
   const [selectedTurbineTypeId, setSelectedTurbineTypeId] = useState(turbineTypes[0]?.id);
   const [selectedCableTypeId, setSelectedCableTypeId] = useState(cableTypes[0]?.id);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
+  const [editingLayerId, setEditingLayerId] = useState(null);
+  const [editingLayerName, setEditingLayerName] = useState('');
   const [mode, setMode] = useState('select');
   const [drawingPoints, setDrawingPoints] = useState([]);
   const [selectedFeatureId, setSelectedFeatureId] = useState(null);
@@ -1890,85 +1893,26 @@ export default function Planning() {
 
             {/* LAYERS TAB */}
             {rightTab === 'layers' && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold text-slate-300">Map Layers</span>
-                  <button onClick={() => {
-                    const l = createLayer({ name: 'New Zone', type: 'polygon', color: '#8b5cf6' });
-                    setLayers(prev => [...prev, l]);
-                  }} className="p-1 text-slate-500 hover:text-white text-[10px] flex items-center gap-0.5">
-                    <Plus className="w-3 h-3" /> Add Zone
-                  </button>
-                </div>
-                <p className="text-[9px] text-slate-600">Higher layers render on top. Use ↑↓ to reorder.</p>
+              <div className="space-y-3">
+                <button onClick={() => {
+                  const l = createLayer({ name: 'New Zone', type: 'polygon', color: '#8b5cf6' });
+                  setLayers(prev => [...prev, l]);
+                }} className="w-full py-2 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-medium rounded-lg flex items-center justify-center gap-1.5 transition-colors">
+                  <Plus className="w-3.5 h-3.5" /> Add Zone
+                </button>
                 <LayerImportExport
                   layers={layers}
                   onAddLayer={(layer) => setLayers(prev => [...prev, layer])}
                   projectName={projectName}
                 />
-                {layers.map((layer, idx) => (
-                  <div key={layer.id} onClick={() => {
-                    setSelectedLayerId(layer.id);
-                    // Fly to the bounds of all features in this layer
-                    if (mapRef.current && layer.features.length > 0) {
-                      const allPts = layer.features.flatMap(f => {
-                        const g = f.geometry;
-                        if (g.type === 'Point') return [[g.coordinates[1], g.coordinates[0]]];
-                        if (g.type === 'LineString') return g.coordinates.map(([lng, lat]) => [lat, lng]);
-                        if (g.type === 'Polygon') return g.coordinates[0].map(([lng, lat]) => [lat, lng]);
-                        return [];
-                      });
-                      if (allPts.length > 0) mapRef.current.flyToBounds(L.latLngBounds(allPts), { padding: [60, 60], animate: true, duration: 0.8 });
-                    }
-                  }}
-                    className={cn("flex items-center gap-1.5 p-2 rounded-lg border cursor-pointer transition-all",
-                      layer.id === selectedLayerId ? "bg-slate-700 border-slate-600" : "bg-slate-800/50 border-slate-700 hover:border-slate-600"
-                    )}>
-                    <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: layer.color }} />
-                    <span className="flex-1 text-xs text-slate-300 truncate">{layer.name}</span>
-                    {layer.no_turbines && <span className="text-[9px] text-red-400 shrink-0" title="No turbines allowed">⛔</span>}
-                    <span className="text-[10px] text-slate-600 shrink-0">{layer.features.length}</span>
-                    {/* Z-order controls */}
-                    <div className="flex flex-col gap-0 shrink-0">
-                      <button
-                        disabled={idx === 0}
-                        onClick={e => {
-                          e.stopPropagation();
-                          setLayers(prev => {
-                            const a = [...prev];
-                            [a[idx - 1], a[idx]] = [a[idx], a[idx - 1]];
-                            return a;
-                          });
-                        }}
-                        className="p-0.5 text-slate-600 hover:text-white disabled:opacity-20">
-                        <ArrowUp className="w-2.5 h-2.5" />
-                      </button>
-                      <button
-                        disabled={idx === layers.length - 1}
-                        onClick={e => {
-                          e.stopPropagation();
-                          setLayers(prev => {
-                            const a = [...prev];
-                            [a[idx], a[idx + 1]] = [a[idx + 1], a[idx]];
-                            return a;
-                          });
-                        }}
-                        className="p-0.5 text-slate-600 hover:text-white disabled:opacity-20">
-                        <ArrowDown className="w-2.5 h-2.5" />
-                      </button>
-                    </div>
-                    <button onClick={e => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
-                      className="text-slate-500 hover:text-white p-0.5 shrink-0">
-                      {layer.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                    </button>
-                    {!['turbine','cable','substation'].includes(layer.type) && (
-                      <button onClick={e => { e.stopPropagation(); setLayers(prev => prev.filter(l => l.id !== layer.id)); }}
-                        className="text-slate-600 hover:text-red-400 p-0.5 shrink-0">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                <LayerList
+                  layers={layers}
+                  selectedLayerId={selectedLayerId}
+                  setSelectedLayerId={setSelectedLayerId}
+                  updateLayer={updateLayer}
+                  setLayers={setLayers}
+                  mapRef={mapRef}
+                />
               </div>
             )}
 
