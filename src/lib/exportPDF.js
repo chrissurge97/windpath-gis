@@ -204,6 +204,21 @@ async function addMapPage(doc, mapEl, layers, projectName) {
   doc.text(`Drawing produced: ${new Date().toLocaleDateString('en-IE', { dateStyle: 'long' })}   |   EagleView Academy Wind Farm Planning Tool   |   For indicative purposes only`, PW / 2, footerY, { align: 'center' });
 }
 
+// ── Compute wind farm bounding box from turbines + substations ───────────────
+function getWindFarmBounds(turbines, substations) {
+  const points = [
+    ...turbines.map(t => ({ lat: t.geometry.coordinates[1], lng: t.geometry.coordinates[0] })),
+    ...substations.map(s => ({ lat: s.geometry.coordinates[1], lng: s.geometry.coordinates[0] })),
+  ];
+  if (points.length === 0) return null;
+  const lats = points.map(p => p.lat);
+  const lngs = points.map(p => p.lng);
+  return {
+    minLat: Math.min(...lats), maxLat: Math.max(...lats),
+    minLng: Math.min(...lngs), maxLng: Math.max(...lngs),
+  };
+}
+
 // ── Main export function ─────────────────────────────────────────────────────
 export async function exportProjectPDF({
   projectName,
@@ -222,6 +237,7 @@ export async function exportProjectPDF({
   monthlyData,
   layers,
   mapEl,
+  mapRef,
 }) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const PW = 210; // page width
@@ -482,8 +498,37 @@ export async function exportProjectPDF({
   doc.text('EagleView Academy — Wind Farm Planning Tool', ML, footerY + 2);
   doc.text('Estimates only. Not for use in formal planning submissions.', PW - MR, footerY + 2, { align: 'right' });
 
-  // ── Map drawing page (A0 landscape) ────────────────────────────────────────
+  // ── Map drawing page: zoom map to wind farm area first ─────────────────────
+  const map = mapRef?.current;
+  let originalCenter = null;
+  let originalZoom = null;
+
+  if (map && turbines.length > 0) {
+    originalCenter = map.getCenter();
+    originalZoom = map.getZoom();
+
+    const bounds = getWindFarmBounds(turbines, substations);
+    if (bounds) {
+      // Add ~15% buffer around the wind farm
+      const latBuf = (bounds.maxLat - bounds.minLat) * 0.20 + 0.003;
+      const lngBuf = (bounds.maxLng - bounds.minLng) * 0.20 + 0.004;
+      const L = await import('leaflet').then(m => m.default || m);
+      const fitBounds = L.latLngBounds(
+        [bounds.minLat - latBuf, bounds.minLng - lngBuf],
+        [bounds.maxLat + latBuf, bounds.maxLng + lngBuf]
+      );
+      map.fitBounds(fitBounds, { animate: false, padding: [0, 0] });
+      // Wait for tiles to settle
+      await new Promise(r => setTimeout(r, 900));
+    }
+  }
+
   await addMapPage(doc, mapEl, layers, projectName);
+
+  // Restore original map view
+  if (map && originalCenter !== null) {
+    map.setView(originalCenter, originalZoom, { animate: false });
+  }
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const safeName = (projectName || 'wind-farm').replace(/[^a-z0-9]/gi, '-').toLowerCase();
