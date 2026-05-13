@@ -37,6 +37,9 @@ import { EXERCISES } from '@/lib/exercises';
 import ExportMenu from '@/components/planning/ExportMenu';
 import LayerImportExport from '@/components/planning/LayerImportExport';
 import ProjectFileButtons, { saveProject, loadProject, createNewProject, loadProjectIndex, OpenProjectModal } from '@/components/planning/ProjectManager';
+import ConfigMenuWrapper from '@/components/planning/ConfigMenuWrapper';
+import { loadCustomTurbines } from '@/components/planning/TurbineWizard';
+import { loadCustomCables } from '@/components/planning/CableWizard';
 
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -327,18 +330,29 @@ export default function Planning() {
   }, [showLessonGuide]);
 
   const [showOpenModal, setShowOpenModal] = useState(false);
+  const [showConfigMenu, setShowConfigMenu] = useState(false);
+  const [features, setFeatures] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('app_features') || '{"windAnalysis":true,"irelandMapLock":true}');
+    } catch {
+      return { windAnalysis: true, irelandMapLock: true };
+    }
+  });
   const mapRef = useRef(null);
   const [panesReady, setPanesReady] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
 
-  // Close draw tools dropdown on outside click
   useEffect(() => {
-    const handler = (e) => {
-      if (drawToolsRef.current && !drawToolsRef.current.contains(e.target)) setDrawToolsOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const h = (e) => { if (drawToolsRef.current && !drawToolsRef.current.contains(e.target)) setDrawToolsOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
   }, []);
+
+  const handleFeatureToggle = (fId) => {
+    const nf = { ...features, [fId]: !features[fId] };
+    setFeatures(nf);
+    localStorage.setItem('app_features', JSON.stringify(nf));
+  };
 
   const substationLayer = layers.find(l => l.type === 'substation');
   const substations = substationLayer?.features || [];
@@ -911,6 +925,9 @@ export default function Planning() {
         )}
 
         <div className="ml-auto flex items-center gap-1 shrink-0">
+          <button onClick={() => setShowConfigMenu(!showConfigMenu)} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-purple-400 hover:border-purple-500/40 shrink-0">
+            <Settings className="w-3 h-3" /> Config
+          </button>
           <button onClick={() => {
             if (!window.confirm('Clear all features from this project?')) return;
             setLayers([
@@ -1977,6 +1994,7 @@ export default function Planning() {
           </div>
         </div>
       </div>
+      <ConfigMenuWrapper isOpen={showConfigMenu} onClose={() => setShowConfigMenu(false)} features={features} onFeatureToggle={handleFeatureToggle} onTurbineAdded={(t) => setTurbineTypes(prev => [...prev, t])} onCableAdded={(c) => setCableTypes(prev => [...prev, c])} />
     </div>
   );
 }
