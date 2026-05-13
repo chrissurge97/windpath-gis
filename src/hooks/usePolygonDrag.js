@@ -1,6 +1,17 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export function usePolygonDrag(draggingPolygonId, dragStartLatlng, setDraggingPolygonId, setDragStartLatlng, layers, updateLayer, mapRef) {
+  const layersRef = useRef(layers);
+  const updateLayerRef = useRef(updateLayer);
+
+  useEffect(() => {
+    layersRef.current = layers;
+  }, [layers]);
+
+  useEffect(() => {
+    updateLayerRef.current = updateLayer;
+  }, [updateLayer]);
+
   useEffect(() => {
     if (!draggingPolygonId || !dragStartLatlng || !mapRef.current) return;
 
@@ -10,7 +21,7 @@ export function usePolygonDrag(draggingPolygonId, dragStartLatlng, setDraggingPo
       
       let foundLayer = null;
       let foundFeature = null;
-      for (const layer of layers) {
+      for (const layer of layersRef.current) {
         const feature = layer.features.find(f => f.id === draggingPolygonId);
         if (feature) {
           foundLayer = layer;
@@ -26,7 +37,7 @@ export function usePolygonDrag(draggingPolygonId, dragStartLatlng, setDraggingPo
 
       const ring = foundFeature.geometry.coordinates[0];
       const newRing = ring.map(([lng, lat]) => [lng + deltaLng, lat + deltaLat]);
-      updateLayer(foundLayer.id, {
+      updateLayerRef.current(foundLayer.id, {
         features: foundLayer.features.map(f =>
           f.id === draggingPolygonId
             ? { ...f, geometry: { ...f.geometry, coordinates: [newRing] } }
@@ -49,5 +60,5 @@ export function usePolygonDrag(draggingPolygonId, dragStartLatlng, setDraggingPo
       map.off('mousemove', onMouseMove);
       map.off('mouseup', onMouseUp);
     };
-  }, [draggingPolygonId, dragStartLatlng, layers, updateLayer, mapRef, setDraggingPolygonId, setDragStartLatlng]);
+  }, [draggingPolygonId, dragStartLatlng, mapRef, setDraggingPolygonId, setDragStartLatlng]);
 }
