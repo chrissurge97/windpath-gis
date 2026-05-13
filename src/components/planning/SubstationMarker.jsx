@@ -1,0 +1,92 @@
+import React from 'react';
+import { Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import { Trash2, X } from 'lucide-react';
+
+export default function SubstationMarker({
+  s,
+  mode,
+  cableLayer,
+  cables,
+  turbines,
+  substationLayer,
+  layers,
+  cableTypes,
+  haversineM,
+  calcCableLoad,
+  calcSubstationLoad,
+  updateLayer,
+  setSubstationMenuFeature,
+  setTurbineMenuFeature,
+  setPolygonMenuFeature,
+}) {
+  const [lng, lat] = s.geometry.coordinates;
+  const subTotalMw = calcSubstationLoad(s.id, cables, turbines);
+  const subCapMw = s.properties.capacity_generation_mw || 0;
+  const subOverloaded = subTotalMw > 0 && subTotalMw > subCapMw + 0.01;
+  
+  const subIcon = L.divIcon({
+    html: `<div style="width:16px;height:16px;background:${subOverloaded ? '#ef4444' : '#facc15'};border:2px solid #fff;border-radius:3px;box-shadow:0 0 6px ${subOverloaded ? '#ef444499' : '#facc1599'};display:flex;align-items:center;justify-content:center;">
+      <div style="width:6px;height:6px;background:#000;border-radius:1px;opacity:0.5"></div>
+    </div>`,
+    className: '', iconSize: [16, 16], iconAnchor: [8, 8],
+  });
+
+  return (
+    <Marker key={`sub-${s.id}`} position={[lat, lng]} icon={subIcon}
+      draggable={mode === 'select'}
+      eventHandlers={{
+        click: (e) => {
+          if (mode === 'select') { 
+            L.DomEvent.stopPropagation(e); 
+            setSubstationMenuFeature(s); 
+            setTurbineMenuFeature(null); 
+            setPolygonMenuFeature(null); 
+          }
+        },
+        dragend: (e) => {
+          const newLatLng = e.target.getLatLng();
+          const newCoords = [newLatLng.lng, newLatLng.lat];
+          if (!substationLayer) return;
+          // Update substation
+          updateLayer(substationLayer.id, {
+            features: substationLayer.features.map(f =>
+              f.id === s.id ? { ...f, geometry: { ...f.geometry, coordinates: newCoords } } : f
+            )
+          });
+          // Update connected cables endpoints and lengths
+          if (cableLayer) {
+            updateLayer(cableLayer.id, {
+              features: cableLayer.features.map(cable => {
+                const start = cable.properties.start_node;
+                const end = cable.properties.end_node;
+                if (!start?.id && !end?.id) return cable;
+                const isStart = start?.id === s.id;
+                const isEnd = end?.id === s.id;
+                if (!isStart && !isEnd) return cable;
+                const coords = cable.geometry.coordinates.map(([l,t]) => [l,t]);
+                if (isStart) coords[0] = newCoords;
+                if (isEnd) coords[coords.length - 1] = newCoords;
+                let totalLen = 0;
+                for (let i = 0; i < coords.length - 1; i++) {
+                  totalLen += haversineM(coords[i][1], coords[i][0], coords[i+1][1], coords[i+1][0]);
+                }
+                return { ...cable, geometry: { ...cable.geometry, coordinates: coords }, properties: { ...cable.properties, length_m: +totalLen.toFixed(0) } };
+              })
+            });
+          }
+        }
+      }}>
+      <Popup>
+        <div className="text-xs min-w-36">
+          <p className="font-bold">{s.properties.name}</p>
+          <p className="text-slate-500">{s.properties.transformer_mva} MVA transformer</p>
+          <p className="text-slate-500">Gen capacity: {subCapMw} MW</p>
+          {subTotalMw > 0 && <p style={{ color: subOverloaded ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>
+            Connected load: {subTotalMw.toFixed(1)} MW{subOverloaded ? ' ⚠ OVER CAPACITY' : ' ✓ OK'}
+          </p>}
+        </div>
+      </Popup>
+    </Marker>
+  );
+}

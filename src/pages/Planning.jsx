@@ -30,6 +30,7 @@ import ExerciseGuide from '@/components/planning/ExerciseGuide';
 import LessonGuide from '@/components/planning/LessonGuide';
 import TextAnnotationMenu from '@/components/planning/TextAnnotationMenu';
 import TextOverlay from '@/components/planning/TextOverlay';
+import SubstationMarker from '@/components/planning/SubstationMarker';
 import { EXERCISES } from '@/lib/exercises';
 import ExportMenu from '@/components/planning/ExportMenu';
 import LayerImportExport from '@/components/planning/LayerImportExport';
@@ -1229,56 +1230,25 @@ export default function Planning() {
             />
 
             {/* Placeable Substations */}
-            {showSubstations && substations.map(s => {
-              const [lng, lat] = s.geometry.coordinates;
-              const substIcon = L.divIcon({
-                html: `<div style="width:14px;height:14px;background:#facc15;border:2px solid #fff;border-radius:3px;box-shadow:0 0 6px #facc1599;display:flex;align-items:center;justify-content:center;">
-                  <div style="width:6px;height:6px;background:#000;border-radius:1px;opacity:0.5"></div>
-                </div>`,
-                className: '', iconSize: [14, 14], iconAnchor: [7, 7],
-              });
-              const subTotalMw = calcSubstationLoad(s.id, cables, turbines);
-              const subCapMw = s.properties.capacity_generation_mw || 0;
-              const subOverloaded = subTotalMw > 0 && subTotalMw > subCapMw + 0.01;
-              const subIcon = L.divIcon({
-                html: `<div style="width:16px;height:16px;background:${subOverloaded ? '#ef4444' : '#facc15'};border:2px solid #fff;border-radius:3px;box-shadow:0 0 6px ${subOverloaded ? '#ef444499' : '#facc1599'};display:flex;align-items:center;justify-content:center;">
-                  <div style="width:6px;height:6px;background:#000;border-radius:1px;opacity:0.5"></div>
-                </div>`,
-                className: '', iconSize: [16, 16], iconAnchor: [8, 8],
-              });
-              const sSnap = s;
-              return (
-                <Marker key={`sub-${s.id}`} position={[lat, lng]} icon={subIcon}
-                  draggable={mode === 'select'}
-                  eventHandlers={{
-                    click: (e) => {
-                      if (mode === 'select') { L.DomEvent.stopPropagation(e); setSubstationMenuFeature(sSnap); setTurbineMenuFeature(null); setPolygonMenuFeature(null); }
-                    },
-                    dragend: (e) => {
-                      const newLatLng = e.target.getLatLng();
-                      if (!substationLayer) return;
-                      updateLayer(substationLayer.id, {
-                        features: substationLayer.features.map(f =>
-                          f.id === sSnap.id
-                            ? { ...f, geometry: { ...f.geometry, coordinates: [newLatLng.lng, newLatLng.lat] } }
-                            : f
-                        )
-                      });
-                    }
-                  }}>
-                  <Popup>
-                    <div className="text-xs min-w-36">
-                      <p className="font-bold">{s.properties.name}</p>
-                      <p className="text-slate-500">{s.properties.transformer_mva} MVA transformer</p>
-                      <p className="text-slate-500">Gen capacity: {subCapMw} MW</p>
-                      {subTotalMw > 0 && <p style={{ color: subOverloaded ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>
-                        Connected load: {subTotalMw.toFixed(1)} MW{subOverloaded ? ' ⚠ OVER CAPACITY' : ' ✓ OK'}
-                      </p>}
-                    </div>
-                  </Popup>
-                </Marker>
-              );
-            })}
+            {showSubstations && substations.map(s => (
+              <SubstationMarker
+                key={`sub-${s.id}`}
+                s={s}
+                mode={mode}
+                cableLayer={cableLayer}
+                cables={cables}
+                turbines={turbines}
+                substationLayer={substationLayer}
+                cableTypes={cableTypes}
+                haversineM={haversineM}
+                calcCableLoad={calcCableLoad}
+                calcSubstationLoad={calcSubstationLoad}
+                updateLayer={updateLayer}
+                setSubstationMenuFeature={setSubstationMenuFeature}
+                setTurbineMenuFeature={setTurbineMenuFeature}
+                setPolygonMenuFeature={setPolygonMenuFeature}
+              />
+            ))}
           </MapContainer>
 
           {/* Map layer toggles */}
