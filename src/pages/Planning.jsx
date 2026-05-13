@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   MapContainer, TileLayer, Marker, Popup, Circle, Polygon, Polyline,
@@ -30,6 +30,8 @@ import ExerciseGuide from '@/components/planning/ExerciseGuide';
 import { EXERCISES } from '@/lib/exercises';
 import ExportMenu from '@/components/planning/ExportMenu';
 import LayerImportExport from '@/components/planning/LayerImportExport';
+import ProjectManager, { saveProject, loadProject, createNewProject, loadProjectIndex } from '@/components/planning/ProjectManager';
+
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -205,42 +207,77 @@ function MapClickHandler({ mode, onAddPoint, onFinishPolygon, onFinishCable }) {
 
 const STORAGE_KEY = 'planning_v3_ire';
 
+// Ireland bounding box
+const IRELAND_BOUNDS = [[51.2, -10.8], [55.6, -5.4]];
+
+// Enforces map stays within Ireland bounds
+function MapBoundsEnforcer() {
+  const map = useMapEvents({});
+  useEffect(() => {
+    map.setMaxBounds(IRELAND_BOUNDS);
+    map.options.maxBoundsViscosity = 1.0;
+  }, [map]);
+  return null;
+}
+
 export default function Planning() {
   const location = useLocation();
   const navigate = useNavigate();
   const exerciseId = location.state?.exerciseId || null;
   const activeExercise = exerciseId ? EXERCISES[exerciseId] : null;
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  const [layers, setLayers] = useState(() => {
+  // ── Project system ─────────────────────────────────────────────────────────
+  const [currentProjectId, setCurrentProjectId] = useState(() => {
+    // Load or create the first project
+    const index = loadProjectIndex();
+    if (index.length > 0) return index[0].id;
+    // Migrate legacy data if any
     try {
-      const d = localStorage.getItem(STORAGE_KEY);
-      const parsed = d ? JSON.parse(d) : null;
-      if (parsed?.layers) {
+      const legacy = localStorage.getItem(STORAGE_KEY);
+      if (legacy) {
+        const d = JSON.parse(legacy);
+        const id = `proj_legacy_${Date.now()}`;
+        const proj = {
+          id,
+          name: 'My Project',
+          layers: d.layers || [],
+          turbineTypes: d.turbineTypes || DEFAULT_TURBINE_TYPES,
+          cableTypes: d.cableTypes || DEFAULT_CABLE_TYPES,
+          windParams: { k: 2.0, lambda: 7.0 },
+        };
         // Migrate: add substation layer if missing
-        if (!parsed.layers.find(l => l.type === 'substation')) {
-          parsed.layers.push(createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 }));
+        if (!proj.layers.find(l => l.type === 'substation')) {
+          proj.layers.push(createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 }));
         }
-        return parsed.layers;
+        saveProject(id, proj);
+        return id;
       }
     } catch {}
-    return [
-      createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }),
-      createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }),
-      createLayer({ name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8 }),
-      createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 }),
-    ];
+    const { id } = createNewProject('My Project');
+    return id;
   });
 
-  const [turbineTypes, setTurbineTypes] = useState(() => {
-    try { const d = localStorage.getItem(STORAGE_KEY); const p = d ? JSON.parse(d) : null; if (p?.turbineTypes) return p.turbineTypes; } catch {}
-    return DEFAULT_TURBINE_TYPES;
-  });
+  const loadCurrentProject = (id) => {
+    const proj = loadProject(id);
+    if (!proj) return null;
+    if (!proj.layers.find(l => l.type === 'substation')) {
+      proj.layers.push(createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 }));
+    }
+    return proj;
+  };
 
-  const [cableTypes, setCableTypes] = useState(() => {
-    try { const d = localStorage.getItem(STORAGE_KEY); const p = d ? JSON.parse(d) : null; if (p?.cableTypes) return p.cableTypes; } catch {}
-    return DEFAULT_CABLE_TYPES;
-  });
+  const initProj = loadCurrentProject(currentProjectId) || {};
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  const [layers, setLayers] = useState(() => initProj.layers || [
+    createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }),
+    createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }),
+    createLayer({ name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8 }),
+    createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 }),
+  ]);
+
+  const [turbineTypes, setTurbineTypes] = useState(() => initProj.turbineTypes || DEFAULT_TURBINE_TYPES);
+  const [cableTypes, setCableTypes] = useState(() => initProj.cableTypes || DEFAULT_CABLE_TYPES);
 
   const [selectedTurbineTypeId, setSelectedTurbineTypeId] = useState(turbineTypes[0]?.id);
   const [selectedCableTypeId, setSelectedCableTypeId] = useState(cableTypes[0]?.id);
@@ -251,7 +288,7 @@ export default function Planning() {
   const [rightTab, setRightTab] = useState('turbines');
   const [loadingWind, setLoadingWind] = useState(false);
   const [windFetched, setWindFetched] = useState(false);
-  const [projectName, setProjectName] = useState('Wind Farm Project');
+  const [projectName, setProjectName] = useState(() => initProj.name || 'Wind Farm Project');
   const [savedMsg, setSavedMsg] = useState(false);
   const [windParams, setWindParams] = useState({ k: 2.0, lambda: 7.0 });
 
@@ -309,10 +346,34 @@ export default function Planning() {
   const selectedTurbineType = turbineTypes.find(t => t.id === selectedTurbineTypeId) || turbineTypes[0];
   const selectedCableType = cableTypes.find(t => t.id === selectedCableTypeId) || cableTypes[0];
 
-  // ── Persist ────────────────────────────────────────────────────────────────
+  // ── Persist (debounced) ────────────────────────────────────────────────────
+  const saveTimer = useRef(null);
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ layers, turbineTypes, cableTypes })); } catch {}
-  }, [layers, turbineTypes, cableTypes]);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveProject(currentProjectId, { id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams });
+    }, 800);
+    return () => clearTimeout(saveTimer.current);
+  }, [layers, turbineTypes, cableTypes, projectName, currentProjectId, windParams]);
+
+  // ── Project switching ──────────────────────────────────────────────────────
+  const handleSwitchProject = (id, proj) => {
+    setCurrentProjectId(id);
+    setLayers(proj.layers || []);
+    setTurbineTypes(proj.turbineTypes || DEFAULT_TURBINE_TYPES);
+    setCableTypes(proj.cableTypes || DEFAULT_CABLE_TYPES);
+    setProjectName(proj.name || 'Project');
+    setWindParams(proj.windParams || { k: 2.0, lambda: 7.0 });
+    setMode('select');
+    setTurbineMenuFeature(null);
+    setPolygonMenuFeature(null);
+    setCableMenuFeature(null);
+    setSubstationMenuFeature(null);
+  };
+
+  const handleNewProject = (id, proj) => {
+    handleSwitchProject(id, proj);
+  };
 
   const updateLayer = useCallback((id, changes) => {
     setLayers(prev => prev.map(l => l.id === id ? { ...l, ...changes } : l));
@@ -649,15 +710,15 @@ export default function Planning() {
   }, 0);
 
   const monthlyFactors = [1.25, 1.15, 1.1, 0.95, 0.8, 0.7, 0.72, 0.75, 0.9, 1.05, 1.15, 1.28];
-  const monthlyData = ['J','F','M','A','M','J','J','A','S','O','N','D'].map((m, i) => ({
+  const monthlyData = useMemo(() => ['J','F','M','A','M','J','J','A','S','O','N','D'].map((m, i) => ({
     m, e: totalAEP_live > 0 ? +((totalAEP_live / 12) * monthlyFactors[i]).toFixed(0) : 0,
-  }));
+  })), [totalAEP_live]);
 
-  const weibullData = Array.from({ length: 25 }, (_, i) => i + 0.5).map(v => {
+  const weibullData = useMemo(() => Array.from({ length: 25 }, (_, i) => i + 0.5).map(v => {
     const { k, lambda } = windParams;
     const pdf = k > 0 && lambda > 0 ? (k / lambda) * Math.pow(v / lambda, k - 1) * Math.exp(-Math.pow(v / lambda, k)) : 0;
     return { v: v.toFixed(0), f: +(pdf * 100).toFixed(2) };
-  });
+  }), [windParams]);
 
   const cursorStyle = { select: 'default', draw_polygon: 'crosshair', place_turbine: 'cell', draw_cable: 'crosshair' }[mode] || 'default';
 
@@ -682,10 +743,17 @@ export default function Planning() {
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-slate-800 flex-wrap shrink-0">
         <Map className="w-4 h-4 text-emerald-400 shrink-0" />
+        <ProjectManager
+          currentProjectId={currentProjectId}
+          currentProjectName={projectName}
+          onSwitchProject={handleSwitchProject}
+          onNewProject={handleNewProject}
+        />
         <input
           value={projectName}
           onChange={e => setProjectName(e.target.value)}
-          className="bg-transparent text-sm font-medium text-white border-none outline-none w-44"
+          className="bg-transparent text-sm font-medium text-white border-none outline-none w-36"
+          placeholder="Project name"
         />
         <div className="h-4 w-px bg-slate-700 mx-1" />
 
@@ -738,7 +806,7 @@ export default function Planning() {
             <Wind className="w-3 h-3" /> Load Demo
           </button>
           <button onClick={() => {
-            if (!window.confirm('Clear all project data and start fresh?')) return;
+            if (!window.confirm('Clear all features from this project?')) return;
             const empty = [
               createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }),
               createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }),
@@ -746,9 +814,7 @@ export default function Planning() {
               createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 }),
             ];
             setLayers(empty);
-            setProjectName('Wind Farm Project');
             setWindParams({ k: 2.0, lambda: 7.0 });
-            localStorage.removeItem(STORAGE_KEY);
           }}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-slate-700/60 border border-slate-600 text-slate-400 hover:text-red-400 hover:border-red-500/40">
             <Trash2 className="w-3 h-3" /> Clear
@@ -780,7 +846,10 @@ export default function Planning() {
             onExportPDF={() => exportProjectPDF({ projectName, turbines, turbineTypes, cables, cableTypes, substations, totalCapacity_mw, totalAEP, avgCapFactor, avgWindSpeed, totalCableLength, totalCableCost, windParams, monthlyData, layers, mapEl: mapRef.current?.getContainer ? mapRef.current.getContainer() : null })}
           />
           <button
-            onClick={() => { localStorage.setItem(STORAGE_KEY, JSON.stringify({ layers, turbineTypes, cableTypes })); setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2000); }}
+            onClick={() => {
+              saveProject(currentProjectId, { id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams });
+              setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2000);
+            }}
             className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all",
               savedMsg ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-white border-slate-600 hover:bg-slate-700"
             )}
@@ -794,15 +863,27 @@ export default function Planning() {
       <div className="flex flex-1 min-h-0">
         {/* Map */}
         <div className="flex-1 relative min-w-0" style={{ cursor: cursorStyle }}>
-          <MapContainer center={[53.5, -8.0]} zoom={7} style={{ height: '100%', width: '100%' }} zoomControl ref={mapRef}
+          <MapContainer
+            center={[53.5, -8.0]} zoom={7}
+            minZoom={6} maxZoom={19}
+            maxBounds={IRELAND_BOUNDS}
+            maxBoundsViscosity={1.0}
+            style={{ height: '100%', width: '100%' }}
+            zoomControl
+            ref={mapRef}
             whenReady={(map) => {
-              // Create a pane above the default overlayPane (z-index 400) for cables
               if (!map.target.getPane('cablePane')) {
                 map.target.createPane('cablePane');
                 map.target.getPane('cablePane').style.zIndex = 450;
               }
+              if (!map.target.getPane('windPane')) {
+                map.target.createPane('windPane');
+                map.target.getPane('windPane').style.zIndex = 420;
+                map.target.getPane('windPane').style.pointerEvents = 'none';
+              }
             }}
           >
+            <MapBoundsEnforcer />
             {satelliteView ? (
               <TileLayer
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
@@ -1005,24 +1086,22 @@ export default function Planning() {
               />
             )}
 
-            {/* Wind speed heatmap — gradient circles with multiple rings for depth */}
+            {/* Wind speed heatmap — rendered in dedicated windPane above polygons */}
             {showWindLayer && turbines.map(t => {
               const spd = t.properties.hub_wind_speed;
               if (!spd) return null;
               const [lng, lat] = t.geometry.coordinates;
-              // Colour gradient: blue → cyan → green → amber → red
               const color = spd >= 10 ? '#ef4444' : spd >= 9 ? '#f97316' : spd >= 8 ? '#f59e0b' : spd >= 7 ? '#10b981' : spd >= 6 ? '#06b6d4' : '#3b82f6';
-              const rings = [
-                { r: 300, opacity: 0.40 },
-                { r: 600, opacity: 0.22 },
-                { r: 1000, opacity: 0.12 },
-                { r: 1500, opacity: 0.06 },
-              ];
-              return rings.map(({ r, opacity }, ri) => (
-                <Circle key={`wind-${t.id}-${ri}`} center={[lat, lng]} radius={r}
-                  pathOptions={{ color, fillColor: color, fillOpacity: opacity, weight: ri === 0 ? 1 : 0, opacity: ri === 0 ? 0.5 : 0, interactive: false }}
-                />
-              ));
+              return (
+                <React.Fragment key={`wind-${t.id}`}>
+                  <Circle center={[lat, lng]} radius={200} pane="windPane"
+                    pathOptions={{ color, fillColor: color, fillOpacity: 0.55, weight: 1.5, opacity: 0.8, interactive: false }} />
+                  <Circle center={[lat, lng]} radius={500} pane="windPane"
+                    pathOptions={{ color, fillColor: color, fillOpacity: 0.20, weight: 0, opacity: 0, interactive: false }} />
+                  <Circle center={[lat, lng]} radius={900} pane="windPane"
+                    pathOptions={{ color, fillColor: color, fillOpacity: 0.08, weight: 0, opacity: 0, interactive: false }} />
+                </React.Fragment>
+              );
             })}
 
             {/* Placeable Substations */}
