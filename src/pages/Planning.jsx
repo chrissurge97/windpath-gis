@@ -295,8 +295,9 @@ export default function Planning() {
   const [showBaseMapMenu, setShowBaseMapMenu] = useState(false);
   const satelliteView = baseMap === 'satellite';
   const roadsView = baseMap === 'roads';
-  const [showWindLayer, setShowWindLayer] = useState(true);
   const [showSubstations, setShowSubstations] = useState(true);
+  const [drawToolsOpen, setDrawToolsOpen] = useState(false);
+  const drawToolsRef = useRef(null);
 
   // Substation popup menu state
   const [substationMenuFeature, setSubstationMenuFeature] = useState(null);
@@ -331,6 +332,15 @@ export default function Planning() {
   const mapRef = useRef(null);
   const [panesReady, setPanesReady] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+
+  // Close draw tools dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (drawToolsRef.current && !drawToolsRef.current.contains(e.target)) setDrawToolsOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const substationLayer = layers.find(l => l.type === 'substation');
   const substations = substationLayer?.features || [];
@@ -706,13 +716,13 @@ export default function Planning() {
 
   const cursorStyle = { select: 'default', draw_polygon: 'crosshair', place_turbine: 'cell', draw_cable: 'crosshair' }[mode] || 'default';
 
-  const TOOLBAR_MODES = [
-    { id: 'select', label: 'Select', icon: MousePointer },
+  const DRAW_TOOLS = [
     { id: 'draw_polygon', label: 'Polygon', icon: Pentagon },
     { id: 'place_turbine', label: 'Place Turbine', icon: Wind },
     { id: 'draw_cable', label: 'Draw Cable', icon: Zap },
     { id: 'place_substation', label: 'Substation', icon: Target },
   ];
+  const activeDrawTool = DRAW_TOOLS.find(t => t.id === mode);
 
   const RIGHT_TABS = [
     { id: 'turbines', label: 'Turbines', icon: Wind },
@@ -743,28 +753,53 @@ export default function Planning() {
         />
         <div className="h-4 w-px bg-slate-700 mx-0.5 shrink-0" />
 
-        {TOOLBAR_MODES.map(({ id, label, icon: TbIcon }) => (
-          <button key={id} onClick={() => {
-            setMode(id);
-            setDrawingPoints([]);
-            setDrawingSnapNodes([]);
-            setSnapPreview(null);
-            setTurbineMenuFeature(null);
-            setPolygonMenuFeature(null);
-            setEditingPolygonId(null);
-            if (id === 'draw_polygon') {
-              const first = layers.find(l => !['turbine','cable','wind_resource','substation'].includes(l.type));
-              if (first) setSelectedLayerId(first.id);
-            }
-          }}
+        {/* Select button */}
+        <button onClick={() => { setMode('select'); setDrawingPoints([]); setDrawingSnapNodes([]); setSnapPreview(null); setTurbineMenuFeature(null); setPolygonMenuFeature(null); setEditingPolygonId(null); }}
+          className={cn("flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-all border shrink-0",
+            mode === 'select' ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700"
+          )}>
+          <MousePointer className="w-3 h-3" /> Select
+        </button>
+
+        {/* Drawing tools dropdown */}
+        <div className="relative shrink-0" ref={drawToolsRef}>
+          <button
+            onClick={() => setDrawToolsOpen(v => !v)}
             className={cn(
-              "flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-all border shrink-0",
-              mode === id ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700"
+              "flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-all border",
+              activeDrawTool ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700"
             )}
           >
-            <TbIcon className="w-3 h-3" /> {label}
+            {activeDrawTool ? <activeDrawTool.icon className="w-3 h-3" /> : <Pentagon className="w-3 h-3" />}
+            {activeDrawTool ? activeDrawTool.label : 'Draw Tools'}
+            <ChevronDown className={cn("w-3 h-3 transition-transform", drawToolsOpen && "rotate-180")} />
           </button>
-        ))}
+          {drawToolsOpen && (
+            <div className="absolute top-full left-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-[2000] overflow-hidden min-w-[150px]">
+              {DRAW_TOOLS.map(({ id, label, icon: DIcon }) => (
+                <button key={id} onClick={() => {
+                  setMode(id);
+                  setDrawingPoints([]);
+                  setDrawingSnapNodes([]);
+                  setSnapPreview(null);
+                  setTurbineMenuFeature(null);
+                  setPolygonMenuFeature(null);
+                  setEditingPolygonId(null);
+                  setDrawToolsOpen(false);
+                  if (id === 'draw_polygon') {
+                    const first = layers.find(l => !['turbine','cable','wind_resource','substation'].includes(l.type));
+                    if (first) setSelectedLayerId(first.id);
+                  }
+                }}
+                  className={cn("flex items-center gap-2 w-full px-3 py-2 text-[11px] font-medium transition-colors text-left",
+                    mode === id ? "bg-emerald-500/20 text-emerald-400" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  )}>
+                  <DIcon className="w-3 h-3" /> {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {mode === 'draw_polygon' && drawingPoints.length >= 2 && (
           <button onClick={finishPolygon} className="px-2 py-1 rounded text-[11px] bg-cyan-600/20 text-cyan-400 border border-cyan-500/40 shrink-0">
@@ -818,7 +853,7 @@ export default function Planning() {
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a'); a.href = url; a.download = `${projectName}.csv`; a.click(); URL.revokeObjectURL(url);
             }}
-            onExportPDF={() => exportProjectPDF({ projectName, turbines, turbineTypes, cables, cableTypes, substations, totalCapacity_mw, totalAEP, avgCapFactor, avgWindSpeed, totalCableLength, totalCableCost, windParams, monthlyData, layers, mapEl: mapRef.current?.getContainer ? mapRef.current.getContainer() : null, mapRef })}
+            onExportPDF={() => exportProjectPDF({ projectName, turbines, turbineTypes, cables, cableTypes, substations, totalCapacity_mw, totalAEP, avgCapFactor, avgWindSpeed, totalCableLength, totalCableCost, windParams, monthlyData, layers, mapRef })}
           />
         </div>
       </div>
@@ -1123,12 +1158,7 @@ export default function Planning() {
                 </div>
               )}
             </div>
-            <button onClick={() => setShowWindLayer(v => !v)}
-              className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
-                showWindLayer ? "bg-cyan-600 text-white border-cyan-500" : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
-              )}>
-              <Wind className="w-3 h-3" /> Wind Heat Map
-            </button>
+
             <button onClick={() => setShowSubstations(v => !v)}
               className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
                 showSubstations ? "bg-yellow-500 text-slate-900 border-yellow-400 font-semibold" : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
@@ -1138,28 +1168,7 @@ export default function Planning() {
             </button>
           </div>
 
-          {/* Wind heat map legend */}
-          {showWindLayer && turbines.some(t => t.properties.hub_wind_speed) && (
-            <div className="absolute bottom-6 right-3 z-[1100] bg-slate-900/90 border border-slate-700 rounded-xl px-3 py-2.5 shadow-xl">
-              <p className="text-[9px] text-slate-400 uppercase tracking-wider mb-1.5 font-semibold">Hub Wind Speed (m/s)</p>
-              <div className="space-y-1">
-                {[
-                  { color: '#ef4444', label: '≥ 10.0 m/s', desc: 'Excellent' },
-                  { color: '#f97316', label: '9–10 m/s', desc: 'Very good' },
-                  { color: '#f59e0b', label: '8–9 m/s', desc: 'Good' },
-                  { color: '#10b981', label: '7–8 m/s', desc: 'Moderate' },
-                  { color: '#06b6d4', label: '6–7 m/s', desc: 'Poor' },
-                  { color: '#3b82f6', label: '< 6.0 m/s', desc: 'Very poor' },
-                ].map(({ color, label, desc }) => (
-                  <div key={label} className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full shrink-0 opacity-80" style={{ background: color }} />
-                    <span className="text-[10px] text-slate-300 font-medium">{label}</span>
-                    <span className="text-[9px] text-slate-500">{desc}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+
 
           {/* Mode hint */}
           {mode !== 'select' && (

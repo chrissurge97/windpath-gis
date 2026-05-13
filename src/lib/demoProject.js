@@ -38,11 +38,11 @@ const turbinePositions = [
   { name: 'T05', lat: 53.436, lng: -8.790, wind_speed_ms: 8.1, hub_wind_speed: 9.3, aep_mwh: 16900 },
   { name: 'T06', lat: 53.432, lng: -8.785, wind_speed_ms: 8.6, hub_wind_speed: 9.8, aep_mwh: 18400 },
   { name: 'T07', lat: 53.428, lng: -8.780, wind_speed_ms: 8.4, hub_wind_speed: 9.6, aep_mwh: 17800 },
-  { name: 'T08', lat: 53.424, lng: -8.775, wind_speed_ms: 8.0, hub_wind_speed: 9.1, aep_mwh: 16400 },
+  { name: 'T08', lat: 53.431, lng: -8.774, wind_speed_ms: 8.0, hub_wind_speed: 9.1, aep_mwh: 16400 },
   { name: 'T09', lat: 53.434, lng: -8.770, wind_speed_ms: 7.8, hub_wind_speed: 8.9, aep_mwh: 15900 },
   { name: 'T10', lat: 53.430, lng: -8.765, wind_speed_ms: 7.9, hub_wind_speed: 9.0, aep_mwh: 16100 },
   { name: 'T11', lat: 53.426, lng: -8.760, wind_speed_ms: 8.1, hub_wind_speed: 9.2, aep_mwh: 16700 },
-  { name: 'T12', lat: 53.422, lng: -8.757, wind_speed_ms: 8.2, hub_wind_speed: 9.4, aep_mwh: 17200 },
+  { name: 'T12', lat: 53.427, lng: -8.756, wind_speed_ms: 8.2, hub_wind_speed: 9.4, aep_mwh: 17200 },
 ];
 
 const SUB_LAT = 53.422, SUB_LNG = -8.720;
