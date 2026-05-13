@@ -377,10 +377,10 @@ export default function Planning() {
 
   // ── Clear project on lesson entry or exercise start ────────────────────────
   useEffect(() => {
-    if (showLessonGuide || activeExercise) {
+    if ((showLessonGuide || activeExercise) && !lessonProjectId) {
       clearProject();
     }
-  }, [showLessonGuide, activeExercise, clearProject]);
+  }, [showLessonGuide, activeExercise, lessonProjectId, clearProject]);
 
   // ── Auto-load lesson project from navigation state ────────────────────────
   useEffect(() => {
