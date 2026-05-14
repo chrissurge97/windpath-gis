@@ -4,7 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import {
-  LayoutDashboard, BookOpen, Map, Wind, Trophy, Table2,
+  LayoutDashboard, BookOpen, Map, Wind, Table2,
   Menu, X, ChevronRight, ChevronLeft, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 
@@ -12,7 +12,6 @@ const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/learn', label: 'Learn', icon: BookOpen },
   { path: '/planning', label: 'Planning Tool', icon: Map },
-  { path: '/progress', label: 'Progress', icon: Trophy },
   { path: '/data', label: 'Data Tables', icon: Table2 },
 ];
 
