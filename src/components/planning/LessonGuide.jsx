@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import {
-  X, Minimize2, Maximize2, BookOpen, ChevronLeft, ChevronRight,
-  CheckCircle2, MousePointer, Pentagon, Wind, Zap, Target,
-  Eye, Layers, BarChart2, Settings, Map, Upload, Type, Save
+  X, Minimize2, BookOpen, ChevronLeft, ChevronRight, CheckCircle2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MODULES } from '@/lib/trainingModules';
