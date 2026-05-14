@@ -1,43 +1,11 @@
-import React, { useRef } from 'react';
-import { Upload, Download, FileJson, File } from 'lucide-react';
-import { geoJSONToLayer, layersToGeoJSON, downloadJSON } from '@/lib/gisUtils';
-
-function layersToCSV(layers) {
-  // Export all features from all layers as one CSV with layer name column
-  const rows = [];
-  rows.push(['layer', 'feature_id', 'name', 'type', 'geometry_type', 'lat', 'lng', 'notes', 'extra'].join(','));
-  for (const layer of layers) {
-    for (const f of layer.features) {
-      const geo = f.geometry;
-      let lat = '', lng = '';
-      if (geo.type === 'Point') { [lng, lat] = geo.coordinates; }
-      else if (geo.type === 'Polygon') { const c = geo.coordinates[0][0]; lng = c[0]; lat = c[1]; }
-      else if (geo.type === 'LineString') { const c = geo.coordinates[0]; lng = c[0]; lat = c[1]; }
-      const extra = Object.entries(f.properties || {})
-        .filter(([k]) => !['name','notes'].includes(k))
-        .map(([k,v]) => `${k}=${v}`)
-        .join('|');
-      const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-      rows.push([
-        esc(layer.name), esc(f.id), esc(f.properties?.name || ''),
-        esc(layer.type), esc(geo.type),
-        esc(lat), esc(lng),
-        esc(f.properties?.notes || ''), esc(extra)
-      ].join(','));
-    }
-  }
-  return rows.join('\n');
-}
-
-function downloadCSV(content, filename) {
-  const blob = new Blob([content], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
-}
+import React, { useRef, useState } from 'react';
+import { Upload, Download } from 'lucide-react';
+import { geoJSONToLayer } from '@/lib/gisUtils';
+import LayerExportModal from '@/components/planning/LayerExportModal';
 
 export default function LayerImportExport({ layers, onAddLayer, projectName = 'project' }) {
   const fileRef = useRef(null);
+  const [showExport, setShowExport] = useState(false);
 
   const handleImport = (e) => {
     const file = e.target.files[0]; if (!file) return;
@@ -47,7 +15,6 @@ export default function LayerImportExport({ layers, onAddLayer, projectName = 'p
         const text = ev.target.result;
         const name = file.name.replace(/\.[^.]+$/, '');
         if (file.name.endsWith('.csv')) {
-          // Parse CSV back to a layer
           const lines = text.split('\n').filter(Boolean);
           const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, ''));
           const features = [];
@@ -59,12 +26,10 @@ export default function LayerImportExport({ layers, onAddLayer, projectName = 'p
             if (isNaN(lat) || isNaN(lng)) continue;
             features.push({ id: crypto.randomUUID(), layerId: name, geometry: { type: 'Point', coordinates: [lng, lat] }, properties: { name: row.name || `Feature ${i}`, notes: row.notes || '' } });
           }
-          const layer = { id: crypto.randomUUID(), name, type: 'polygon', visible: true, color: '#8b5cf6', fillOpacity: 0.2, strokeOpacity: 0.8, strokeWeight: 2, no_turbines: false, features };
-          onAddLayer(layer);
+          onAddLayer({ id: crypto.randomUUID(), name, type: 'polygon', visible: true, color: '#8b5cf6', fillOpacity: 0.2, strokeOpacity: 0.8, strokeWeight: 2, no_turbines: false, features });
         } else {
           const data = JSON.parse(text);
-          const layer = geoJSONToLayer(data, name);
-          onAddLayer(layer);
+          onAddLayer(geoJSONToLayer(data, name));
         }
       } catch (err) { alert('Could not parse file: ' + err.message); }
     };
@@ -73,43 +38,33 @@ export default function LayerImportExport({ layers, onAddLayer, projectName = 'p
   };
 
   return (
-    <div className="border border-slate-700 rounded-lg overflow-hidden mt-2">
-      <p className="text-[9px] text-slate-500 uppercase tracking-wider px-3 py-2 bg-slate-800/60 border-b border-slate-700">Import / Export Layers</p>
-      <div className="p-2 space-y-1.5">
+    <>
+      <div className="flex gap-2">
         <button
           onClick={() => fileRef.current?.click()}
-          className="w-full flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 transition-colors text-left"
+          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 transition-colors"
         >
           <Upload className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-          <div>
-            <p className="font-medium text-white">Import Layer</p>
-            <p className="text-[9px] text-slate-500">GeoJSON, CSV, KML</p>
-          </div>
+          Import Layer
         </button>
         <input ref={fileRef} type="file" accept=".json,.geojson,.csv" className="hidden" onChange={handleImport} />
 
         <button
-          onClick={() => downloadJSON(layersToGeoJSON(layers), `${projectName}.geojson`)}
-          className="w-full flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 transition-colors text-left"
+          onClick={() => setShowExport(true)}
+          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 transition-colors"
         >
-          <FileJson className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-          <div>
-            <p className="font-medium text-white">Export All → GeoJSON</p>
-            <p className="text-[9px] text-slate-500">QGIS / ArcGIS compatible</p>
-          </div>
-        </button>
-
-        <button
-          onClick={() => downloadCSV(layersToCSV(layers), `${projectName}.csv`)}
-          className="w-full flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 transition-colors text-left"
-        >
-          <File className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
-          <div>
-            <p className="font-medium text-white">Export All → CSV</p>
-            <p className="text-[9px] text-slate-500">Feature attributes spreadsheet</p>
-          </div>
+          <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          Export Layers
         </button>
       </div>
-    </div>
+
+      {showExport && (
+        <LayerExportModal
+          layers={layers}
+          projectName={projectName}
+          onClose={() => setShowExport(false)}
+        />
+      )}
+    </>
   );
 }
