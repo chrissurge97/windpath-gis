@@ -34,17 +34,118 @@ function drawBarChart(doc, x, y, w, h, data, label) {
   });
 }
 
-// ── Leaflet map capture using html2canvas ────────────────────────────────────
+// ── Leaflet map capture — pixel-perfect tile stitch ──────────────────────────
+// html2canvas struggles with Leaflet's CSS transform panes.
+// Instead we manually composite tiles + SVG overlays at exact pixel positions.
 async function renderMapToCanvas(map) {
-  const html2canvas = (await import('html2canvas')).default;
   const container = map.getContainer();
-  const canvas = await html2canvas(container, {
-    useCORS: true,
-    allowTaint: true,
-    scale: 3, // 3× for high resolution
-    logging: false,
-    backgroundColor: '#0f172a',
-  });
+  const W = container.offsetWidth;
+  const H = container.offsetHeight;
+  const SCALE = 2;
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = W * SCALE;
+  canvas.height = H * SCALE;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(SCALE, SCALE);
+
+  // Dark background
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, W, H);
+
+  // Get the map pane's CSS transform offset (Leaflet shifts panes during pan)
+  function getPaneOffset(pane) {
+    if (!pane) return { x: 0, y: 0 };
+    const t = pane.style.transform || '';
+    const m = t.match(/translate(?:3d)?\(\s*([-\d.]+)px,\s*([-\d.]+)px/);
+    return m ? { x: +m[1], y: +m[2] } : { x: 0, y: 0 };
+  }
+
+  // 1. Draw all map tile <img> elements
+  const tilePane = container.querySelector('.leaflet-tile-pane');
+  if (tilePane) {
+    const tileOffset = getPaneOffset(tilePane);
+    const imgs = tilePane.querySelectorAll('img.leaflet-tile');
+    for (const img of imgs) {
+      if (!img.complete || !img.naturalWidth) continue;
+      // Position = tile's own transform/left+top + tile pane's offset
+      let tx = 0, ty = 0;
+      const imgT = img.style.transform;
+      if (imgT) {
+        const m = imgT.match(/translate(?:3d)?\(\s*([-\d.]+)px,\s*([-\d.]+)px/);
+        if (m) { tx = +m[1]; ty = +m[2]; }
+      } else {
+        tx = parseFloat(img.style.left || 0);
+        ty = parseFloat(img.style.top  || 0);
+      }
+      // Walk up to the layer container for its own offset
+      const layerContainer = img.closest('.leaflet-layer');
+      const layerOffset = layerContainer ? getPaneOffset(layerContainer) : { x: 0, y: 0 };
+      const finalX = tx + tileOffset.x + layerOffset.x;
+      const finalY = ty + tileOffset.y + layerOffset.y;
+      const tw = img.naturalWidth  || img.offsetWidth  || 256;
+      const th = img.naturalHeight || img.offsetHeight || 256;
+      ctx.globalAlpha = parseFloat(img.style.opacity || '1');
+      try { ctx.drawImage(img, finalX, finalY, img.offsetWidth || 256, img.offsetHeight || 256); } catch {}
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // 2. Draw every SVG pane (overlay pane, cable pane, marker pane, etc.)
+  const panes = container.querySelectorAll('.leaflet-pane');
+  for (const pane of panes) {
+    const svg = pane.querySelector(':scope > svg');
+    if (!svg) continue;
+    const paneOffset = getPaneOffset(pane);
+    const svgW = parseFloat(svg.getAttribute('width'))  || W;
+    const svgH = parseFloat(svg.getAttribute('height')) || H;
+    // Inline all styles so the blob renders correctly cross-origin
+    const serialized = new XMLSerializer().serializeToString(svg);
+    const blob = new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    await new Promise(res => {
+      const img = new Image();
+      img.onload = () => {
+        try { ctx.drawImage(img, paneOffset.x, paneOffset.y, svgW, svgH); } catch {}
+        URL.revokeObjectURL(url);
+        res();
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); res(); };
+      img.src = url;
+    });
+  }
+
+  // 3. Draw marker divIcons (turbines etc.) using foreignObject SVG
+  const markerPane = container.querySelector('.leaflet-marker-pane');
+  if (markerPane) {
+    const markerPaneOffset = getPaneOffset(markerPane);
+    for (const marker of markerPane.querySelectorAll('.leaflet-marker-icon')) {
+      const mt = marker.style.transform || '';
+      const mm = mt.match(/translate(?:3d)?\(\s*([-\d.]+)px,\s*([-\d.]+)px/);
+      if (!mm) continue;
+      const mx = +mm[1] + markerPaneOffset.x + (parseInt(marker.style.marginLeft) || 0);
+      const my = +mm[2] + markerPaneOffset.y + (parseInt(marker.style.marginTop)  || 0);
+      const mw = marker.offsetWidth  || 20;
+      const mh = marker.offsetHeight || 20;
+      const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${mw}" height="${mh}">` +
+        `<foreignObject width="${mw}" height="${mh}">` +
+        `<div xmlns="http://www.w3.org/1999/xhtml">${marker.innerHTML}</div>` +
+        `</foreignObject></svg>`;
+      const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+      const url  = URL.createObjectURL(blob);
+      await new Promise(res => {
+        const img = new Image();
+        img.onload = () => {
+          try { ctx.drawImage(img, mx, my, mw, mh); } catch {}
+          URL.revokeObjectURL(url);
+          res();
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); res(); };
+        img.src = url;
+      });
+    }
+  }
+
   return canvas;
 }
 
