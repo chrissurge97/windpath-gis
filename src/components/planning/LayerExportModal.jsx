@@ -100,11 +100,37 @@ export default function LayerExportModal({ layers, projectName = 'project', onCl
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = `${name}.csv`; a.click(); URL.revokeObjectURL(url);
     } else if (format === 'shapefile') {
+      // Shapefiles require a single geometry type per file.
+      // Split features by geometry type and produce one shapefile per type in a combined ZIP.
       const geojson = layersToGeoJSON(exportLayers);
       const projected = reprojectGeoJSON(geojson, crs);
       projected._crsName = crs;
-      const zip = exportShapefile(projected, name);
-      downloadFile(zip, `${name}-shapefile.zip`, 'application/zip');
+
+      const byType = { Point: [], LineString: [], Polygon: [] };
+      for (const f of projected.features) {
+        const t = f.geometry?.type;
+        if (t === 'Point') byType.Point.push(f);
+        else if (t === 'LineString' || t === 'MultiLineString') byType.LineString.push(f);
+        else if (t === 'Polygon' || t === 'MultiPolygon') byType.Polygon.push(f);
+      }
+
+      const typeLabel = { Point: 'points', LineString: 'lines', Polygon: 'polygons' };
+      const zips = Object.entries(byType)
+        .filter(([, feats]) => feats.length > 0)
+        .map(([type, feats]) => ({
+          label: typeLabel[type],
+          zip: exportShapefile({ ...projected, features: feats }, `${name}_${typeLabel[type]}`),
+        }));
+
+      if (zips.length === 1) {
+        // Only one geometry type — export as single zip
+        downloadFile(zips[0].zip, `${name}-shapefile.zip`, 'application/zip');
+      } else {
+        // Multiple types — download each separately
+        for (const { label, zip } of zips) {
+          downloadFile(zip, `${name}-${label}.zip`, 'application/zip');
+        }
+      }
     } else {
       // geojson
       const geojson = layersToGeoJSON(exportLayers);
@@ -129,40 +155,6 @@ export default function LayerExportModal({ layers, projectName = 'project', onCl
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-          {/* Layer selection */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Layers</span>
-              <button onClick={toggleAll} className="text-[10px] text-slate-500 hover:text-emerald-400 transition-colors">
-                {selectedLayers.size === layers.length ? 'Deselect all' : 'Select all'}
-              </button>
-            </div>
-            <div className="space-y-1">
-              {layers.map(l => (
-                <button
-                  key={l.id}
-                  onClick={() => toggleLayer(l.id)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors text-left",
-                    selectedLayers.has(l.id)
-                      ? "bg-emerald-500/10 border-emerald-500/30"
-                      : "bg-slate-800/50 border-slate-700 hover:border-slate-600"
-                  )}
-                >
-                  <div className={cn(
-                    "w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors",
-                    selectedLayers.has(l.id) ? "bg-emerald-500 border-emerald-500" : "border-slate-600"
-                  )}>
-                    {selectedLayers.has(l.id) && <Check className="w-2.5 h-2.5 text-white" />}
-                  </div>
-                  <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: l.color }} />
-                  <span className="flex-1 text-xs text-slate-300 truncate">{l.name}</span>
-                  <span className="text-[10px] text-slate-600 shrink-0">{l.features.length} features</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Format */}
           <div>
             <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block mb-2">Format</span>
@@ -182,6 +174,9 @@ export default function LayerExportModal({ layers, projectName = 'project', onCl
                 </button>
               ))}
             </div>
+            {format === 'shapefile' && (
+              <p className="text-[10px] text-slate-500 mt-1.5">Mixed geometry layers export as separate ZIPs (one per geometry type).</p>
+            )}
           </div>
 
           {/* CRS */}
@@ -214,6 +209,40 @@ export default function LayerExportModal({ layers, projectName = 'project', onCl
             {format === 'kml' && (
               <p className="text-[10px] text-amber-500 mt-1.5">KML always uses WGS84.</p>
             )}
+          </div>
+
+          {/* Layer selection */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Layers</span>
+              <button onClick={toggleAll} className="text-[10px] text-slate-500 hover:text-emerald-400 transition-colors">
+                {selectedLayers.size === layers.length ? 'Deselect all' : 'Select all'}
+              </button>
+            </div>
+            <div className="space-y-1">
+              {layers.map(l => (
+                <button
+                  key={l.id}
+                  onClick={() => toggleLayer(l.id)}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors text-left",
+                    selectedLayers.has(l.id)
+                      ? "bg-emerald-500/10 border-emerald-500/30"
+                      : "bg-slate-800/50 border-slate-700 hover:border-slate-600"
+                  )}
+                >
+                  <div className={cn(
+                    "w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors",
+                    selectedLayers.has(l.id) ? "bg-emerald-500 border-emerald-500" : "border-slate-600"
+                  )}>
+                    {selectedLayers.has(l.id) && <Check className="w-2.5 h-2.5 text-white" />}
+                  </div>
+                  <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: l.color }} />
+                  <span className="flex-1 text-xs text-slate-300 truncate">{l.name}</span>
+                  <span className="text-[10px] text-slate-600 shrink-0">{l.features.length} features</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
