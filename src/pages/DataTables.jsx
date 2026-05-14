@@ -249,6 +249,7 @@ export default function DataTables() {
   const [selectedProjectId, setSelectedProjectId] = useState(currentProjectId || '');
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [localLayers, setLocalLayers] = useState(null);
+  const [activeLayerId, setActiveLayerId] = useState('all');
 
   const project = useMemo(() => {
     if (!selectedProjectId) return null;
@@ -347,20 +348,45 @@ export default function DataTables() {
         </div>
       </div>
 
-      {/* Layer badges */}
-      <div className="flex gap-2 px-6 py-3 border-b border-slate-800/60 overflow-x-auto shrink-0">
-        {layers.map(l => (
-          <div key={l.id} className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800/60 border border-slate-700 rounded-full text-[11px] shrink-0">
-            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: l.color }} />
-            <span className="text-slate-300">{l.name}</span>
-            <span className="text-slate-500">{l.features?.length || 0}</span>
-          </div>
-        ))}
+      {/* Layer tab buttons */}
+      <div className="flex gap-1.5 px-6 py-3 border-b border-slate-800/60 overflow-x-auto shrink-0">
+        <button
+          onClick={() => setActiveLayerId('all')}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors shrink-0',
+            activeLayerId === 'all'
+              ? 'bg-slate-600 border-slate-500 text-white'
+              : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:text-white hover:border-slate-600'
+          )}
+        >
+          All <span className="text-slate-500">{totalFeatures}</span>
+        </button>
+        {layers.filter(l => l.type !== 'wind_resource').map(l => {
+          const Icon = LAYER_ICONS[l.type] || Map;
+          const colorClass = LAYER_COLORS[l.type] || 'text-slate-400';
+          return (
+            <button
+              key={l.id}
+              onClick={() => setActiveLayerId(l.id)}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors shrink-0',
+                activeLayerId === l.id
+                  ? 'bg-slate-700 border-slate-500 text-white'
+                  : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:text-white hover:border-slate-600'
+              )}
+            >
+              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: l.color }} />
+              <Icon className={cn('w-3 h-3 shrink-0', activeLayerId === l.id ? colorClass : '')} />
+              <span>{l.name}</span>
+              <span className="text-slate-500">{l.features?.length || 0}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Tables */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {layers.filter(l => l.type !== 'wind_resource').map(l => (
+        {layers.filter(l => l.type !== 'wind_resource' && (activeLayerId === 'all' || activeLayerId === l.id)).map(l => (
           <LayerTable key={l.id} layer={l} onUpdateFeature={handleUpdateFeature} />
         ))}
         {totalFeatures === 0 && (
