@@ -32,7 +32,6 @@ import { exportProjectGeoJSON, exportProjectKMZ, downloadFile } from '@/lib/proj
 import { reprojectGeoJSON } from '@/lib/crsUtils';
 import { exportShapefile, importShapefile } from '@/lib/shapefileUtils';
 import TurbineRadiiOverlay, { DEFAULT_TURBINE_RADII, checkTurbineRadii } from '@/components/planning/TurbineRadiiOverlay';
-import TurbineRadiiEditor from '@/components/planning/TurbineRadiiEditor';
 import RightPanel from '@/components/planning/PlanningRightPanel';
 import { buildDemoProject } from '@/lib/demoProject';
 import ExerciseGuide from '@/components/planning/ExerciseGuide';
@@ -294,6 +293,7 @@ export default function Planning() {
 
   const [windParams, setWindParams] = useState({ k: 2.0, lambda: 7.0 });
   const [globalRadii, setGlobalRadii] = useState(() => initProj.globalRadii || DEFAULT_TURBINE_RADII);
+  const [showRadii, setShowRadii] = useState(true);
 
   // Map display state
   const [baseMap, setBaseMap] = useState('roads'); // 'dark' | 'satellite' | 'roads'
@@ -1341,7 +1341,7 @@ export default function Planning() {
             {/* Wind speed heatmap — removed */}
 
             {/* Turbine separation radii */}
-            <TurbineRadiiOverlay turbines={turbines} turbineTypes={turbineTypes} globalRadii={globalRadii} />
+            <TurbineRadiiOverlay turbines={turbines} turbineTypes={turbineTypes} globalRadii={globalRadii} visible={showRadii} />
 
             {/* Text Annotations — fixed pixel size overlay */}
             <TextOverlay
@@ -1547,15 +1547,6 @@ export default function Planning() {
                 </div>
 
 
-
-                {/* Separation Radii */}
-                <div className="mb-3 border-t border-slate-700 pt-3">
-                  <TurbineRadiiEditor
-                    radii={turbineMenuFeature.properties.radii || globalRadii}
-                    rotorDiameterM={turbineTypes.find(t => t.id === turbineMenuTypeId)?.rotor_diameter_m || 130}
-                    onChange={(newRadii) => setTurbineMenuFeature(prev => ({ ...prev, properties: { ...prev.properties, radii: newRadii } }))}
-                  />
-                </div>
 
                 {/* Actions */}
                 <div className="flex gap-2">
@@ -1891,6 +1882,8 @@ export default function Planning() {
           selectedLayerId={selectedLayerId} setSelectedLayerId={setSelectedLayerId}
           setLayers={setLayers} mapRef={mapRef} setShowNewZoneDialog={setShowNewZoneDialog}
           projectName={projectName} setTurbineTypes={setTurbineTypes}
+          globalRadii={globalRadii} onRadiiChange={setGlobalRadii}
+          showRadii={showRadii} onToggleRadii={() => setShowRadii(v => !v)}
         />
       </div>
       <ConfigMenuWrapper isOpen={showConfigMenu} onClose={() => setShowConfigMenu(false)} features={features} onFeatureToggle={handleFeatureToggle} onTurbineAdded={(t) => setTurbineTypes(prev => [...prev, t])} onCableAdded={(c) => setCableTypes(prev => [...prev, c])} />

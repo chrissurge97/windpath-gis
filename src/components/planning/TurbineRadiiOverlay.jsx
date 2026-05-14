@@ -56,8 +56,8 @@ function haversineM(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export default function TurbineRadiiOverlay({ turbines, turbineTypes, globalRadii }) {
-  if (!turbines || turbines.length === 0) return null;
+export default function TurbineRadiiOverlay({ turbines, turbineTypes, globalRadii, visible = true }) {
+  if (!visible || !turbines || turbines.length === 0) return null;
 
   return (
     <>

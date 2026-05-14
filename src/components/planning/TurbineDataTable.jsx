@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Trash2, Edit2, Check, X, Wind, ChevronDown } from 'lucide-react';
+import { Trash2, Edit2, Check, X, Wind, ChevronDown, Eye, EyeOff, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import TurbineRadiiEditor from '@/components/planning/TurbineRadiiEditor';
 
-export default function TurbineDataTable({ turbines, turbineTypes, selectedTypeId, onSelectType, onDeleteTurbine, onUpdateTurbine, turbineLayer, onFlyTo }) {
+export default function TurbineDataTable({ turbines, turbineTypes, selectedTypeId, onSelectType, onDeleteTurbine, onUpdateTurbine, turbineLayer, onFlyTo, globalRadii, onRadiiChange, showRadii, onToggleRadii }) {
   const [editingId, setEditingId] = useState(null);
   const [editVals, setEditVals] = useState({});
   const [showTypeSelect, setShowTypeSelect] = useState(false);
+  const [showRadiiConfig, setShowRadiiConfig] = useState(false);
 
   const selectedType = turbineTypes.find(t => t.id === selectedTypeId) || turbineTypes[0];
 
@@ -20,6 +22,14 @@ export default function TurbineDataTable({ turbines, turbineTypes, selectedTypeI
 
   const totalMW = turbines.length * (selectedType?.rated_power_mw || 3.5);
   const totalAEP = turbines.reduce((s, t) => s + (t.properties.aep_mwh || 0), 0);
+
+  // Average rotor diameter across placed turbines (for radii editor preview)
+  const avgRotorD = turbines.length > 0
+    ? turbines.reduce((s, t) => {
+        const tt = turbineTypes.find(ty => ty.id === t.properties.turbine_type_id) || turbineTypes[0];
+        return s + (tt?.rotor_diameter_m || 130);
+      }, 0) / turbines.length
+    : (turbineTypes[0]?.rotor_diameter_m || 130);
 
   return (
     <div className="space-y-3">
@@ -59,6 +69,49 @@ export default function TurbineDataTable({ turbines, turbineTypes, selectedTypeI
           </div>
         )}
       </div>
+
+      {/* Setback Config + Visibility row */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setShowRadiiConfig(v => !v)}
+          className={cn(
+            "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-medium border transition-colors",
+            showRadiiConfig
+              ? "bg-purple-500/20 border-purple-500/40 text-purple-300"
+              : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
+          )}
+        >
+          <SlidersHorizontal className="w-3 h-3" />
+          Turbine Setback Config
+        </button>
+        <button
+          onClick={onToggleRadii}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium border transition-colors shrink-0",
+            showRadii
+              ? "bg-yellow-500/20 border-yellow-500/40 text-yellow-300"
+              : "bg-slate-800 border-slate-700 text-slate-500 hover:text-white"
+          )}
+          title={showRadii ? "Hide radii on map" : "Show radii on map"}
+        >
+          {showRadii ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+          {showRadii ? "Visible" : "Hidden"}
+        </button>
+      </div>
+
+      {/* Radii config panel */}
+      {showRadiiConfig && globalRadii && (
+        <div className="bg-slate-800/60 border border-purple-500/20 rounded-xl p-3">
+          <p className="text-[10px] text-slate-400 mb-2">
+            These setbacks apply globally. Individual turbines use their own type's rotor diameter.
+          </p>
+          <TurbineRadiiEditor
+            radii={globalRadii}
+            rotorDiameterM={Math.round(avgRotorD)}
+            onChange={onRadiiChange}
+          />
+        </div>
+      )}
 
       {/* Summary row */}
       {turbines.length > 0 && (

@@ -19,6 +19,7 @@ export default function PlanningRightPanel({
   totalAEP_live, liveCapFactor, avgWindSpeed, totalCableLength, totalCableCost,
   monthlyData, weibullData, layers, selectedLayerId, setSelectedLayerId,
   setLayers, mapRef, setShowNewZoneDialog, setTurbineTypes,
+  globalRadii, onRadiiChange, showRadii, onToggleRadii,
 }) {
   return (
     <div className={cn("shrink-0 flex flex-col bg-slate-900 border-l border-slate-800 overflow-hidden transition-all duration-200", rightPanelOpen ? "w-80" : "w-0 border-l-0")}>
@@ -35,6 +36,10 @@ export default function PlanningRightPanel({
             onUpdateTurbine={updateTurbineProps}
             turbineLayer={turbineLayer}
             onFlyTo={flyToFeature}
+            globalRadii={globalRadii}
+            onRadiiChange={onRadiiChange}
+            showRadii={showRadii}
+            onToggleRadii={onToggleRadii}
           />
         )}
 
