@@ -159,20 +159,32 @@ function buildSHP(features) {
 
     if (geom.type === 'Point') {
       const [x, y] = geom.coordinates;
+      if (!isFinite(x) || !isFinite(y)) { records.push(null); continue; }
       fileXmin = Math.min(fileXmin, x); fileXmax = Math.max(fileXmax, x);
       fileYmin = Math.min(fileYmin, y); fileYmax = Math.max(fileYmax, y);
 
-      const buf = new ArrayBuffer(20); // 4 (type) + 8 (x) + 8 (y)
+      // Point content: shapeType(4) + x(8) + y(8) = 20 bytes = 10 words
+      const buf = new ArrayBuffer(20);
       const dv  = new DataView(buf);
       dv.setInt32(0,   SHP_POINT, true);
-      dv.setFloat64(4,  x,        true);
-      dv.setFloat64(12, y,        true);
+      dv.setFloat64(4,  x, true);
+      dv.setFloat64(12, y, true);
       records.push(new Uint8Array(buf));
 
     } else if (geom.type === 'Polygon' || geom.type === 'MultiPolygon') {
-      const rings = geom.type === 'Polygon' ? geom.coordinates : geom.coordinates.flat(1);
+      // Flatten to array of rings, filter out empties, ensure each ring is closed
+      const rawRings = geom.type === 'Polygon' ? geom.coordinates : geom.coordinates.flat(1);
+      const rings = rawRings
+        .filter(r => r && r.length >= 3)
+        .map(r => {
+          // Ensure ring is closed (last point == first point)
+          const first = r[0], last = r[r.length - 1];
+          if (first[0] !== last[0] || first[1] !== last[1]) return [...r, r[0]];
+          return r;
+        });
 
-      // Compute feature bbox
+      if (rings.length === 0) { records.push(null); continue; }
+
       let fxmin = Infinity, fymin = Infinity, fxmax = -Infinity, fymax = -Infinity;
       let totalPts = 0;
       for (const ring of rings) {
@@ -185,7 +197,7 @@ function buildSHP(features) {
       fileXmin = Math.min(fileXmin, fxmin); fileXmax = Math.max(fileXmax, fxmax);
       fileYmin = Math.min(fileYmin, fymin); fileYmax = Math.max(fileYmax, fymax);
 
-      // Content: type(4) + bbox(32) + numParts(4) + numPoints(4) + parts(4*n) + points(16*n)
+      // Content: shapeType(4) + bbox(32) + numParts(4) + numPoints(4) + partStarts(4*numParts) + points(16*numPoints)
       const contentLen = 4 + 32 + 4 + 4 + rings.length * 4 + totalPts * 16;
       const buf = new ArrayBuffer(contentLen);
       const dv  = new DataView(buf);
@@ -196,17 +208,22 @@ function buildSHP(features) {
       dv.setFloat64(off, fxmax, true); off += 8;
       dv.setFloat64(off, fymax, true); off += 8;
       dv.setInt32(off, rings.length, true); off += 4;
-      dv.setInt32(off, totalPts,     true); off += 4;
+      dv.setInt32(off, totalPts, true);     off += 4;
       let partStart = 0;
       for (const ring of rings) { dv.setInt32(off, partStart, true); off += 4; partStart += ring.length; }
       for (const ring of rings) for (const [x, y] of ring) {
         dv.setFloat64(off, x, true); off += 8;
         dv.setFloat64(off, y, true); off += 8;
       }
+      // Sanity-check: off must equal contentLen
+      if (off !== contentLen) { records.push(null); continue; }
       records.push(new Uint8Array(buf));
 
     } else if (geom.type === 'LineString' || geom.type === 'MultiLineString') {
-      const parts = geom.type === 'LineString' ? [geom.coordinates] : geom.coordinates;
+      const rawParts = geom.type === 'LineString' ? [geom.coordinates] : geom.coordinates;
+      const parts = rawParts.filter(p => p && p.length >= 2);
+
+      if (parts.length === 0) { records.push(null); continue; }
 
       let fxmin = Infinity, fymin = Infinity, fxmax = -Infinity, fymax = -Infinity;
       let totalPts = 0;
@@ -220,6 +237,7 @@ function buildSHP(features) {
       fileXmin = Math.min(fileXmin, fxmin); fileXmax = Math.max(fileXmax, fxmax);
       fileYmin = Math.min(fileYmin, fymin); fileYmax = Math.max(fileYmax, fymax);
 
+      // Content: shapeType(4) + bbox(32) + numParts(4) + numPoints(4) + partStarts(4*numParts) + points(16*numPoints)
       const contentLen = 4 + 32 + 4 + 4 + parts.length * 4 + totalPts * 16;
       const buf = new ArrayBuffer(contentLen);
       const dv  = new DataView(buf);
@@ -230,13 +248,14 @@ function buildSHP(features) {
       dv.setFloat64(off, fxmax, true); off += 8;
       dv.setFloat64(off, fymax, true); off += 8;
       dv.setInt32(off, parts.length, true); off += 4;
-      dv.setInt32(off, totalPts,     true); off += 4;
+      dv.setInt32(off, totalPts, true);     off += 4;
       let partStart = 0;
       for (const part of parts) { dv.setInt32(off, partStart, true); off += 4; partStart += part.length; }
       for (const part of parts) for (const [x, y] of part) {
         dv.setFloat64(off, x, true); off += 8;
         dv.setFloat64(off, y, true); off += 8;
       }
+      if (off !== contentLen) { records.push(null); continue; }
       records.push(new Uint8Array(buf));
 
     } else {
