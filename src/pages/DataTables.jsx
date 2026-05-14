@@ -1,41 +1,12 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { usePlanningProject } from '@/lib/PlanningContext';
-import { loadProjectIndex, loadProject } from '@/components/planning/ProjectManager';
-import { ChevronDown, Wind, Zap, Target, FileText, Pentagon, Map, Eye, EyeOff } from 'lucide-react';
+import { loadProjectIndex, loadProject, saveProject } from '@/components/planning/ProjectManager';
+import { ChevronDown, Wind, Zap, Target, FileText, Pentagon, Map, Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const LAYER_ICONS = {
-  turbine: Wind,
-  cable: Zap,
-  substation: Target,
-  polygon: Pentagon,
-};
+const LAYER_ICONS = { turbine: Wind, cable: Zap, substation: Target, polygon: Pentagon };
+const LAYER_COLORS = { turbine: 'text-emerald-400', cable: 'text-orange-400', substation: 'text-yellow-400', polygon: 'text-cyan-400' };
 
-const LAYER_COLORS = {
-  turbine: 'text-emerald-400',
-  cable: 'text-orange-400',
-  substation: 'text-yellow-400',
-  polygon: 'text-cyan-400',
-};
-
-function formatCoord(v) {
-  return typeof v === 'number' ? v.toFixed(5) : '—';
-}
-
-function getFeatureCoords(feature) {
-  const g = feature.geometry;
-  if (!g) return '—';
-  if (g.type === 'Point') return `${formatCoord(g.coordinates[1])}, ${formatCoord(g.coordinates[0])}`;
-  if (g.type === 'LineString') return `${g.coordinates.length} vertices`;
-  if (g.type === 'Polygon') return `${(g.coordinates[0]?.length || 0) - 1} vertices`;
-  return '—';
-}
-
-function getGeomType(feature) {
-  return feature.geometry?.type || '—';
-}
-
-// Gather all property keys from a set of features (excluding internal ones)
 function getPropertyKeys(features) {
   const skip = new Set(['layerId', '_featureType']);
   const keys = new Set();
@@ -47,49 +18,203 @@ function getPropertyKeys(features) {
   return [...keys];
 }
 
-function formatVal(v) {
-  if (v === null || v === undefined || v === '') return '—';
+function rawVal(v) {
+  if (v === null || v === undefined) return '';
   if (typeof v === 'object') return JSON.stringify(v);
-  if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(3);
   return String(v);
 }
 
-function LayerTable({ layer, cableTypes, turbineTypes }) {
+// Build TSV rows for a layer (for copy-to-Excel)
+function buildTSV(layer, propKeys) {
+  const features = layer.features || [];
+  const isPolygon = ['polygon', 'substation'].includes(layer.type) || features.some(f => f.geometry?.type === 'Polygon');
+  const isLine = layer.type === 'cable' || features.some(f => f.geometry?.type === 'LineString');
+
+  // Header
+  const baseHeaders = ['#', 'Feature Name', 'Geometry Type', ...propKeys.map(k => k.replace(/_/g, ' '))];
+
+  if (isPolygon) {
+    // For polygons: one row per feature with properties, then vertex rows below
+    const headers = [...baseHeaders, 'Vertex #', 'Vertex Lat', 'Vertex Lng'];
+    const rows = [headers];
+    features.forEach((f, fi) => {
+      const props = propKeys.map(k => {
+        let v = f.properties?.[k];
+        if (typeof v === 'object' && v !== null) v = JSON.stringify(v);
+        return rawVal(v);
+      });
+      const ring = f.geometry?.coordinates?.[0] || [];
+      const verts = ring.slice(0, -1); // exclude closing duplicate
+      if (verts.length === 0) {
+        rows.push([fi + 1, f.properties?.name || '', f.geometry?.type || '', ...props, '', '', '']);
+      } else {
+        verts.forEach((coord, vi) => {
+          const [lng, lat] = coord;
+          rows.push([
+            vi === 0 ? fi + 1 : '',
+            vi === 0 ? (f.properties?.name || '') : '',
+            vi === 0 ? (f.geometry?.type || '') : '',
+            ...props.map(p => vi === 0 ? p : ''),
+            vi + 1,
+            lat.toFixed(6),
+            lng.toFixed(6),
+          ]);
+        });
+      }
+    });
+    return rows.map(r => r.join('\t')).join('\n');
+  }
+
+  if (isLine) {
+    const headers = [...baseHeaders, 'Vertex #', 'Vertex Lat', 'Vertex Lng'];
+    const rows = [headers];
+    features.forEach((f, fi) => {
+      const props = propKeys.map(k => {
+        let v = f.properties?.[k];
+        if (typeof v === 'object' && v !== null) v = JSON.stringify(v);
+        return rawVal(v);
+      });
+      const coords = f.geometry?.coordinates || [];
+      if (coords.length === 0) {
+        rows.push([fi + 1, f.properties?.name || '', f.geometry?.type || '', ...props, '', '', '']);
+      } else {
+        coords.forEach((coord, vi) => {
+          const [lng, lat] = coord;
+          rows.push([
+            vi === 0 ? fi + 1 : '',
+            vi === 0 ? (f.properties?.name || '') : '',
+            vi === 0 ? (f.geometry?.type || '') : '',
+            ...props.map(p => vi === 0 ? p : ''),
+            vi + 1,
+            lat.toFixed(6),
+            lng.toFixed(6),
+          ]);
+        });
+      }
+    });
+    return rows.map(r => r.join('\t')).join('\n');
+  }
+
+  // Points: simple one row per feature
+  const headers = [...baseHeaders, 'Lat', 'Lng'];
+  const rows = [headers];
+  features.forEach((f, fi) => {
+    const [lng, lat] = f.geometry?.coordinates || [0, 0];
+    const props = propKeys.map(k => {
+      let v = f.properties?.[k];
+      if (typeof v === 'object' && v !== null) v = JSON.stringify(v);
+      return rawVal(v);
+    });
+    rows.push([fi + 1, f.properties?.name || '', f.geometry?.type || '', ...props, lat.toFixed(6), lng.toFixed(6)]);
+  });
+  return rows.map(r => r.join('\t')).join('\n');
+}
+
+function EditableCell({ value, onSave, type = 'text' }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value ?? ''));
+
+  const commit = () => {
+    setEditing(false);
+    const parsed = type === 'number' ? parseFloat(draft) : draft;
+    if (parsed !== value) onSave(isNaN(parsed) && type === 'number' ? value : parsed);
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        type={type === 'number' ? 'number' : 'text'}
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+        className="w-full min-w-[80px] bg-slate-700 border border-emerald-500/60 rounded px-1.5 py-0.5 text-white outline-none text-xs"
+      />
+    );
+  }
+
+  const display = value === null || value === undefined || value === '' ? (
+    <span className="text-slate-600 italic text-[10px]">—</span>
+  ) : (
+    <span>{typeof value === 'number' && !Number.isInteger(value) ? value.toFixed(3) : String(value)}</span>
+  );
+
+  return (
+    <span
+      onClick={() => { setDraft(String(value ?? '')); setEditing(true); }}
+      className="cursor-pointer hover:bg-slate-700/60 rounded px-1 py-0.5 transition-colors group"
+      title="Click to edit"
+    >
+      {display}
+      <span className="ml-1 opacity-0 group-hover:opacity-40 text-[9px] text-slate-400">✎</span>
+    </span>
+  );
+}
+
+function LayerTable({ layer, onUpdateFeature }) {
   const [visible, setVisible] = useState(true);
+  const [copied, setCopied] = useState(false);
   const features = layer.features || [];
   if (features.length === 0) return null;
 
   const Icon = LAYER_ICONS[layer.type] || Map;
   const colorClass = LAYER_COLORS[layer.type] || 'text-slate-400';
-
-  // Build columns based on layer type
   const propKeys = getPropertyKeys(features);
 
-  // For cables, resolve names
-  const resolveNode = (node, layers) => {
-    if (!node) return null;
-    if (node.type === 'turbine') {
-      const tl = layers?.find(l => l.type === 'turbine');
-      return tl?.features.find(f => f.id === node.id)?.properties?.name || `Turbine ${node.id.slice(0,6)}`;
+  const isNumeric = (k) => {
+    for (const f of features) {
+      const v = f.properties?.[k];
+      if (v !== undefined && v !== null && v !== '') return typeof v === 'number';
     }
-    if (node.type === 'substation') {
-      const sl = layers?.find(l => l.type === 'substation');
-      return sl?.features.find(f => f.id === node.id)?.properties?.name || `Substation ${node.id.slice(0,6)}`;
-    }
-    return null;
+    return false;
+  };
+
+  const handleCopy = () => {
+    const tsv = buildTSV(layer, propKeys);
+    navigator.clipboard.writeText(tsv).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const updateProp = (featureId, key, value) => {
+    onUpdateFeature(layer.id, featureId, key, value);
+  };
+
+  // Coord display
+  const coordDisplay = (f) => {
+    const g = f.geometry;
+    if (!g) return '—';
+    if (g.type === 'Point') return `${g.coordinates[1].toFixed(5)}, ${g.coordinates[0].toFixed(5)}`;
+    if (g.type === 'LineString') return `${g.coordinates.length} pts`;
+    if (g.type === 'Polygon') return `${(g.coordinates[0]?.length || 0) - 1} verts`;
+    return '—';
   };
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-      {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 bg-slate-800/60 border-b border-slate-700">
         <Icon className={cn("w-4 h-4 shrink-0", colorClass)} />
         <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: layer.color }} />
         <h2 className="text-sm font-semibold text-white flex-1">
-          {layer.name} <span className="text-slate-500 font-normal">({features.length} feature{features.length !== 1 ? 's' : ''})</span>
+          {layer.name} <span className="text-slate-500 font-normal">({features.length})</span>
         </h2>
         <span className="text-[10px] text-slate-500 uppercase tracking-wider">{layer.type}</span>
-        <button onClick={() => setVisible(v => !v)} className="text-slate-500 hover:text-white ml-2">
+        <button
+          onClick={handleCopy}
+          className={cn(
+            "flex items-center gap-1 px-2 py-1 rounded text-[11px] border transition-colors ml-1",
+            copied
+              ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400"
+              : "bg-slate-700 border-slate-600 text-slate-400 hover:text-white hover:border-slate-500"
+          )}
+          title="Copy table as TSV (paste into Excel)"
+        >
+          {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+        <button onClick={() => setVisible(v => !v)} className="text-slate-500 hover:text-white ml-1">
           {visible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
         </button>
       </div>
@@ -99,9 +224,9 @@ function LayerTable({ layer, cableTypes, turbineTypes }) {
           <table className="w-full text-xs text-slate-300 whitespace-nowrap">
             <thead className="bg-slate-800/80 border-b border-slate-700">
               <tr>
-                <th className="px-3 py-2 text-left font-medium text-slate-400">#</th>
-                <th className="px-3 py-2 text-left font-medium text-slate-400">Geometry</th>
-                <th className="px-3 py-2 text-left font-medium text-slate-400">Coordinates</th>
+                <th className="px-3 py-2 text-left font-medium text-slate-400 w-8">#</th>
+                <th className="px-3 py-2 text-left font-medium text-slate-400">Geom</th>
+                <th className="px-3 py-2 text-left font-medium text-slate-400">Coords</th>
                 {propKeys.map(k => (
                   <th key={k} className="px-3 py-2 text-left font-medium text-slate-400 capitalize">
                     {k.replace(/_/g, ' ')}
@@ -111,26 +236,28 @@ function LayerTable({ layer, cableTypes, turbineTypes }) {
             </thead>
             <tbody className="divide-y divide-slate-800/80">
               {features.map((f, i) => (
-                <tr key={f.id} className="hover:bg-slate-800/40 transition-colors">
+                <tr key={f.id} className="hover:bg-slate-800/30 transition-colors">
                   <td className="px-3 py-2 text-slate-600">{i + 1}</td>
-                  <td className="px-3 py-2 text-slate-500">{getGeomType(f)}</td>
-                  <td className="px-3 py-2 text-slate-400 font-mono text-[10px]">{getFeatureCoords(f)}</td>
+                  <td className="px-3 py-2 text-slate-500 text-[10px]">{f.geometry?.type || '—'}</td>
+                  <td className="px-3 py-2 text-slate-400 font-mono text-[10px]">{coordDisplay(f)}</td>
                   {propKeys.map(k => {
-                    let val = f.properties?.[k];
-                    // Resolve node references for cables
-                    if (k === 'start_node' || k === 'end_node') {
-                      val = resolveNode(val) || (val ? `${val.type} ${val.id?.slice(0,6)}` : null);
+                    const raw = f.properties?.[k];
+                    // Skip editable for object fields (start_node, end_node etc)
+                    if (typeof raw === 'object' && raw !== null) {
+                      const display = k === 'start_node' || k === 'end_node'
+                        ? (raw.type ? `${raw.type} ${raw.id?.slice(0, 6)}` : '—')
+                        : JSON.stringify(raw);
+                      return <td key={k} className="px-3 py-2 text-slate-500 text-[10px]">{display}</td>;
                     }
-                    // Format AEP in GWh
-                    const display = k === 'aep_mwh' && typeof val === 'number'
-                      ? `${(val / 1000).toFixed(3)} GWh`
-                      : k === 'length_m' && typeof val === 'number'
-                        ? `${(val / 1000).toFixed(3)} km`
-                        : formatVal(val);
-                    const isHighlight = ['rated_power_mw', 'aep_mwh', 'hub_wind_speed', 'length_m'].includes(k);
+                    const num = isNumeric(k);
+                    const highlight = ['rated_power_mw', 'aep_mwh', 'hub_wind_speed', 'length_m'].includes(k);
                     return (
-                      <td key={k} className={cn("px-3 py-2", isHighlight ? colorClass + ' font-medium' : 'text-slate-300')}>
-                        {display}
+                      <td key={k} className={cn("px-3 py-2", highlight ? colorClass : 'text-slate-300')}>
+                        <EditableCell
+                          value={raw}
+                          type={num ? 'number' : 'text'}
+                          onSave={v => updateProp(f.id, k, v)}
+                        />
                       </td>
                     );
                   })}
@@ -145,9 +272,10 @@ function LayerTable({ layer, cableTypes, turbineTypes }) {
 }
 
 export default function DataTables() {
-  const { currentProjectId, currentProject } = usePlanningProject();
+  const { currentProjectId, currentProject, switchProject } = usePlanningProject();
   const [selectedProjectId, setSelectedProjectId] = useState(currentProjectId || '');
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const [localLayers, setLocalLayers] = useState(null);
 
   const project = useMemo(() => {
     if (!selectedProjectId) return null;
@@ -160,21 +288,41 @@ export default function DataTables() {
     return index.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }, []);
 
-  // Auto-select current project if none selected
   useEffect(() => {
     if (!selectedProjectId && currentProjectId) setSelectedProjectId(currentProjectId);
   }, [currentProjectId]);
 
-  const layers = project?.layers || [];
+  // Sync local layers from project
+  useEffect(() => {
+    if (project?.layers) setLocalLayers(project.layers);
+  }, [project]);
+
+  const layers = localLayers || project?.layers || [];
   const totalFeatures = layers.reduce((s, l) => s + (l.features?.length || 0), 0);
+
+  const handleUpdateFeature = useCallback((layerId, featureId, key, value) => {
+    setLocalLayers(prev => {
+      const next = prev.map(l => {
+        if (l.id !== layerId) return l;
+        return {
+          ...l,
+          features: l.features.map(f =>
+            f.id !== featureId ? f : { ...f, properties: { ...f.properties, [key]: value } }
+          )
+        };
+      });
+      // Persist to localStorage
+      const proj = loadProject(selectedProjectId);
+      if (proj) saveProject(selectedProjectId, { ...proj, layers: next });
+      return next;
+    });
+  }, [selectedProjectId]);
 
   if (!selectedProjectId && !currentProjectId) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-slate-950 gap-4">
         <FileText className="w-12 h-12 text-slate-600" />
-        <p className="text-slate-400 text-center max-w-sm">
-          No project selected. Open a project in the Planning Tool first.
-        </p>
+        <p className="text-slate-400 text-center max-w-sm">No project selected. Open a project in the Planning Tool first.</p>
       </div>
     );
   }
@@ -195,11 +343,9 @@ export default function DataTables() {
         <div>
           <h1 className="text-xl font-bold text-white">{project.name}</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            {layers.length} layer{layers.length !== 1 ? 's' : ''} &nbsp;·&nbsp; {totalFeatures} total feature{totalFeatures !== 1 ? 's' : ''}
+            {layers.length} layer{layers.length !== 1 ? 's' : ''} · {totalFeatures} features · <span className="text-slate-600">Click any cell to edit</span>
           </p>
         </div>
-
-        {/* Project selector */}
         <div className="relative">
           <button
             onClick={() => setShowProjectDropdown(v => !v)}
@@ -213,56 +359,37 @@ export default function DataTables() {
             <div className="absolute top-full right-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden min-w-[220px] max-h-72 overflow-y-auto">
               {projectsList.length === 0 ? (
                 <div className="px-3 py-2 text-xs text-slate-500">No saved projects</div>
-              ) : (
-                projectsList.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => { setSelectedProjectId(p.id); setShowProjectDropdown(false); }}
-                    className={cn(
-                      'w-full text-left px-3 py-2 text-xs transition-colors border-l-2',
-                      selectedProjectId === p.id
-                        ? 'bg-emerald-500/20 border-l-emerald-500 text-emerald-300'
-                        : 'border-l-transparent text-slate-300 hover:bg-slate-800'
-                    )}
-                  >
-                    <p className="font-medium truncate">{p.name}</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">
-                      {new Date(p.updatedAt || p.createdAt).toLocaleDateString()}
-                    </p>
-                  </button>
-                ))
-              )}
+              ) : projectsList.map(p => (
+                <button key={p.id}
+                  onClick={() => { setSelectedProjectId(p.id); setLocalLayers(null); setShowProjectDropdown(false); }}
+                  className={cn('w-full text-left px-3 py-2 text-xs transition-colors border-l-2',
+                    selectedProjectId === p.id ? 'bg-emerald-500/20 border-l-emerald-500 text-emerald-300' : 'border-l-transparent text-slate-300 hover:bg-slate-800'
+                  )}>
+                  <p className="font-medium truncate">{p.name}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{new Date(p.updatedAt || p.createdAt).toLocaleDateString()}</p>
+                </button>
+              ))}
             </div>
           )}
         </div>
       </div>
 
-      {/* Layer summary badges */}
+      {/* Layer badges */}
       <div className="flex gap-2 px-6 py-3 border-b border-slate-800/60 overflow-x-auto shrink-0">
-        {layers.map(l => {
-          const Icon = LAYER_ICONS[l.type] || Map;
-          const colorClass = LAYER_COLORS[l.type] || 'text-slate-400';
-          return (
-            <div key={l.id} className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800/60 border border-slate-700 rounded-full text-[11px] shrink-0">
-              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: l.color }} />
-              <span className="text-slate-300">{l.name}</span>
-              <span className="text-slate-500">{l.features?.length || 0}</span>
-            </div>
-          );
-        })}
+        {layers.map(l => (
+          <div key={l.id} className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800/60 border border-slate-700 rounded-full text-[11px] shrink-0">
+            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: l.color }} />
+            <span className="text-slate-300">{l.name}</span>
+            <span className="text-slate-500">{l.features?.length || 0}</span>
+          </div>
+        ))}
       </div>
 
       {/* Tables */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {layers.filter(l => l.type !== 'wind_resource').map(l => (
-          <LayerTable
-            key={l.id}
-            layer={l}
-            cableTypes={project.cableTypes}
-            turbineTypes={project.turbineTypes}
-          />
+          <LayerTable key={l.id} layer={l} onUpdateFeature={handleUpdateFeature} />
         ))}
-
         {totalFeatures === 0 && (
           <div className="flex items-center justify-center py-16 text-slate-600">
             <p>No features in this project yet.</p>
