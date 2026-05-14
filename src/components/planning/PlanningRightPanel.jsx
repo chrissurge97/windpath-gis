@@ -156,7 +156,7 @@ export default function PlanningRightPanel({
             <button onClick={() => setShowNewZoneDialog(true)} className="w-full py-2 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-medium rounded-lg flex items-center justify-center gap-1.5 transition-colors">
               <Plus className="w-3.5 h-3.5" /> Add Zone
             </button>
-            <LayerImportExport layers={layers} onAddLayer={(layer) => setLayers(prev => [...prev, layer])} projectName="" />
+            <LayerImportExport layers={layers} onAddLayer={(layer) => setLayers(prev => [...prev, layer])} projectName="project" />
             <LayerList layers={layers} selectedLayerId={selectedLayerId} setSelectedLayerId={setSelectedLayerId} updateLayer={updateLayer} setLayers={setLayers} mapRef={mapRef} />
           </div>
         )}
