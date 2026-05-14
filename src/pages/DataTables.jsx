@@ -24,60 +24,58 @@ function rawVal(v) {
   return String(v);
 }
 
+// Serialize a property value for TSV output
+function serializeProp(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'object') {
+    // For node refs like {type:'turbine', id:'...'}, make readable
+    if (v.type && v.id) return `${v.type}:${v.id.slice(0, 8)}`;
+    return JSON.stringify(v);
+  }
+  return String(v);
+}
+
 // Build TSV matching the CSV import schema: name, lat, lng, notes, ...extra props
-// Polygon/Line features: one row per vertex with the feature name repeated
+// All geometry types handled: Point (1 row), Polygon/LineString (1 row per vertex)
 function buildTSV(layer, propKeys) {
   const features = layer.features || [];
 
-  // Extra props beyond name/notes (skip internal ones and lat/lng which we handle)
-  const skip = new Set(['name', 'notes', 'lat', 'lng', 'layerId', '_featureType']);
-  const extraKeys = propKeys.filter(k => !skip.has(k));
+  // Fixed columns always come first; extra = everything else that isn't internal
+  const fixedSkip = new Set(['name', 'notes', 'lat', 'lng', 'layerId', '_featureType']);
+  const extraKeys = propKeys.filter(k => !fixedSkip.has(k));
 
-  // CSV import schema columns first, then any extra props
   const headers = ['name', 'lat', 'lng', 'notes', ...extraKeys];
   const rows = [headers];
+
+  const propsRow = (p, nameOverride, lat, lng, isFirst = true) => [
+    nameOverride,
+    lat,
+    lng,
+    isFirst ? (p.notes || '') : '',
+    ...extraKeys.map(k => isFirst ? serializeProp(p[k]) : ''),
+  ];
 
   features.forEach(f => {
     const p = f.properties || {};
     const geomType = f.geometry?.type;
-
-    const extraVals = (overrides = {}) =>
-      extraKeys.map(k => {
-        const v = overrides[k] !== undefined ? overrides[k] : p[k];
-        if (typeof v === 'object' && v !== null) return JSON.stringify(v);
-        return rawVal(v);
-      });
+    const baseName = p.name || f.id?.slice(0, 8) || '';
 
     if (geomType === 'Point') {
       const [lng, lat] = f.geometry.coordinates;
-      rows.push([p.name || '', lat.toFixed(6), lng.toFixed(6), p.notes || '', ...extraVals()]);
+      rows.push(propsRow(p, baseName, lat.toFixed(6), lng.toFixed(6), true));
 
     } else if (geomType === 'Polygon') {
       const ring = f.geometry.coordinates?.[0] || [];
-      const verts = ring.slice(0, -1); // drop closing duplicate
-      verts.forEach((coord, vi) => {
+      ring.slice(0, -1).forEach((coord, vi) => {
         const [lng, lat] = coord;
-        // Repeat feature name on every vertex row so re-import groups them
-        rows.push([
-          `${p.name || 'Polygon'}_v${vi + 1}`,
-          lat.toFixed(6),
-          lng.toFixed(6),
-          vi === 0 ? (p.notes || '') : '',
-          ...extraVals(vi === 0 ? {} : Object.fromEntries(extraKeys.map(k => [k, '']))),
-        ]);
+        rows.push(propsRow(p, `${baseName}_v${vi + 1}`, lat.toFixed(6), lng.toFixed(6), vi === 0));
       });
 
     } else if (geomType === 'LineString') {
       const coords = f.geometry.coordinates || [];
       coords.forEach((coord, vi) => {
         const [lng, lat] = coord;
-        rows.push([
-          `${p.name || 'Line'}_v${vi + 1}`,
-          lat.toFixed(6),
-          lng.toFixed(6),
-          vi === 0 ? (p.notes || '') : '',
-          ...extraVals(vi === 0 ? {} : Object.fromEntries(extraKeys.map(k => [k, '']))),
-        ]);
+        rows.push(propsRow(p, `${baseName}_v${vi + 1}`, lat.toFixed(6), lng.toFixed(6), vi === 0));
       });
     }
   });
