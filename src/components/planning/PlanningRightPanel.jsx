@@ -30,11 +30,8 @@ export default function PlanningRightPanel({
           <TurbineDataTable
             turbines={turbines}
             turbineTypes={turbineTypes}
-            selectedTypeId={selectedTurbineTypeId}
-            onSelectType={setSelectedTurbineTypeId}
             onDeleteTurbine={(id) => turbineLayer && deleteFeature(turbineLayer.id, id)}
             onUpdateTurbine={updateTurbineProps}
-            turbineLayer={turbineLayer}
             onFlyTo={flyToFeature}
             globalRadii={globalRadii}
             onRadiiChange={onRadiiChange}

@@ -5,11 +5,10 @@
 import React from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getRadiusMetres } from './TurbineRadiiOverlay';
 
 const PRESET_COLORS = ['#facc15', '#f97316', '#ef4444', '#06b6d4', '#10b981', '#8b5cf6'];
 
-export default function TurbineRadiiEditor({ radii, rotorDiameterM, onChange }) {
+export default function TurbineRadiiEditor({ radii, onChange }) {
   const addRadius = () => {
     const used = new Set(radii.map(r => r.dMultiple));
     let d = 3;
@@ -48,7 +47,6 @@ export default function TurbineRadiiEditor({ radii, rotorDiameterM, onChange }) 
       )}
 
       {radii.map(r => {
-        const radiusM = getRadiusMetres(rotorDiameterM || 130, r.dMultiple);
         return (
           <div key={r.id} className="bg-slate-800/60 border border-slate-700 rounded-lg px-2.5 py-2 space-y-1.5">
             <div className="flex items-center gap-2">
@@ -103,11 +101,6 @@ export default function TurbineRadiiEditor({ radii, rotorDiameterM, onChange }) 
             </div>
 
             <div className="flex items-center justify-between">
-              {/* Radius info */}
-              <span className="text-[10px] text-slate-500">
-                {r.dMultiple}× {rotorDiameterM}m = <span className="text-cyan-400 font-medium">{(radiusM / 1000).toFixed(2)} km</span>
-              </span>
-
               {/* Block placement toggle */}
               <label className="flex items-center gap-1.5 cursor-pointer select-none">
                 <div
