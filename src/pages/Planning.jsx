@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
   Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target, FolderOpen,
-  Layers, Settings, X, Satellite, Navigation, Type,
+  Layers, Settings, X, Satellite, Navigation, Type, ShieldAlert,
   ChevronDown, ChevronRight, ArrowUp, ArrowDown, PlusCircle, Save
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
@@ -37,6 +37,7 @@ import TextOverlay from '@/components/planning/TextOverlay';
 import SubstationMarker from '@/components/planning/SubstationMarker';
 import { EXERCISES } from '@/lib/exercises';
 import ExportMenu from '@/components/planning/ExportMenu';
+import ConstraintAdvisor from '@/components/planning/ConstraintAdvisor';
 import LayerImportExport from '@/components/planning/LayerImportExport';
 import LayerList from '@/components/planning/LayerList';
 import NewZoneDialog from '@/components/planning/NewZoneDialog';
@@ -338,6 +339,7 @@ export default function Planning() {
 
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showConfigMenu, setShowConfigMenu] = useState(false);
+  const [advisorEnabled, setAdvisorEnabled] = useState(false);
   const [features, setFeatures] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('app_features') || '{"windAnalysis":true,"irelandMapLock":true}');
@@ -947,6 +949,20 @@ export default function Planning() {
         )}
 
         <div className="ml-auto flex items-center gap-1 shrink-0">
+          {/* Constraint Advisor toggle */}
+          <button
+            onClick={() => setAdvisorEnabled(v => !v)}
+            className={cn(
+              "flex items-center gap-1 px-2 py-1 rounded text-[11px] border transition-all shrink-0",
+              advisorEnabled
+                ? "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                : "bg-slate-800 text-slate-400 border-slate-700 hover:text-purple-400 hover:border-purple-500/40"
+            )}
+            title="Toggle Constraint Advisor"
+          >
+            <ShieldAlert className="w-3 h-3" />
+            {advisorEnabled ? 'Advisor On' : 'Advisor'}
+          </button>
           <button onClick={() => setShowConfigMenu(!showConfigMenu)} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-purple-400 hover:border-purple-500/40 shrink-0">
             <Settings className="w-3 h-3" /> Config
           </button>
@@ -1788,6 +1804,7 @@ export default function Planning() {
             />
           )}
 
+          <ConstraintAdvisor enabled={advisorEnabled} onToggle={setAdvisorEnabled} />
 
         </div>
 
