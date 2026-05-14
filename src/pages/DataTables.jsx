@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { usePlanningProject } from '@/lib/PlanningContext';
 import { loadProjectIndex, loadProject, saveProject } from '@/components/planning/ProjectManager';
-import { ChevronDown, Wind, Zap, Target, FileText, Pentagon, Map, Eye, EyeOff, Copy, Check } from 'lucide-react';
+import { ChevronDown, Wind, Zap, Target, FileText, Pentagon, Map, Eye, EyeOff, Copy, Check, Library } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import TurbineLibraryEditor from '@/components/planning/TurbineLibraryEditor';
+import CableLibraryEditor from '@/components/planning/CableLibraryEditor';
 
 const LAYER_ICONS = { turbine: Wind, cable: Zap, substation: Target, polygon: Pentagon };
 const LAYER_COLORS = { turbine: 'text-emerald-400', cable: 'text-orange-400', substation: 'text-yellow-400', polygon: 'text-cyan-400' };
@@ -250,6 +252,9 @@ export default function DataTables() {
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [localLayers, setLocalLayers] = useState(null);
   const [activeLayerId, setActiveLayerId] = useState('all');
+  const [activeTab, setActiveTab] = useState('layers'); // 'layers' | 'turbine_library' | 'cable_library'
+  const [localTurbineTypes, setLocalTurbineTypes] = useState(null);
+  const [localCableTypes, setLocalCableTypes] = useState(null);
 
   const project = useMemo(() => {
     if (!selectedProjectId) return null;
@@ -266,13 +271,29 @@ export default function DataTables() {
     if (!selectedProjectId && currentProjectId) setSelectedProjectId(currentProjectId);
   }, [currentProjectId]);
 
-  // Sync local layers from project
+  // Sync local state from project
   useEffect(() => {
     if (project?.layers) setLocalLayers(project.layers);
+    if (project?.turbineTypes) setLocalTurbineTypes(project.turbineTypes);
+    if (project?.cableTypes) setLocalCableTypes(project.cableTypes);
   }, [project]);
 
   const layers = localLayers || project?.layers || [];
   const totalFeatures = layers.reduce((s, l) => s + (l.features?.length || 0), 0);
+  const turbineTypes = localTurbineTypes || project?.turbineTypes || [];
+  const cableTypes = localCableTypes || project?.cableTypes || [];
+
+  const handleTurbineTypesChange = useCallback((next) => {
+    setLocalTurbineTypes(next);
+    const proj = loadProject(selectedProjectId);
+    if (proj) saveProject(selectedProjectId, { ...proj, turbineTypes: next });
+  }, [selectedProjectId]);
+
+  const handleCableTypesChange = useCallback((next) => {
+    setLocalCableTypes(next);
+    const proj = loadProject(selectedProjectId);
+    if (proj) saveProject(selectedProjectId, { ...proj, cableTypes: next });
+  }, [selectedProjectId]);
 
   const handleUpdateFeature = useCallback((layerId, featureId, key, value) => {
     setLocalLayers(prev => {
@@ -348,8 +369,30 @@ export default function DataTables() {
         </div>
       </div>
 
-      {/* Layer tab buttons */}
-      <div className="flex gap-1.5 px-6 py-3 border-b border-slate-800/60 overflow-x-auto shrink-0">
+      {/* Top-level tabs */}
+      <div className="flex gap-1 px-6 pt-3 pb-0 border-b border-slate-800/60 shrink-0">
+        {[
+          { id: 'layers', label: 'Layer Data' },
+          { id: 'turbine_library', label: 'Turbine Library' },
+          { id: 'cable_library', label: 'Cable Library' },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              'px-4 py-2 text-xs font-medium rounded-t-lg border-x border-t transition-colors -mb-px',
+              activeTab === tab.id
+                ? 'bg-slate-900 border-slate-700 text-white'
+                : 'bg-slate-800/40 border-transparent text-slate-500 hover:text-slate-300'
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Layer tab buttons — only when on layers tab */}
+      <div className={cn("flex gap-1.5 px-6 py-3 border-b border-slate-800/60 overflow-x-auto shrink-0", activeTab !== 'layers' && 'hidden')}>
         <button
           onClick={() => setActiveLayerId('all')}
           className={cn(
@@ -384,15 +427,25 @@ export default function DataTables() {
         })}
       </div>
 
-      {/* Tables */}
+      {/* Content */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {layers.filter(l => l.type !== 'wind_resource' && (activeLayerId === 'all' || activeLayerId === l.id)).map(l => (
-          <LayerTable key={l.id} layer={l} onUpdateFeature={handleUpdateFeature} />
-        ))}
-        {totalFeatures === 0 && (
-          <div className="flex items-center justify-center py-16 text-slate-600">
-            <p>No features in this project yet.</p>
-          </div>
+        {activeTab === 'layers' && (
+          <>
+            {layers.filter(l => l.type !== 'wind_resource' && (activeLayerId === 'all' || activeLayerId === l.id)).map(l => (
+              <LayerTable key={l.id} layer={l} onUpdateFeature={handleUpdateFeature} />
+            ))}
+            {totalFeatures === 0 && (
+              <div className="flex items-center justify-center py-16 text-slate-600">
+                <p>No features in this project yet.</p>
+              </div>
+            )}
+          </>
+        )}
+        {activeTab === 'turbine_library' && (
+          <TurbineLibraryEditor turbineTypes={turbineTypes} onChange={handleTurbineTypesChange} />
+        )}
+        {activeTab === 'cable_library' && (
+          <CableLibraryEditor cableTypes={cableTypes} onChange={handleCableTypesChange} />
         )}
       </div>
     </div>
