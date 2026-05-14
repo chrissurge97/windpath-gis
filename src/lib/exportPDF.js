@@ -34,159 +34,18 @@ function drawBarChart(doc, x, y, w, h, data, label) {
   });
 }
 
-// ── Leaflet → PDF map capture (bulletproof) ─────────────────────────────────
-// Instead of html2canvas (which mis-offsets SVG/canvas panes), we directly
-// read Leaflet's tile grid + SVG overlay, redraw everything onto a fresh
-// OffscreenCanvas, and encode the result to a high-res PNG dataURL.
-
-function latLngToPixel(lat, lng, map) {
-  const pt = map.latLngToContainerPoint([lat, lng]);
-  return { x: pt.x, y: pt.y };
-}
-
-function hexToRgba(hex, alpha = 1) {
-  const [r, g, b] = hexToRgb(hex);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
-async function renderMapToCanvas(map, layers) {
+// ── Leaflet map capture using html2canvas ────────────────────────────────────
+async function renderMapToCanvas(map) {
+  const html2canvas = (await import('html2canvas')).default;
   const container = map.getContainer();
-  const W = container.offsetWidth;
-  const H = container.offsetHeight;
-  const SCALE = 4; // 4× for very high resolution
-
-  const canvas = document.createElement('canvas');
-  canvas.width = W * SCALE;
-  canvas.height = H * SCALE;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(SCALE, SCALE);
-
-  // 1. Dark background
-  ctx.fillStyle = '#0f172a';
-  ctx.fillRect(0, 0, W, H);
-
-  // 2. Draw tile images — find all <img> elements inside the tile pane
-  const tilePane = container.querySelector('.leaflet-tile-pane');
-  if (tilePane) {
-    // Walk every tile layer container, respecting their CSS transform
-    const tileLayers = tilePane.querySelectorAll('.leaflet-layer');
-    for (const tileLayer of tileLayers) {
-      const layerTransform = tileLayer.style.transform || '';
-      const layerOffset = parseCSSTranslate(layerTransform);
-      const imgs = tileLayer.querySelectorAll('img.leaflet-tile');
-      for (const img of imgs) {
-        if (!img.complete || !img.naturalWidth) continue;
-        // Each tile has a CSS transform or top/left position
-        const { x: tx, y: ty } = getTilePosition(img, layerOffset);
-        const tw = img.offsetWidth || 256;
-        const th = img.offsetHeight || 256;
-        ctx.globalAlpha = parseFloat(img.style.opacity || '1');
-        try { ctx.drawImage(img, tx, ty, tw, th); } catch {}
-        ctx.globalAlpha = 1;
-      }
-    }
-  }
-
-  // 3. Draw all Leaflet SVG overlay (polygons, polylines, circles)
-  const svgEl = container.querySelector('.leaflet-overlay-pane svg');
-  if (svgEl) {
-    const svgStr = new XMLSerializer().serializeToString(svgEl);
-    const blob = new Blob([svgStr], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    await new Promise((res) => {
-      const img = new Image();
-      img.onload = () => {
-        // The SVG pane is positioned via CSS transform translate
-        const pane = container.querySelector('.leaflet-overlay-pane');
-        const t = parseCSSTranslate(pane?.style?.transform || '');
-        ctx.drawImage(img, t.x, t.y, svgEl.getAttribute('width') || W, svgEl.getAttribute('height') || H);
-        URL.revokeObjectURL(url);
-        res();
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); res(); };
-      img.src = url;
-    });
-  }
-
-  // 4. Draw custom markers (turbines, substations) from DOM divIcon elements
-  const markerPane = container.querySelector('.leaflet-marker-pane');
-  if (markerPane) {
-    const markers = markerPane.querySelectorAll('.leaflet-marker-icon');
-    for (const marker of markers) {
-      const style = marker.style;
-      // Markers use CSS transform: translate3d(x, y, 0)
-      const t = parseCSSTranslate(style.transform || '');
-      const mw = marker.offsetWidth;
-      const mh = marker.offsetHeight;
-      // Anchor compensation
-      const ax = parseInt(style.marginLeft || '0') || -mw / 2;
-      const ay = parseInt(style.marginTop || '0') || -mh / 2;
-      // Render inner HTML as SVG foreignObject → canvas
-      const inner = marker.innerHTML;
-      const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${mw}" height="${mh}"><foreignObject width="${mw}" height="${mh}"><div xmlns="http://www.w3.org/1999/xhtml">${inner}</div></foreignObject></svg>`;
-      const blob = new Blob([svgStr], { type: 'image/svg+xml' });
-      const url = URL.createObjectURL(blob);
-      await new Promise((res) => {
-        const img = new Image();
-        img.onload = () => {
-          try { ctx.drawImage(img, t.x + ax, t.y + ay, mw, mh); } catch {}
-          URL.revokeObjectURL(url);
-          res();
-        };
-        img.onerror = () => { URL.revokeObjectURL(url); res(); };
-        img.src = url;
-      });
-    }
-  }
-
-  // 5. Draw cable pane SVG if present (cables are in a custom elevated pane)
-  const cablePane = container.querySelector('.leaflet-pane[style]');
-  // Walk all panes, draw any extra SVGs we missed
-  const allPanes = container.querySelectorAll('.leaflet-pane');
-  for (const pane of allPanes) {
-    if (pane === container.querySelector('.leaflet-overlay-pane')) continue; // already done
-    const svg = pane.querySelector(':scope > svg');
-    if (!svg) continue;
-    const svgStr = new XMLSerializer().serializeToString(svg);
-    const blob = new Blob([svgStr], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    await new Promise((res) => {
-      const img = new Image();
-      img.onload = () => {
-        const t = parseCSSTranslate(pane?.style?.transform || '');
-        try { ctx.drawImage(img, t.x, t.y); } catch {}
-        URL.revokeObjectURL(url);
-        res();
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); res(); };
-      img.src = url;
-    });
-  }
-
+  const canvas = await html2canvas(container, {
+    useCORS: true,
+    allowTaint: true,
+    scale: 3, // 3× for high resolution
+    logging: false,
+    backgroundColor: '#0f172a',
+  });
   return canvas;
-}
-
-function parseCSSTranslate(transform) {
-  if (!transform) return { x: 0, y: 0 };
-  // translate3d(x, y, z) or translate(x, y)
-  const m3 = transform.match(/translate3d\(\s*([-\d.]+)px,\s*([-\d.]+)px/);
-  if (m3) return { x: parseFloat(m3[1]), y: parseFloat(m3[2]) };
-  const m2 = transform.match(/translate\(\s*([-\d.]+)px,\s*([-\d.]+)px/);
-  if (m2) return { x: parseFloat(m2[1]), y: parseFloat(m2[2]) };
-  return { x: 0, y: 0 };
-}
-
-function getTilePosition(img, layerOffset) {
-  const style = window.getComputedStyle(img);
-  const transform = img.style.transform;
-  if (transform) {
-    const t = parseCSSTranslate(transform);
-    return { x: t.x + layerOffset.x, y: t.y + layerOffset.y };
-  }
-  return {
-    x: parseFloat(img.style.left || '0') + layerOffset.x,
-    y: parseFloat(img.style.top || '0') + layerOffset.y,
-  };
 }
 
 // ── Map page (A0 landscape) ──────────────────────────────────────────────────
@@ -227,11 +86,10 @@ async function addMapPage(doc, map, layers, projectName) {
 
   if (map) {
     try {
-      const canvas = await renderMapToCanvas(map, layers);
-      const imgData = canvas.toDataURL('image/png');
-      doc.addImage(imgData, 'PNG', mapX, mapY, mapW, mapH);
+      const canvas = await renderMapToCanvas(map);
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      doc.addImage(imgData, 'JPEG', mapX, mapY, mapW, mapH);
     } catch (e) {
-      console.error('Map render error:', e);
       setFill(doc, '#1e293b');
       doc.rect(mapX, mapY, mapW, mapH, 'F');
       setTextColor(doc, '#475569');
@@ -334,16 +192,6 @@ async function addMapPage(doc, map, layers, projectName) {
   doc.text(`Drawing produced: ${new Date().toLocaleDateString('en-IE', { dateStyle: 'long' })}   |   EagleView Academy Wind Farm Planning Tool   |   For indicative purposes only`, PW / 2, footerY, { align: 'center' });
 }
 
-function getWindFarmBounds(turbines, substations) {
-  const points = [
-    ...turbines.map(t => ({ lat: t.geometry.coordinates[1], lng: t.geometry.coordinates[0] })),
-    ...substations.map(s => ({ lat: s.geometry.coordinates[1], lng: s.geometry.coordinates[0] })),
-  ];
-  if (points.length === 0) return null;
-  const lats = points.map(p => p.lat);
-  const lngs = points.map(p => p.lng);
-  return { minLat: Math.min(...lats), maxLat: Math.max(...lats), minLng: Math.min(...lngs), maxLng: Math.max(...lngs) };
-}
 
 export async function exportProjectPDF({
   projectName, turbines, turbineTypes, cables, cableTypes, substations,
@@ -507,35 +355,12 @@ export async function exportProjectPDF({
   doc.text('EagleView Academy — Wind Farm Planning Tool', ML, footerY + 2);
   doc.text('Estimates only. Not for use in formal planning submissions.', PW - MR, footerY + 2, { align: 'right' });
 
-  // ── Map page: zoom to wind farm then capture ────────────────────────────────
+  // ── Map page: capture current map view as-is ───────────────────────────────
   const map = mapRef?.current;
-  let originalCenter = null, originalZoom = null;
-
   const mapContainer = map?.getContainer();
   const hasMapSize = mapContainer && mapContainer.offsetWidth > 0 && mapContainer.offsetHeight > 0;
 
-  if (map && hasMapSize && turbines.length > 0) {
-    originalCenter = map.getCenter();
-    originalZoom = map.getZoom();
-    const bounds = getWindFarmBounds(turbines, substations);
-    if (bounds) {
-      const latBuf = (bounds.maxLat - bounds.minLat) * 0.25 + 0.003;
-      const lngBuf = (bounds.maxLng - bounds.minLng) * 0.25 + 0.004;
-      const L = await import('leaflet').then(m => m.default || m);
-      map.fitBounds(
-        L.latLngBounds([bounds.minLat - latBuf, bounds.minLng - lngBuf], [bounds.maxLat + latBuf, bounds.maxLng + lngBuf]),
-        { animate: false, padding: [0, 0] }
-      );
-      // Wait for tiles to fully load
-      await new Promise(r => setTimeout(r, 1800));
-    }
-  }
-
   await addMapPage(doc, hasMapSize ? map : null, layers, projectName);
-
-  if (map && hasMapSize && originalCenter !== null) {
-    map.setView(originalCenter, originalZoom, { animate: false });
-  }
 
   const safeName = (projectName || 'wind-farm').replace(/[^a-z0-9]/gi, '-').toLowerCase();
   doc.save(`${safeName}-report.pdf`);
