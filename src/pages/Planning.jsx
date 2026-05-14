@@ -177,13 +177,27 @@ function calcSubstationLoad(substationId, cables, turbines) {
   }, 0);
 }
 
-function MapMouseHandler({ mode, turbines, substations, onSnapPreview }) {
+function MapMouseHandler({ mode, turbines, substations, onSnapPreview, draggingRef, onPolygonDrag, onPolygonDragEnd }) {
   useMapEvents({
     mousemove(e) {
-      if (mode !== 'draw_cable') { onSnapPreview(null); return; }
-      // We need the map instance — use e.target
-      const snap = findSnapNode(e.latlng, turbines, substations, e.target);
-      onSnapPreview(snap);
+      if (mode === 'draw_cable') {
+        onSnapPreview(findSnapNode(e.latlng, turbines, substations, e.target));
+      } else {
+        onSnapPreview(null);
+      }
+      const drag = draggingRef.current;
+      if (drag.id && drag.lastLatlng) {
+        e.target.dragging.disable();
+        onPolygonDrag(drag.id, e.latlng.lat - drag.lastLatlng.lat, e.latlng.lng - drag.lastLatlng.lng);
+        draggingRef.current = { ...drag, lastLatlng: e.latlng };
+      }
+    },
+    mouseup(e) {
+      if (draggingRef.current.id) {
+        e.target.dragging.enable();
+        draggingRef.current = { id: null, lastLatlng: null };
+        onPolygonDragEnd();
+      }
     },
   });
   return null;
@@ -247,18 +261,6 @@ export default function Planning() {
   const showLessonGuide = lessonIndex !== null && lessonProjectId !== null;
   const activeExercise = exerciseId && !showLessonGuide ? EXERCISES[exerciseId] : null;
 
-  // ── Project system ─────────────────────────────────────────────────────────
-
-  const loadCurrentProject = (id) => {
-    if (!id) return null;
-    const proj = loadProject(id);
-    if (!proj) return null;
-    if (!proj.layers.find(l => l.type === 'substation')) {
-      proj.layers.push(createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 }));
-    }
-    return proj;
-  };
-
   const initProj = currentProject || {};
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -275,11 +277,9 @@ export default function Planning() {
   const [selectedTurbineTypeId, setSelectedTurbineTypeId] = useState(turbineTypes[0]?.id);
   const [selectedCableTypeId, setSelectedCableTypeId] = useState(cableTypes[0]?.id);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
-  const [editingLayerId, setEditingLayerId] = useState(null);
-  const [editingLayerName, setEditingLayerName] = useState('');
+
   const [showNewZoneDialog, setShowNewZoneDialog] = useState(false);
   const [mode, setMode] = useState('select');
-  const [movingPolygonId, setMovingPolygonId] = useState(null);
   const [drawingPoints, setDrawingPoints] = useState([]);
   const [selectedFeatureId, setSelectedFeatureId] = useState(null);
   const [rightTab, setRightTab] = useState('turbines');
@@ -318,9 +318,8 @@ export default function Planning() {
   // Vertex edit mode: featureId -> [[lat,lng],...]
   const [editingPolygonId, setEditingPolygonId] = useState(null);
   
-  // Polygon drag state
-  const [draggingPolygonId, setDraggingPolygonId] = useState(null);
-  const [dragStartLatlng, setDragStartLatlng] = useState(null);
+  // Polygon drag state — use a ref to avoid stale closures in map event handlers
+  const polygonDragRef = useRef({ id: null, lastLatlng: null });
 
   // Cable snap state: stores snapped node for start/end of current cable
   const [drawingSnapNodes, setDrawingSnapNodes] = useState([]); // array of { type, id, lat, lng } or null per point
@@ -335,15 +334,7 @@ export default function Planning() {
   // Text annotation state
   const [textAnnotationMenu, setTextAnnotationMenu] = useState(null); // { feature, isNew }
 
-  // Lesson guide highlights — re-read every 500ms when a lesson is active
-  const [highlights, setHighlights] = useState([]);
-  useEffect(() => {
-    if (!showLessonGuide) return;
-    const id = setInterval(() => {
-      setHighlights(window.__lessonHighlights__ || []);
-    }, 300);
-    return () => clearInterval(id);
-  }, [showLessonGuide]);
+
 
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showConfigMenu, setShowConfigMenu] = useState(false);
@@ -775,8 +766,6 @@ export default function Planning() {
 
   // ── Computed stats ─────────────────────────────────────────────────────────
   const totalCapacity_mw = turbines.reduce((s, t) => s + (t.properties.rated_power_mw || selectedTurbineType?.rated_power_mw || 3.5), 0);
-  // Stored AEP (used for map KPIs — fixed at placement time)
-  const totalAEP_stored = turbines.reduce((s, t) => s + (t.properties.aep_mwh || 0), 0);
   // Live Weibull-integrated AEP (used in Analysis tab — responds to k/λ sliders)
   const totalAEP_live = turbines.reduce((s, t) => {
     const hubSpd = t.properties.hub_wind_speed;
@@ -815,7 +804,8 @@ export default function Planning() {
     return { v: v.toFixed(0), f: +(pdf * 100).toFixed(2) };
   }), [windParams]);
 
-  const cursorStyle = { select: 'default', draw_polygon: 'crosshair', place_turbine: 'cell', draw_cable: 'crosshair', place_text: 'text', place_substation: 'cell' }[mode] || 'default';
+  const isDraggingPolygon = polygonDragRef.current?.id != null;
+  const cursorStyle = isDraggingPolygon ? 'grabbing' : { select: 'default', draw_polygon: 'crosshair', place_turbine: 'cell', draw_cable: 'crosshair', place_text: 'text', place_substation: 'cell' }[mode] || 'default';
 
   const DRAW_TOOLS = [
     { id: 'draw_polygon', label: 'Polygon', icon: Pentagon },
@@ -871,7 +861,7 @@ export default function Planning() {
       {/* Toolbar */}
       <div className="flex items-center gap-1.5 px-2 py-1.5 bg-slate-900 border-b border-slate-800 shrink-0 flex-wrap min-h-[40px]">
         <Map className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-        <div data-lesson-id="btn-file" className={cn(highlights.includes('btn-file') && "ring-2 ring-amber-400 rounded ring-offset-1 ring-offset-slate-900 animate-pulse")}>
+        <div data-lesson-id="btn-file">
           <ProjectFileButtons
             currentProjectId={currentProjectId}
             currentProjectName={projectName}
@@ -894,8 +884,7 @@ export default function Planning() {
           data-lesson-id="btn-select"
           onClick={() => { setMode('select'); setDrawingPoints([]); setDrawingSnapNodes([]); setSnapPreview(null); setTurbineMenuFeature(null); setPolygonMenuFeature(null); setEditingPolygonId(null); setTextAnnotationMenu(null); }}
           className={cn("flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-all border shrink-0",
-            mode === 'select' ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700",
-            highlights.includes('btn-select') && "ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900 animate-pulse"
+            mode === 'select' ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700"
           )}>
           <MousePointer className="w-3 h-3" /> Select
         </button>
@@ -906,8 +895,7 @@ export default function Planning() {
             onClick={() => setDrawToolsOpen(v => !v)}
             className={cn(
               "flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-all border",
-              activeDrawTool ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700",
-              highlights.some(h => DRAW_TOOLS.some(dt => `btn-${dt.id}` === h)) && "ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900 animate-pulse"
+              activeDrawTool ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700"
             )}
           >
             {activeDrawTool ? <activeDrawTool.icon className="w-3 h-3" /> : <Pentagon className="w-3 h-3" />}
@@ -951,11 +939,7 @@ export default function Planning() {
             Finish ({drawingPoints.length}pts)
           </button>
         )}
-        {mode === 'move_polygon' && movingPolygonId && (
-          <button onClick={() => { setMode('select'); setMovingPolygonId(null); }} className="px-2 py-1 rounded text-[11px] bg-cyan-600/20 text-cyan-400 border border-cyan-500/40 shrink-0">
-            Done Moving
-          </button>
-        )}
+
         {loadingWind && (
           <span className="flex items-center gap-1 text-[11px] text-amber-400 shrink-0">
             <RefreshCw className="w-3 h-3 animate-spin" /> Fetching…
@@ -981,12 +965,10 @@ export default function Planning() {
           <button
             data-lesson-id="btn-import"
             onClick={handleImport}
-            className={cn("flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-white shrink-0",
-              highlights.includes('btn-import') && "ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900 animate-pulse"
-            )}>
+            className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-white shrink-0">
             <Upload className="w-3 h-3" /> Import
           </button>
-          <div data-lesson-id="btn-export" className={cn(highlights.includes('btn-export') && "ring-2 ring-amber-400 rounded ring-offset-1 ring-offset-slate-900 animate-pulse")}>
+          <div data-lesson-id="btn-export">
           <ExportMenu
             onExportProject={() => { const geojson = exportProjectGeoJSON({ name: projectName, description: '', layers, turbineTypes, cableTypes, windParams }); downloadFile(JSON.stringify(geojson, null, 2), `${projectName}-project.geojson`, 'application/json'); }}
             onExportGeoJSON={() => downloadJSON(layersToGeoJSON(layers), `${projectName}.geojson`)}
@@ -1055,7 +1037,15 @@ export default function Planning() {
               />
             )}
             <MapClickHandler mode={mode} onAddPoint={addPoint} onFinishPolygon={finishPolygon} onFinishCable={finishCable} />
-            <MapMouseHandler mode={mode} turbines={turbines} substations={substations} onSnapPreview={setSnapPreview} />
+            <MapMouseHandler
+              mode={mode}
+              turbines={turbines}
+              substations={substations}
+              onSnapPreview={setSnapPreview}
+              draggingRef={polygonDragRef}
+              onPolygonDrag={movePolygon}
+              onPolygonDragEnd={() => { polygonDragRef.current = { id: null, lastLatlng: null }; }}
+            />
 
             {layers.map(layer => {
               if (!layer.visible) return null;
@@ -1070,11 +1060,10 @@ export default function Planning() {
                 const ring = f.geometry.coordinates[0];
                 const positions = ring.slice(0, -1).map(([lng, lat]) => [lat, lng]);
                 const isEditing = editingPolygonId === f.id;
-                const isMoving = movingPolygonId === f.id;
                 const polyColor = layer.type === 'polygon' ? (layer.color || '#06b6d4') : pathOpts.color;
                 const polyOpts = { ...pathOpts, color: polyColor, fillColor: polyColor,
-                  weight: isEditing || isMoving ? 2.5 : pathOpts.weight,
-                  dashArray: isEditing ? '6 4' : isMoving ? '3 3' : undefined };
+                  weight: isEditing ? 2.5 : pathOpts.weight,
+                  dashArray: isEditing ? '6 4' : undefined };
                 // In drawing modes, let clicks bubble through to the map handler
                 const nonSelectMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation'].includes(mode);
                 return (
@@ -1094,8 +1083,7 @@ export default function Planning() {
                         mousedown: (e) => {
                           if (mode === 'select' && !isEditing) {
                             L.DomEvent.stopPropagation(e);
-                            setDraggingPolygonId(f.id);
-                            setDragStartLatlng(e.latlng);
+                            polygonDragRef.current = { id: f.id, lastLatlng: e.latlng };
                           }
                         },
                         mousemove: (e) => {
@@ -1530,13 +1518,7 @@ export default function Planning() {
               }}
               onClose={() => { setPolygonMenuFeature(null); setPolygonMenuLayerId(null); }}
               onEditVertices={() => {
-                // Click twice: first activates edit mode, second activates move mode
-                if (editingPolygonId === polygonMenuFeature.id) {
-                  setMode('move_polygon');
-                  setMovingPolygonId(polygonMenuFeature.id);
-                } else {
-                  setEditingPolygonId(polygonMenuFeature.id);
-                }
+                setEditingPolygonId(polygonMenuFeature.id);
                 setPolygonMenuFeature(null);
                 setPolygonMenuLayerId(null);
               }}
@@ -1811,7 +1793,7 @@ export default function Planning() {
 
         {/* Right panel */}
         <div className={cn("shrink-0 flex flex-col bg-slate-900 border-l border-slate-800 overflow-hidden transition-all duration-200", rightPanelOpen ? "w-80" : "w-0 border-l-0")}>
-          <RightPanelTabs rightTab={rightTab} setRightTab={setRightTab} features={features} highlights={highlights} rightPanelOpen={rightPanelOpen} />
+          <RightPanelTabs rightTab={rightTab} setRightTab={setRightTab} features={features} highlights={[]} rightPanelOpen={rightPanelOpen} />
 
           <div className="flex-1 overflow-y-auto p-3">
             {/* TURBINES TAB */}

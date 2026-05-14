@@ -64,34 +64,6 @@ const LESSON_CONFIG = {
   },
 };
 
-const HIGHLIGHT_LABELS = {
-  'btn-select':           { label: 'Select',         icon: MousePointer },
-  'btn-draw_polygon':     { label: 'Polygon',         icon: Pentagon     },
-  'btn-place_turbine':    { label: 'Turbine',         icon: Wind         },
-  'btn-draw_cable':       { label: 'Cable',           icon: Zap          },
-  'btn-place_substation': { label: 'Substation',      icon: Target       },
-  'btn-file':             { label: 'File Menu',       icon: Save         },
-  'btn-import':           { label: 'Import',          icon: Upload       },
-  'btn-export':           { label: 'Export',          icon: Map          },
-  'btn-basemap':          { label: 'Base Map',        icon: Map          },
-  'btn-substations':      { label: 'Substations',     icon: Target       },
-  'btn-place_text':       { label: 'Place Text',      icon: Type         },
-  'tab-turbines':         { label: 'Turbines Tab',    icon: Wind         },
-  'tab-cables':           { label: 'Cables Tab',      icon: Zap          },
-  'tab-analysis':         { label: 'Analysis Tab',    icon: BarChart2    },
-  'tab-layers':           { label: 'Layers Tab',      icon: Layers       },
-  'tab-types':            { label: 'Types Tab',       icon: Settings     },
-};
-
-function HighlightBadge({ id }) {
-  const cfg = HIGHLIGHT_LABELS[id] || { label: id, icon: Eye };
-  const Icon = cfg.icon;
-  return (
-    <span className="flex items-center gap-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded px-1.5 py-0.5 text-[10px] font-medium">
-      <Icon className="w-2.5 h-2.5" /> {cfg.label}
-    </span>
-  );
-}
 
 export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, onClose }) {
   const navigate = useNavigate();
@@ -103,19 +75,12 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
   // Define these variables unconditionally for hooks
   let config = {};
   let tasks = [];
-  let highlights = [];
   if (module) {
     config = LESSON_CONFIG[moduleId]?.[lessonIndex] || {};
     tasks = config.tasks || [];
-    highlights = config.highlight || [];
   }
 
-  // Expose highlights globally so Planning toolbar can read them
-  useEffect(() => {
-    if (!module) return;
-    window.__lessonHighlights__ = highlights;
-    return () => { window.__lessonHighlights__ = []; };
-  }, [highlights.join(','), module]);
+
 
   // Snap map to lesson location
   useEffect(() => {
@@ -204,15 +169,6 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
           {lesson.content}
         </div>
 
-        {/* Highlighted buttons legend */}
-        {highlights.length > 0 && (
-          <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-2.5">
-            <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-1.5">📍 Look for these buttons</p>
-            <div className="flex flex-wrap gap-1.5">
-              {highlights.map(h => <HighlightBadge key={h} id={h} />)}
-            </div>
-          </div>
-        )}
 
         {/* Interactive tasks */}
         {tasks.length > 0 && (

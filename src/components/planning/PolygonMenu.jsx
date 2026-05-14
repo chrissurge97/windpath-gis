@@ -174,15 +174,9 @@ export default function PolygonMenu({ feature, layer, onApply, onDelete, onClose
           >
             ✏ Edit Vertices
           </button>
-          <button
-            onClick={() => onEditVertices()}
-            className="flex-1 py-1.5 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 border border-cyan-500/40 text-xs font-medium rounded-lg transition-colors"
-            title="Drag mode: click and drag the polygon to move it"
-          >
-            🖱 Move
-          </button>
         </div>
       )}
+      <p className="text-[9px] text-slate-600 text-center mt-1">Drag polygon on map to move it</p>
     </div>
   );
 }
