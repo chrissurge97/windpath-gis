@@ -386,7 +386,8 @@ export default function Planning() {
 
   const selectedTurbineType = turbineTypes.find(t => t.id === selectedTurbineTypeId) || turbineTypes[0];
   const selectedCableType = cableTypes.find(t => t.id === selectedCableTypeId) || cableTypes[0];
-  const { handleClassifyConfirm } = useImportClassify({ layers, selectedTurbineTypeId, selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers });
+  
+  const handleClassifyConfirm = useImportClassify(selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers);
 
   // ── Notify lesson guide of current mode/tab for task tracking ───────────
   useEffect(() => {
