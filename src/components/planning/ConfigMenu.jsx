@@ -21,6 +21,7 @@ export default function ConfigMenu({
   const FEATURE_LIST = [
     { id: 'windAnalysis', label: 'Wind Analysis', description: 'Enable wind speed distribution and Weibull parameters' },
     { id: 'irelandMapLock', label: 'Ireland Map Lock', description: 'Restrict map boundaries to Ireland' },
+    { id: 'importClassifier', label: 'Import Classifier', description: 'Show classification modal when importing files with point or line features (classify as turbines or cables)', beta: true },
   ];
 
   return (
@@ -64,13 +65,18 @@ export default function ConfigMenu({
           {/* Features Tab */}
           {tab === 'features' && (
             <div className="space-y-3">
-              {FEATURE_LIST.map(({ id, label, description }) => (
+              {FEATURE_LIST.map(({ id, label, description, beta }) => (
                 <div
                   key={id}
                   className="flex items-center justify-between p-3 bg-slate-800/50 border border-slate-700 rounded-lg"
                 >
                   <div>
-                    <p className="text-sm font-medium text-white">{label}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-white">{label}</p>
+                      {beta && (
+                        <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded">BETA</span>
+                      )}
+                    </div>
                     <p className="text-xs text-slate-500 mt-1">{description}</p>
                   </div>
                   <button

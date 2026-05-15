@@ -12,32 +12,39 @@ function haversineM(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export function useImportClassify(selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers) {
+function calcLineLength(coords) {
+  let len = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    len += haversineM(coords[i][1], coords[i][0], coords[i + 1][1], coords[i + 1][0]);
+  }
+  return +len.toFixed(0);
+}
+
+export function useImportClassify(layers, selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers) {
   return useCallback((decisions) => {
-    const turbineLayer = setLayers.__turbineLayer;
-    const cableLayer = setLayers.__cableLayer;
-    const layers = setLayers.__layers;
+    const turbineLayer = layers.find(l => l.type === 'turbine');
+    const cableLayer = layers.find(l => l.type === 'cable');
     
     let turbineFeaturesToAdd = [];
     let cableFeaturesToAdd = [];
-    const toAdd = [];
+    const layersToAdd = [];
 
     const isPoint = (f) => f.geometry?.type === 'Point';
     const isLine = (f) => f.geometry?.type === 'LineString' || f.geometry?.type === 'MultiLineString';
 
     for (const { layer, classification } of decisions) {
       if (classification === 'keep') {
-        toAdd.push(layer);
+        layersToAdd.push(layer);
         continue;
       }
 
-      if (classification === 'turbine') {
+      if (classification === 'turbine' && turbineLayer) {
         const pts = layer.features?.filter(isPoint) || [];
         const newTurbines = pts.map((f, i) => ({
           ...f,
           id: crypto.randomUUID(),
           properties: {
-            name: f.properties?.name || `T${(turbineLayer?.features?.length || 0) + turbineFeaturesToAdd.length + i + 1}`,
+            name: f.properties?.name || `T${(turbineLayer.features?.length || 0) + turbineFeaturesToAdd.length + i + 1}`,
             turbine_type_id: selectedTurbineType?.id,
             hub_height: selectedTurbineType?.hub_height_m || 100,
             rotor_diameter: selectedTurbineType?.rotor_diameter_m || 120,
@@ -47,9 +54,9 @@ export function useImportClassify(selectedTurbineType, selectedCableTypeId, setL
         }));
         turbineFeaturesToAdd = [...turbineFeaturesToAdd, ...newTurbines];
         const rest = layer.features?.filter(f => !isPoint(f)) || [];
-        if (rest.length > 0) toAdd.push({ ...layer, features: rest });
+        if (rest.length > 0) layersToAdd.push({ ...layer, features: rest });
 
-      } else if (classification === 'cable') {
+      } else if (classification === 'cable' && cableLayer) {
         const lines = layer.features?.filter(isLine) || [];
         const flattened = lines.flatMap(f => {
           if (f.geometry?.type === 'MultiLineString') {
@@ -60,26 +67,27 @@ export function useImportClassify(selectedTurbineType, selectedCableTypeId, setL
               properties: {
                 name: f.properties?.name ? `${f.properties.name}_${idx + 1}` : `Cable ${cableFeaturesToAdd.length + idx + 1}`,
                 cable_type_id: selectedCableTypeId,
-                length_m: coords.reduce((sum, p, i, arr) => i === 0 ? 0 : sum + haversineM(arr[i-1][1], arr[i-1][0], p[1], p[0]), 0),
+                length_m: calcLineLength(coords),
                 ...Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name', 'cable_type_id', 'length_m'].includes(k))),
               },
             }));
           }
-          const length_m = f.geometry?.coordinates.reduce((sum, p, i, arr) => i === 0 ? 0 : sum + haversineM(arr[i-1][1], arr[i-1][0], p[1], p[0]), 0);
           return [{
             ...f,
             id: crypto.randomUUID(),
             properties: {
               name: f.properties?.name || `Cable ${cableFeaturesToAdd.length + 1}`,
               cable_type_id: selectedCableTypeId,
-              length_m: length_m,
+              length_m: calcLineLength(f.geometry.coordinates),
               ...Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name', 'cable_type_id', 'length_m'].includes(k))),
             },
           }];
         });
         cableFeaturesToAdd = [...cableFeaturesToAdd, ...flattened];
         const rest = layer.features?.filter(f => !isLine(f)) || [];
-        if (rest.length > 0) toAdd.push({ ...layer, features: rest });
+        if (rest.length > 0) layersToAdd.push({ ...layer, features: rest });
+      } else {
+        layersToAdd.push(layer);
       }
     }
 
@@ -91,8 +99,8 @@ export function useImportClassify(selectedTurbineType, selectedCableTypeId, setL
       if (cableFeaturesToAdd.length > 0) {
         next = next.map(l => l.type === 'cable' ? { ...l, features: [...(l.features || []), ...cableFeaturesToAdd] } : l);
       }
-      return [...next, ...toAdd];
+      return [...next, ...layersToAdd];
     });
     setImportClassifyLayers(null);
-  }, [selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers]);
+  }, [layers, selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers]);
 }

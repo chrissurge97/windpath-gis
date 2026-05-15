@@ -349,9 +349,10 @@ export default function Planning() {
   const [showConfigMenu, setShowConfigMenu] = useState(false);
   const [features, setFeatures] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('app_features') || '{"windAnalysis":true,"irelandMapLock":true}');
+      const saved = JSON.parse(localStorage.getItem('app_features') || '{}');
+      return { windAnalysis: true, irelandMapLock: true, importClassifier: true, ...saved };
     } catch {
-      return { windAnalysis: true, irelandMapLock: true };
+      return { windAnalysis: true, irelandMapLock: true, importClassifier: true };
     }
   });
   const mapRef = useRef(null);
@@ -387,7 +388,7 @@ export default function Planning() {
   const selectedTurbineType = turbineTypes.find(t => t.id === selectedTurbineTypeId) || turbineTypes[0];
   const selectedCableType = cableTypes.find(t => t.id === selectedCableTypeId) || cableTypes[0];
   
-  const handleClassifyConfirm = useImportClassify(selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers);
+  const handleClassifyConfirm = useImportClassify(layers, selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers);
 
   // ── Notify lesson guide of current mode/tab for task tracking ───────────
   useEffect(() => {
@@ -831,7 +832,7 @@ export default function Planning() {
         const hasClassifiable = newLayers.some(l =>
           l.features?.some(f => f.geometry?.type === 'Point' || f.geometry?.type === 'LineString' || f.geometry?.type === 'MultiLineString')
         );
-        if (hasClassifiable) {
+        if (hasClassifiable && features.importClassifier) {
           setImportClassifyLayers(newLayers);
         } else {
           setLayers(prev => [...prev, ...newLayers]);
