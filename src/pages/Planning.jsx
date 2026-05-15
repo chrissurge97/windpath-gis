@@ -415,12 +415,12 @@ export default function Planning() {
   useEffect(() => {
     if (!currentProjectId) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    // Keep context snapshot fresh so DataTables always sees live data
     const data = { id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams, globalRadii };
-    updateProjectState(data);
+    // Defer BOTH the context update and localStorage write — avoids re-render cascade on large imports
     saveTimer.current = setTimeout(() => {
+      updateProjectState(data);
       saveProject(currentProjectId, data);
-    }, 800);
+    }, 500);
     return () => clearTimeout(saveTimer.current);
   }, [layers, turbineTypes, cableTypes, projectName, currentProjectId, windParams]);
 
