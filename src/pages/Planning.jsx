@@ -256,7 +256,7 @@ function MapBoundsEnforcer({ enabled }) {
 export default function Planning() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentProjectId, currentProject, switchProject, clearProject } = usePlanningProject();
+  const { currentProjectId, currentProject, switchProject, updateProjectState, clearProject } = usePlanningProject();
   const exerciseId = location.state?.exerciseId || null;
   const lessonIndex = location.state?.lessonIndex ?? null;
   const lessonProjectId = location.state?.lessonProjectId || null;
@@ -411,8 +411,11 @@ export default function Planning() {
   useEffect(() => {
     if (!currentProjectId) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
+    // Keep context snapshot fresh so DataTables always sees live data
+    const data = { id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams, globalRadii };
+    updateProjectState(data);
     saveTimer.current = setTimeout(() => {
-      saveProject(currentProjectId, { id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams, globalRadii });
+      saveProject(currentProjectId, data);
     }, 800);
     return () => clearTimeout(saveTimer.current);
   }, [layers, turbineTypes, cableTypes, projectName, currentProjectId, windParams]);
@@ -770,25 +773,57 @@ export default function Planning() {
 
   const handleImport = () => {
     const input = document.createElement('input');
-    input.type = 'file'; input.accept = '.json,.geojson,.shp,.zip';
+    input.type = 'file';
+    input.accept = '.json,.geojson,.shp,.zip,.csv';
+    input.multiple = true;
     input.onchange = async (e) => {
-      const file = e.target.files[0]; if (!file) return;
-      const name = file.name.toLowerCase();
-      if (name.endsWith('.shp') || name.endsWith('.zip')) {
-        const buf = await file.arrayBuffer();
-        const geojson = await importShapefile(buf, file.name);
-        const layer = geoJSONToLayer(geojson, file.name.replace(/\.[^.]+$/, ''));
-        setLayers(prev => [...prev, layer]);
-      } else {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          try {
-            const data = JSON.parse(ev.target.result);
-            const layer = geoJSONToLayer(data, file.name.replace(/\.[^.]+$/, ''));
-            setLayers(prev => [...prev, layer]);
-          } catch { alert('Invalid file'); }
-        };
-        reader.readAsText(file);
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      const newLayers = [];
+      for (const file of files) {
+        const fname = file.name.toLowerCase();
+        const baseName = file.name.replace(/\.[^.]+$/, '');
+        try {
+          if (fname.endsWith('.shp') || fname.endsWith('.zip')) {
+            const buf = await file.arrayBuffer();
+            // importShapefile now returns an array of layers for multi-layer ZIPs
+            const result = await importShapefile(buf, file.name);
+            if (Array.isArray(result)) {
+              result.forEach(geojson => {
+                const l = geoJSONToLayer(geojson, geojson._layerName || baseName);
+                newLayers.push(l);
+              });
+            } else {
+              newLayers.push(geoJSONToLayer(result, baseName));
+            }
+          } else if (fname.endsWith('.json') || fname.endsWith('.geojson')) {
+            const text = await file.text();
+            const data = JSON.parse(text);
+            newLayers.push(geoJSONToLayer(data, baseName));
+          } else if (fname.endsWith('.csv')) {
+            const text = await file.text();
+            const lines = text.split('\n').filter(Boolean);
+            const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
+            const features = [];
+            for (let i = 1; i < lines.length; i++) {
+              const vals = lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g)?.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"')) || [];
+              const row = Object.fromEntries(headers.map((h, j) => [h, vals[j] || '']));
+              if (!row.lat || !row.lng) continue;
+              const lat = parseFloat(row.lat), lng = parseFloat(row.lng);
+              if (isNaN(lat) || isNaN(lng)) continue;
+              features.push({ id: crypto.randomUUID(), layerId: baseName, geometry: { type: 'Point', coordinates: [lng, lat] }, properties: { name: row.name || `Feature ${i}`, notes: row.notes || '' } });
+            }
+            if (features.length > 0) {
+              newLayers.push({ id: crypto.randomUUID(), name: baseName, type: 'polygon', visible: true, color: '#8b5cf6', fillOpacity: 0.2, strokeOpacity: 0.8, strokeWeight: 2, no_turbines: false, features });
+            }
+          }
+        } catch (err) {
+          console.error('Import error for', file.name, err);
+          alert(`Could not import ${file.name}: ${err.message}`);
+        }
+      }
+      if (newLayers.length > 0) {
+        setLayers(prev => [...prev, ...newLayers]);
       }
     };
     input.click();

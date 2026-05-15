@@ -256,11 +256,22 @@ export default function DataTables() {
   const [localTurbineTypes, setLocalTurbineTypes] = useState(null);
   const [localCableTypes, setLocalCableTypes] = useState(null);
 
+  // Always prefer the live in-memory context snapshot for the active project
+  // (avoids stale reads after switching to DataTables before autosave fires)
   const project = useMemo(() => {
     if (!selectedProjectId) return null;
     if (selectedProjectId === currentProjectId && currentProject) return currentProject;
     return loadProject(selectedProjectId);
   }, [selectedProjectId, currentProjectId, currentProject]);
+
+  // Keep local state in sync with context changes (e.g. turbine placed in Planning)
+  useEffect(() => {
+    if (selectedProjectId === currentProjectId && currentProject) {
+      if (currentProject.layers) setLocalLayers(currentProject.layers);
+      if (currentProject.turbineTypes) setLocalTurbineTypes(currentProject.turbineTypes);
+      if (currentProject.cableTypes) setLocalCableTypes(currentProject.cableTypes);
+    }
+  }, [currentProject, selectedProjectId, currentProjectId]);
 
   const projectsList = useMemo(() => {
     const index = loadProjectIndex();
@@ -271,12 +282,15 @@ export default function DataTables() {
     if (!selectedProjectId && currentProjectId) setSelectedProjectId(currentProjectId);
   }, [currentProjectId]);
 
-  // Sync local state from project
+  // Initial sync when switching to a different project via dropdown
   useEffect(() => {
-    if (project?.layers) setLocalLayers(project.layers);
-    if (project?.turbineTypes) setLocalTurbineTypes(project.turbineTypes);
-    if (project?.cableTypes) setLocalCableTypes(project.cableTypes);
-  }, [project]);
+    if (selectedProjectId !== currentProjectId) {
+      const p = loadProject(selectedProjectId);
+      if (p?.layers) setLocalLayers(p.layers);
+      if (p?.turbineTypes) setLocalTurbineTypes(p.turbineTypes);
+      if (p?.cableTypes) setLocalCableTypes(p.cableTypes);
+    }
+  }, [selectedProjectId]);
 
   const layers = localLayers || project?.layers || [];
   const totalFeatures = layers.reduce((s, l) => s + (l.features?.length || 0), 0);
