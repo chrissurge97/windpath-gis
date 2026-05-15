@@ -41,6 +41,8 @@ import TextOverlay from '@/components/planning/TextOverlay';
 import SubstationMarker from '@/components/planning/SubstationMarker';
 import { EXERCISES } from '@/lib/exercises';
 import ExportMenu from '@/components/planning/ExportMenu';
+import ImportClassifyModal from '@/components/planning/ImportClassifyModal';
+import { useImportClassify } from '@/lib/useImportClassify';
 import LayerImportExport from '@/components/planning/LayerImportExport';
 import LayerList from '@/components/planning/LayerList';
 import NewZoneDialog from '@/components/planning/NewZoneDialog';
@@ -342,6 +344,8 @@ export default function Planning() {
 
 
 
+  const [importClassifyLayers, setImportClassifyLayers] = useState(null); // layers awaiting classification
+  const { handleClassifyConfirm } = useImportClassify({ layers, selectedTurbineTypeId, selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers });
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showConfigMenu, setShowConfigMenu] = useState(false);
   const [features, setFeatures] = useState(() => {
@@ -823,7 +827,14 @@ export default function Planning() {
         }
       }
       if (newLayers.length > 0) {
-        setLayers(prev => [...prev, ...newLayers]);
+        const hasClassifiable = newLayers.some(l =>
+          l.features?.some(f => f.geometry?.type === 'Point' || f.geometry?.type === 'LineString' || f.geometry?.type === 'MultiLineString')
+        );
+        if (hasClassifiable) {
+          setImportClassifyLayers(newLayers);
+        } else {
+          setLayers(prev => [...prev, ...newLayers]);
+        }
       }
     };
     input.click();
@@ -1922,6 +1933,14 @@ export default function Planning() {
         />
       </div>
       <ConfigMenuWrapper isOpen={showConfigMenu} onClose={() => setShowConfigMenu(false)} features={features} onFeatureToggle={handleFeatureToggle} onTurbineAdded={(t) => setTurbineTypes(prev => [...prev, t])} onCableAdded={(c) => setCableTypes(prev => [...prev, c])} />
+
+      {importClassifyLayers && (
+        <ImportClassifyModal
+          layers={importClassifyLayers}
+          onConfirm={handleClassifyConfirm}
+          onClose={() => setImportClassifyLayers(null)}
+        />
+      )}
 
       {showNewZoneDialog && (
         <NewZoneDialog
