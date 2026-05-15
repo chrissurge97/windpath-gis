@@ -2,7 +2,7 @@
  * Hook that handles the "classify imported features" flow.
  * Returns { handleClassifyConfirm, calcLineLength } ready to use in Planning.
  */
-import { useCallback } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 
 function haversineM(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -21,7 +21,21 @@ function calcLineLength(coords) {
 }
 
 export function useImportClassify({ layers, selectedTurbineTypeId, selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers }) {
+  // Use refs so the callback never goes stale and doesn't trigger re-renders
+  const layersRef = useRef(layers);
+  const turbineTypeIdRef = useRef(selectedTurbineTypeId);
+  const turbineTypeRef = useRef(selectedTurbineType);
+  const cableTypeIdRef = useRef(selectedCableTypeId);
+  useEffect(() => { layersRef.current = layers; }, [layers]);
+  useEffect(() => { turbineTypeIdRef.current = selectedTurbineTypeId; }, [selectedTurbineTypeId]);
+  useEffect(() => { turbineTypeRef.current = selectedTurbineType; }, [selectedTurbineType]);
+  useEffect(() => { cableTypeIdRef.current = selectedCableTypeId; }, [selectedCableTypeId]);
+
   const handleClassifyConfirm = useCallback((decisions) => {
+    const layers = layersRef.current;
+    const selectedTurbineTypeId = turbineTypeIdRef.current;
+    const selectedTurbineType = turbineTypeRef.current;
+    const selectedCableTypeId = cableTypeIdRef.current;
     const turbLayer = layers.find(l => l.type === 'turbine');
     const cableLayerRef = layers.find(l => l.type === 'cable');
     const toAdd = [];
@@ -97,7 +111,7 @@ export function useImportClassify({ layers, selectedTurbineTypeId, selectedTurbi
       return [...next, ...toAdd];
     });
     setImportClassifyLayers(null);
-  }, [layers, selectedTurbineTypeId, selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers]);
+  }, [setLayers, setImportClassifyLayers]);
 
   return { handleClassifyConfirm };
 }
