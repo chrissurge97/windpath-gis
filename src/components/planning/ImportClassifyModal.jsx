@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Wind, Zap, Layers, ChevronRight } from 'lucide-react';
+import { X, Wind, Zap, Layers, ChevronRight, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
 
 /**
  * Modal shown after importing layers that contain Point or LineString features.
@@ -34,6 +35,19 @@ export default function ImportClassifyModal({ layers, onConfirm, onClose }) {
     if (lines) parts.push(`${lines} line${lines !== 1 ? 's' : ''}`);
     if (polys) parts.push(`${polys} polygon${polys !== 1 ? 's' : ''}`);
     return parts.join(', ');
+  };
+
+  // Check if any features in a layer have non-WGS84 coords (projected CRS)
+  const hasProjectedCoords = (layer) => {
+    return layer.features?.some(f => {
+      const coords = f.geometry?.coordinates;
+      if (!coords) return false;
+      const flat = [coords].flat(Infinity);
+      for (let i = 0; i < flat.length - 1; i += 2) {
+        if (Math.abs(flat[i]) > 180 || Math.abs(flat[i + 1]) > 90) return true;
+      }
+      return false;
+    }) || false;
   };
 
   const suggestClass = (layer) => {
@@ -78,20 +92,32 @@ export default function ImportClassifyModal({ layers, onConfirm, onClose }) {
           {classifiable.map(layer => {
             const suggested = suggestClass(layer);
             const current = decisions[layer.id];
+            const projectedWarning = hasProjectedCoords(layer);
             return (
-              <div key={layer.id} className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+              <div key={layer.id} className={cn("bg-slate-800/60 border rounded-xl p-4", projectedWarning ? "border-amber-600/40" : "border-slate-700")}>
                 <div className="flex items-start gap-3 mb-3">
                   <div className="w-3 h-3 rounded-sm mt-1 shrink-0" style={{ background: layer.color || '#8b5cf6' }} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-white truncate">{layer.name}</p>
                     <p className="text-[11px] text-slate-500">{featureSummary(layer)}</p>
-                    {suggested !== 'keep' && (
+                    {suggested !== 'keep' && !projectedWarning && (
                       <p className="text-[10px] text-slate-600 mt-0.5">
                         Suggested: <span className={suggested === 'turbine' ? 'text-emerald-500' : 'text-orange-500'}>{suggested}</span>
                       </p>
                     )}
                   </div>
                 </div>
+                {projectedWarning && (
+                  <div className="flex items-start gap-2 bg-amber-900/30 border border-amber-600/40 rounded-lg px-3 py-2 mb-3">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[11px] font-semibold text-amber-300">Projected coordinates detected</p>
+                      <p className="text-[10px] text-amber-500 mt-0.5">
+                        This layer appears to use a projected CRS (e.g. Irish Grid, ITM) rather than WGS84/GPS. Features cannot be placed on the map until re-exported as WGS84. You can still import as a layer for reference, but turbine/cable classification will skip invalid features.
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-2">
                   {OPTS.map(opt => {
                     const Icon = opt.icon;

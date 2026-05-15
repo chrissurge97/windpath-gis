@@ -1309,7 +1309,21 @@ export default function Planning() {
                             if (exclusionHit) {
                               setExclusionWarning({ layerName: exclusionHit.layer.name, featureName: exclusionHit.feature.properties?.name || exclusionHit.layer.name });
                               setTimeout(() => setExclusionWarning(null), 5000);
-                              return; // Don't allow the move
+                              // Snap marker back to original position
+                              const [origLng, origLat] = f.geometry.coordinates;
+                              e.target.setLatLng([origLat, origLng]);
+                              return;
+                            }
+                            // Check turbine radii separation zones
+                            const otherTurbines = turbines.filter(t => t.id !== f.id);
+                            const radiiHit = checkTurbineRadii(newLatLng.lat, newLatLng.lng, otherTurbines, turbineTypes, globalRadii);
+                            if (radiiHit) {
+                              setExclusionWarning({ layerName: `${radiiHit.radiusLabel} separation zone`, featureName: radiiHit.turbineName, isRadii: true, radiusM: radiiHit.radiusM });
+                              setTimeout(() => setExclusionWarning(null), 5000);
+                              // Snap marker back to original position
+                              const [origLng, origLat] = f.geometry.coordinates;
+                              e.target.setLatLng([origLat, origLng]);
+                              return;
                             }
                           }
                           updateLayer(layer.id, {
