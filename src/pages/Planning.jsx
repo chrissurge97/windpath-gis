@@ -345,7 +345,6 @@ export default function Planning() {
 
 
   const [importClassifyLayers, setImportClassifyLayers] = useState(null); // layers awaiting classification
-  const { handleClassifyConfirm } = useImportClassify({ layers, selectedTurbineTypeId, selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers });
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showConfigMenu, setShowConfigMenu] = useState(false);
   const [features, setFeatures] = useState(() => {
@@ -387,6 +386,7 @@ export default function Planning() {
 
   const selectedTurbineType = turbineTypes.find(t => t.id === selectedTurbineTypeId) || turbineTypes[0];
   const selectedCableType = cableTypes.find(t => t.id === selectedCableTypeId) || cableTypes[0];
+  const { handleClassifyConfirm } = useImportClassify({ layers, selectedTurbineTypeId, selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers });
 
   // ── Notify lesson guide of current mode/tab for task tracking ───────────
   useEffect(() => {
