@@ -7,7 +7,6 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { PlanningProvider } from '@/lib/PlanningContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import AppLayout from '@/components/layout/AppLayout';
-import Dashboard from '@/pages/Dashboard';
 import Learn from '@/pages/Learn';
 import Planning from '@/pages/Planning';
 
@@ -40,7 +39,7 @@ const AuthenticatedApp = () => {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Learn />} />
         <Route path="/learn" element={<Learn />} />
         <Route path="/planning" element={<Planning />} />
 

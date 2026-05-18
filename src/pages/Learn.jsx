@@ -1,13 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { MODULES, BADGES } from '@/lib/trainingModules';
+import { MODULES } from '@/lib/trainingModules';
 import { saveLessonProject } from '@/lib/lessonProjects';
 import { EXERCISES } from '@/lib/exercises';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import confetti from 'canvas-confetti';
 import {
   Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot,
   Award, Star, Trophy, CheckCircle2, ChevronRight, ChevronLeft, BarChart2, ExternalLink
@@ -23,16 +20,6 @@ const COLOR_MAP = {
   yellow: { bg: 'bg-yellow-500/10',  border: 'border-yellow-500/30',  text: 'text-yellow-400',  badge: 'bg-yellow-500'  },
 };
 
-// Badge IDs awarded per module
-const MODULE_BADGE = {
-  land_acquisition: 'land_mapper',
-  turbine_placement: 'turbine_placer',
-  cable_routing: 'cable_runner',
-  wind_resource: 'wind_analyst',
-  layer_data: 'layer_master',
-  site_constraints: 'site_surveyor',
-};
-
 function LessonView({ module, onComplete }) {
   const [lessonIndex, setLessonIndex] = useState(0);
   const navigate = useNavigate();
@@ -40,7 +27,6 @@ function LessonView({ module, onComplete }) {
   const lesson = module.lessons[lessonIndex];
   const isLast = lessonIndex === module.lessons.length - 1;
 
-  // Each lesson can open in the planner — saves a sandboxed lesson project first
   const openInPlanner = () => {
     const project = saveLessonProject(module.id, lessonIndex);
     navigate('/planning', { state: { lessonProjectId: project.id, moduleId: module.id, lessonIndex } });
@@ -48,7 +34,7 @@ function LessonView({ module, onComplete }) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Progress dots — clickable */}
+      {/* Progress dots */}
       <div className="flex gap-2 mb-6">
         {module.lessons.map((_, i) => (
           <button
@@ -81,7 +67,6 @@ function LessonView({ module, onComplete }) {
             {lesson.content}
           </div>
 
-          {/* Open in Planner button — shown on every lesson */}
           <button
             onClick={openInPlanner}
             className={cn(
@@ -109,7 +94,7 @@ function LessonView({ module, onComplete }) {
           onClick={() => isLast ? onComplete() : setLessonIndex(i => i + 1)}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium text-white transition-colors"
         >
-          {isLast ? 'Go to Full Exercise' : 'Next Lesson'}
+          {isLast ? 'Go to Exercise' : 'Next Lesson'}
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
@@ -120,80 +105,18 @@ function LessonView({ module, onComplete }) {
 export default function Learn() {
   const location = useLocation();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
-  const { data: progressList } = useQuery({
-    queryKey: ['userProgress'],
-    queryFn: () => base44.entities.UserProgress.list(),
-    initialData: [],
-  });
-
-  const progress = progressList[0] || {
-    xp: 0, level: 1, completed_modules: [], badges: [],
-    completed_quizzes: [], quiz_scores: {}, current_module: MODULES[0].id,
-  };
-
-  const initialModuleId = location.state?.moduleId || progress.current_module || MODULES[0].id;
+  const initialModuleId = location.state?.moduleId || MODULES[0].id;
   const [selectedModuleId, setSelectedModuleId] = useState(initialModuleId);
-  const [view, setView] = useState('lesson'); // 'lesson' | 'exercise'
+  const [view, setView] = useState('lesson');
 
   useEffect(() => {
     if (location.state?.moduleId) {
       setSelectedModuleId(location.state.moduleId);
-      // If returning from Planning with exercise completed, trigger XP award
-      if (location.state?.exerciseCompleted) {
-        handleScenarioComplete(location.state.moduleId);
-      }
     }
   }, [location.state]);
 
   const selectedModule = MODULES.find(m => m.id === selectedModuleId) || MODULES[0];
-
-  const updateProgress = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.UserProgress.update(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['userProgress'] }),
-  });
-
-  // Called when the exercise is completed (from Planning or inline)
-  const handleScenarioComplete = (moduleIdOverride) => {
-    const moduleId = moduleIdOverride || selectedModuleId;
-    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-
-    const wasAlreadyCompleted = progress.completed_modules?.includes(moduleId);
-    if (wasAlreadyCompleted) return; // already awarded XP
-
-    const mod = MODULES.find(m => m.id === moduleId) || selectedModule;
-    const newCompleted = [...(progress.completed_modules || []), moduleId];
-    const xpGain = mod.xp_reward;
-    const newXP = (progress.xp || 0) + (xpGain || 0);
-    const newLevel = Math.floor(newXP / 200) + 1;
-
-    const newBadges = [...(progress.badges || [])];
-    const addBadge = (b) => { if (!newBadges.includes(b)) newBadges.push(b); };
-
-    addBadge('first_steps');
-    const moduleBadge = MODULE_BADGE[moduleId];
-    if (moduleBadge) addBadge(moduleBadge);
-    if (newCompleted.length === MODULES.length) addBadge('completionist');
-
-    const nextModuleIdx = MODULES.findIndex(m => !newCompleted.includes(m.id));
-    const nextModule = nextModuleIdx >= 0 ? MODULES[nextModuleIdx].id : moduleId;
-
-    if (progress.id) {
-      updateProgress.mutate({
-        id: progress.id,
-        data: {
-          xp: newXP,
-          level: newLevel,
-          completed_modules: newCompleted,
-          badges: newBadges,
-          current_module: nextModule,
-        },
-      });
-    }
-  };
-
-  const isCompleted = progress.completed_modules?.includes(selectedModuleId);
   const colors = COLOR_MAP[selectedModule.color] || COLOR_MAP.blue;
 
   return (
@@ -203,10 +126,8 @@ export default function Learn() {
         <div className="p-3 space-y-1">
           <p className="text-[10px] text-slate-500 uppercase tracking-wider px-2 pb-2">Training Scenarios</p>
           {MODULES.map((mod) => {
-            const done = progress.completed_modules?.includes(mod.id);
             const Icon = ICON_MAP[mod.icon] || BookOpen;
             const isActive = mod.id === selectedModuleId;
-
             return (
               <button
                 key={mod.id}
@@ -216,11 +137,8 @@ export default function Learn() {
                   isActive ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'
                 )}
               >
-                <div className={cn(
-                  'w-6 h-6 rounded flex items-center justify-center shrink-0',
-                  done ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'
-                )}>
-                  {done ? <CheckCircle2 className="w-3 h-3" /> : <Icon className="w-3 h-3" />}
+                <div className={cn('w-6 h-6 rounded flex items-center justify-center shrink-0', isActive ? 'bg-slate-700 text-slate-200' : 'bg-slate-800 text-slate-500')}>
+                  <Icon className="w-3 h-3" />
                 </div>
                 <span className="truncate font-medium">{mod.title}</span>
               </button>
@@ -239,14 +157,6 @@ export default function Learn() {
           <div className="flex-1 min-w-0">
             <h1 className="font-bold text-white truncate">{selectedModule.title}</h1>
             <p className="text-xs text-slate-400 truncate">{selectedModule.subtitle}</p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {isCompleted && (
-              <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full">
-                <CheckCircle2 className="w-3 h-3" /> Completed
-              </span>
-            )}
-            <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded-full">+{selectedModule.xp_reward} XP</span>
           </div>
           {/* Tabs */}
           <div className="flex rounded-lg overflow-hidden border border-slate-800 shrink-0">
@@ -290,7 +200,6 @@ export default function Learn() {
                       <h2 className="text-xl font-bold text-white mb-2">{ex.title}</h2>
                       <p className="text-slate-400 text-sm mb-6">{ex.intro}</p>
 
-                      {/* Step preview */}
                       <div className="space-y-2 mb-6">
                         {ex.steps.map((step, i) => (
                           <div key={i} className="flex items-start gap-3 bg-slate-800/60 rounded-xl px-3 py-2.5 border border-slate-700">
@@ -302,7 +211,7 @@ export default function Learn() {
 
                       <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 mb-4">
                         <p className="text-xs text-emerald-300 leading-relaxed">
-                          <strong>How it works:</strong> Click the button below to open the real Planning Tool with a step-by-step guide floating over the map. Complete each step using the full tool — the guide detects your progress automatically and lets you advance when done.
+                          <strong>How it works:</strong> Click the button below to open the Planning Tool with a step-by-step guide floating over the map. Complete each step — the guide detects your progress automatically.
                         </p>
                       </div>
 
@@ -312,13 +221,6 @@ export default function Learn() {
                       >
                         Open Exercise in Planning Tool <ExternalLink className="w-4 h-4" />
                       </button>
-
-                      {isCompleted && (
-                        <div className="mt-4 flex items-center gap-2 text-sm text-emerald-400 bg-emerald-500/10 rounded-xl px-4 py-3 border border-emerald-500/30">
-                          <CheckCircle2 className="w-4 h-4 shrink-0" />
-                          Exercise completed — XP and badge awarded!
-                        </div>
-                      )}
                     </div>
                   );
                 })()}
