@@ -939,7 +939,9 @@ export default function Planning() {
   return (
     <div className="flex flex-col h-full bg-slate-950">
       {/* Toolbar */}
-      <div className="flex items-center gap-1.5 px-2 py-1.5 bg-slate-900 border-b border-slate-800 shrink-0 flex-wrap min-h-[40px]">
+      <div className="flex flex-col bg-slate-900 border-b border-slate-800 shrink-0">
+        {/* Row 1: File / project controls */}
+        <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-slate-800/60 flex-wrap">
         <Map className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
         <div data-lesson-id="btn-file">
           <ProjectFileButtons
@@ -957,8 +959,30 @@ export default function Planning() {
           className="bg-slate-800/60 text-[11px] font-medium text-white border border-slate-700 rounded px-2 py-1 outline-none w-32 shrink-0"
           placeholder="Project name" />
         
-        <div className="h-4 w-px bg-slate-700 mx-0.5 shrink-0" />
+        <div className="ml-auto flex items-center gap-1 shrink-0">
+          <button onClick={() => setShowConfigMenu(!showConfigMenu)} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-purple-400 hover:border-purple-500/40 shrink-0">
+            <Settings className="w-3 h-3" /> Config
+          </button>
+          <button onClick={() => { if (!window.confirm('Clear all features from this project?')) return; setLayers([createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }),createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }),createLayer({ name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8 }),createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 })]); setWindParams({ k: 2.0, lambda: 7.0 }); }} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500/40 shrink-0">
+            <Trash2 className="w-3 h-3" /> Clear
+          </button>
+          <button data-lesson-id="btn-import" onClick={handleImport} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-white shrink-0">
+            <Upload className="w-3 h-3" /> Import
+          </button>
+          <div data-lesson-id="btn-export">
+            <ExportMenu
+              onExportProject={(crs) => { const geojson = exportProjectGeoJSON({ name: projectName, description: '', layers, turbineTypes, cableTypes, windParams }); const projected = reprojectGeoJSON(geojson, crs); downloadFile(JSON.stringify(projected, null, 2), `${projectName}-project.geojson`, 'application/json'); }}
+              onExportGeoJSON={(crs) => { const geojson = layersToGeoJSON(layers); const projected = reprojectGeoJSON(geojson, crs); downloadFile(JSON.stringify(projected, null, 2), `${projectName}.geojson`, 'application/json'); }}
+              onExportShapefile={(crs) => { const geojson = layersToGeoJSON(layers); const projected = reprojectGeoJSON(geojson, crs); projected._crsName = crs; const zipBytes = exportShapefile(projected, projectName); downloadFile(zipBytes, `${projectName}-shapefile.zip`, 'application/zip'); }}
+              onExportKML={() => { exportProjectKMZ({ name: projectName, layers }).then((kml) => downloadFile(kml, `${projectName}.kml`, 'application/vnd.google-earth.kml+xml')); }}
+              onExportCSV={(crs) => { const geojson = layersToGeoJSON(layers); const projected = reprojectGeoJSON(geojson, crs); const rows = [['layer','feature_id','name','geometry_type','x','y','notes'].join(',')]; const esc=(v)=>`"${String(v??'').replace(/"/g,'""')}"`; for(const f of projected.features){const g=f.geometry;let x='',y='';if(g.type==='Point'){[x,y]=g.coordinates;}else if(g.type==='Polygon'){[x,y]=g.coordinates[0][0];}else if(g.type==='LineString'){[x,y]=g.coordinates[0];}rows.push([esc(f.properties?._layerName||''),esc(f.id),esc(f.properties?.name||''),esc(g.type),esc(x),esc(y),esc(f.properties?.notes||'')].join(','));} const blob=new Blob([rows.join('\n')],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`${projectName}.csv`;a.click();URL.revokeObjectURL(url); }}
+              onExportPDF={() => exportProjectPDF({ projectName, turbines, turbineTypes, cables, cableTypes, substations, totalCapacity_mw, totalAEP, avgCapFactor, avgWindSpeed, totalCableLength, totalCableCost, windParams, monthlyData, layers, mapRef })} />
+          </div>
+        </div>
+        </div>{/* end row 1 */}
 
+        {/* Row 2: Mode / draw tools */}
+        <div className="flex items-center gap-1.5 px-2 py-1 flex-wrap">
         {/* Select button */}
         <button
           data-lesson-id="btn-select"
@@ -1035,70 +1059,8 @@ export default function Planning() {
             <RefreshCw className="w-3 h-3 animate-spin" /> Fetching…
           </span>
         }
-
-        <div className="ml-auto flex items-center gap-1 shrink-0">
-
-          <button onClick={() => setShowConfigMenu(!showConfigMenu)} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-purple-400 hover:border-purple-500/40 shrink-0">
-            <Settings className="w-3 h-3" /> Config
-          </button>
-          <button onClick={() => {
-            if (!window.confirm('Clear all features from this project?')) return;
-            setLayers([
-            createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }),
-            createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }),
-            createLayer({ name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8 }),
-            createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 })]
-            );
-            setWindParams({ k: 2.0, lambda: 7.0 });
-          }} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500/40 shrink-0">
-            <Trash2 className="w-3 h-3" /> Clear
-          </button>
-          <button
-            data-lesson-id="btn-import"
-            onClick={handleImport}
-            className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-white shrink-0">
-            <Upload className="w-3 h-3" /> Import
-          </button>
-          <div data-lesson-id="btn-export">
-          <ExportMenu
-              onExportProject={(crs) => {
-                const geojson = exportProjectGeoJSON({ name: projectName, description: '', layers, turbineTypes, cableTypes, windParams });
-                const projected = reprojectGeoJSON(geojson, crs);
-                downloadFile(JSON.stringify(projected, null, 2), `${projectName}-project.geojson`, 'application/json');
-              }}
-              onExportGeoJSON={(crs) => {
-                const geojson = layersToGeoJSON(layers);
-                const projected = reprojectGeoJSON(geojson, crs);
-                downloadFile(JSON.stringify(projected, null, 2), `${projectName}.geojson`, 'application/json');
-              }}
-              onExportShapefile={(crs) => {
-                const geojson = layersToGeoJSON(layers);
-                const projected = reprojectGeoJSON(geojson, crs);
-                projected._crsName = crs;
-                const zipBytes = exportShapefile(projected, projectName);
-                downloadFile(zipBytes, `${projectName}-shapefile.zip`, 'application/zip');
-              }}
-              onExportKML={() => {exportProjectKMZ({ name: projectName, layers }).then((kml) => downloadFile(kml, `${projectName}.kml`, 'application/vnd.google-earth.kml+xml'));}}
-              onExportCSV={(crs) => {
-                const geojson = layersToGeoJSON(layers);
-                const projected = reprojectGeoJSON(geojson, crs);
-                const rows = [['layer', 'feature_id', 'name', 'geometry_type', 'x', 'y', 'notes'].join(',')];
-                const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-                for (const f of projected.features) {
-                  const g = f.geometry;let x = '',y = '';
-                  if (g.type === 'Point') {[x, y] = g.coordinates;} else
-                  if (g.type === 'Polygon') {[x, y] = g.coordinates[0][0];} else
-                  if (g.type === 'LineString') {[x, y] = g.coordinates[0];}
-                  rows.push([esc(f.properties?._layerName || ''), esc(f.id), esc(f.properties?.name || ''), esc(g.type), esc(x), esc(y), esc(f.properties?.notes || '')].join(','));
-                }
-                const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);const a = document.createElement('a');a.href = url;a.download = `${projectName}.csv`;a.click();URL.revokeObjectURL(url);
-              }}
-              onExportPDF={() => exportProjectPDF({ projectName, turbines, turbineTypes, cables, cableTypes, substations, totalCapacity_mw, totalAEP, avgCapFactor, avgWindSpeed, totalCableLength, totalCableCost, windParams, monthlyData, layers, mapRef })} />
-            
-          </div>
-        </div>
-      </div>
+        </div>{/* end row 2 */}
+      </div>{/* end toolbar */}
 
       {/* Main area */}
       <div className="flex flex-1 min-h-0">
