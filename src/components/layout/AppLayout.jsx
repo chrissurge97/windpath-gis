@@ -61,8 +61,8 @@ export default function AppLayout() {
           </div>
           {!sidebarCollapsed &&
           <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm leading-tight">EagleView Academy</p>
-              <p className="text-[10px] text-slate-500">GIS Planning t</p>
+              <p className="font-bold text-sm leading-tight">EagleView</p>
+              <p className="text-[10px] text-slate-500">GIS Planning Tool</p>
             </div>
           }
           {/* Mobile close */}
