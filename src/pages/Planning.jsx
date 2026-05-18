@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
   Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target, FolderOpen,
-  Layers, Settings, X, Satellite, Navigation, Type,
+  Layers, Settings, X, Satellite, Navigation, Type, Table,
   ChevronDown, ChevronRight, ArrowUp, ArrowDown, PlusCircle, Save } from
 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
@@ -1040,6 +1040,9 @@ export default function Planning() {
           </button>
           <button onClick={() => { if (!window.confirm('Clear all features from this project?')) return; setLayers([createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }),createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }),createLayer({ name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8 }),createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 })]); setWindParams({ k: 2.0, lambda: 7.0 }); }} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500/40 shrink-0">
             <Trash2 className="w-3 h-3" /> Clear
+          </button>
+          <button onClick={() => setShowDataTables(true)} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-cyan-400 hover:border-cyan-500/40 shrink-0">
+            <Table className="w-3 h-3" /> Data Tables
           </button>
           <button data-lesson-id="btn-import" onClick={handleImport} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-white shrink-0">
             <Upload className="w-3 h-3" /> Import
