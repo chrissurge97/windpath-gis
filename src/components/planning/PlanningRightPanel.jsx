@@ -7,7 +7,7 @@ import TurbineDataTable from '@/components/planning/TurbineDataTable';
 import CableDataTable from '@/components/planning/CableDataTable';
 import TurbineTypeEditor from '@/components/planning/TurbineTypeEditor';
 import LayerImportExport from '@/components/planning/LayerImportExport';
-import LayerList from '@/components/planning/LayerList';
+import LayerList from '@/components/planning/LayerList.jsx';
 
 export default function PlanningRightPanel({
   rightTab, setRightTab, features, rightPanelOpen,
@@ -20,10 +20,11 @@ export default function PlanningRightPanel({
   monthlyData, weibullData, layers, selectedLayerId, setSelectedLayerId,
   setLayers, mapRef, setShowNewZoneDialog, setTurbineTypes,
   globalRadii, onRadiiChange, showRadii, onToggleRadii,
+  onDataTables,
 }) {
   return (
     <div className={cn("shrink-0 flex flex-col bg-slate-900 border-l border-slate-800 overflow-hidden transition-all duration-200", rightPanelOpen ? "w-80" : "w-0 border-l-0")}>
-      <RightPanelTabs rightTab={rightTab} setRightTab={setRightTab} features={features} highlights={[]} rightPanelOpen={rightPanelOpen} />
+      <RightPanelTabs rightTab={rightTab} setRightTab={setRightTab} features={features} highlights={[]} rightPanelOpen={rightPanelOpen} onDataTables={onDataTables} />
       <div className="flex-1 overflow-y-auto p-3">
 
         {rightTab === 'turbines' && (

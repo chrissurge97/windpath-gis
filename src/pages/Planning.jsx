@@ -35,7 +35,8 @@ import TurbineRadiiOverlay, { DEFAULT_TURBINE_RADII, checkTurbineRadii } from '@
 import RightPanel from '@/components/planning/PlanningRightPanel';
 import { buildDemoProject } from '@/lib/demoProject';
 import ExerciseGuide from '@/components/planning/ExerciseGuide';
-import LessonGuide from '@/components/planning/LessonGuide';
+import LessonGuide from '@/components/planning/LessonGuide.jsx';
+import DataTablesPanel from '@/components/planning/DataTablesPanel.jsx';
 import TextAnnotationMenu from '@/components/planning/TextAnnotationMenu';
 import TextOverlay from '@/components/planning/TextOverlay';
 import SubstationMarker from '@/components/planning/SubstationMarker';
@@ -346,6 +347,7 @@ export default function Planning() {
 
   const [importClassifyLayers, setImportClassifyLayers] = useState(null); // layers awaiting classification
   const [showOpenModal, setShowOpenModal] = useState(false);
+  const [showDataTables, setShowDataTables] = useState(false);
   const [showConfigMenu, setShowConfigMenu] = useState(false);
   const [features, setFeatures] = useState(() => {
     try {
@@ -883,7 +885,7 @@ export default function Planning() {
   }), [windParams]);
 
   const isDraggingPolygon = polygonDragRef.current?.id != null;
-  const cursorStyle = isDraggingPolygon ? 'grabbing' : { select: 'default', draw_polygon: 'crosshair', place_turbine: 'cell', draw_cable: 'crosshair', place_text: 'text', place_substation: 'cell' }[mode] || 'default';
+  const cursorStyle = isDraggingPolygon ? 'grabbing' : { select: 'default', pan: 'grab', draw_polygon: 'crosshair', place_turbine: 'cell', draw_cable: 'crosshair', place_text: 'text', place_substation: 'cell' }[mode] || 'default';
 
   const DRAW_TOOLS = [
     { id: 'draw_polygon', label: 'Polygon', icon: Pentagon },
@@ -965,6 +967,16 @@ export default function Planning() {
             mode === 'select' ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700"
           )}>
           <MousePointer className="w-3 h-3" /> Select
+        </button>
+
+        {/* Pan button */}
+        <button
+          data-lesson-id="btn-pan"
+          onClick={() => { setMode('pan'); setDrawingPoints([]); setDrawingSnapNodes([]); setSnapPreview(null); setEditingPolygonId(null); setTextAnnotationMenu(null); }}
+          className={cn("flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-all border shrink-0",
+            mode === 'pan' ? "bg-blue-500/20 text-blue-400 border-blue-500/40" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700"
+          )}>
+          <Navigation className="w-3 h-3" /> Pan
         </button>
 
         {/* Drawing tools dropdown */}
@@ -1184,11 +1196,12 @@ export default function Planning() {
                           L.DomEvent.stopPropagation(e);
                           if (isEditing) {
                             insertPolygonVertex(f.id, layer.id, e.latlng.lat, e.latlng.lng);
-                          } else {
+                          } else if (mode === 'select' || mode === 'pan') {
                             openPolygonMenu(f, layer.id);
                           }
                         },
                         mousedown: (e) => {
+                          // Only allow polygon drag in select mode (not pan)
                           if (mode === 'select' && !isEditing) {
                             L.DomEvent.stopPropagation(e);
                             polygonDragRef.current = { id: f.id, lastLatlng: e.latlng };
@@ -1241,6 +1254,7 @@ export default function Planning() {
                   const overloaded = usedMw > 0 && usedA > (ct?.ampacity_a || 0);
                   const isSelected = cableMenuFeature?.id === f.id;
                   const nonSelectMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation'].includes(mode);
+                  const isInteractive = mode === 'select' || mode === 'pan';
                   // Capture a stable snapshot of the feature for the click handler
                   const fSnapshot = f;
                   const visWeight = isSelected ? 5 : overloaded ? 4 : 3;
@@ -1253,6 +1267,7 @@ export default function Planning() {
                         bubblingMouseEvents={false}
                         eventHandlers={{
                           click: (e) => {
+                            if (nonSelectMode && !isInteractive) return;
                             if (nonSelectMode) return;
                             L.DomEvent.stop(e);
                             setCableMenuFeature(fSnapshot);
@@ -1497,6 +1512,7 @@ export default function Planning() {
           {/* Mode hint */}
           {mode !== 'select' && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-sm text-white text-xs font-medium px-4 py-2 rounded-full border border-slate-700 pointer-events-none">
+              {mode === 'pan' && `Pan mode — click to inspect features. Switch to Select to move assets.`}
               {mode === 'draw_polygon' && `Click to add vertices • Double-click to finish`}
               {mode === 'place_turbine' && `Placing: ${selectedTurbineType?.manufacturer} ${selectedTurbineType?.model} — click map`}
               {mode === 'draw_cable' && `Click to add waypoints • Hover near turbine/substation to snap • Double-click to finish (${selectedCableType?.name})`}
@@ -1902,6 +1918,7 @@ export default function Planning() {
               <div className="bg-slate-900/95 border border-slate-600 rounded-lg px-3 py-2 shadow-xl max-w-[220px]">
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">{layerTooltip.layerName}</p>
                 {layerTooltip.featureName && <p className="text-xs font-bold text-white leading-snug">{layerTooltip.featureName}</p>}
+                {layerTooltip.area && <p className="text-[10px] text-cyan-400 font-medium mt-0.5">{layerTooltip.area}</p>}
                 {layerTooltip.description && <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{layerTooltip.description}</p>}
               </div>
             </div>
@@ -1946,6 +1963,7 @@ export default function Planning() {
           projectName={projectName} setTurbineTypes={setTurbineTypes}
           globalRadii={globalRadii} onRadiiChange={setGlobalRadii}
           showRadii={showRadii} onToggleRadii={() => setShowRadii(v => !v)}
+          onDataTables={() => setShowDataTables(true)}
         />
       </div>
       <ConfigMenuWrapper isOpen={showConfigMenu} onClose={() => setShowConfigMenu(false)} features={features} onFeatureToggle={handleFeatureToggle} onTurbineAdded={(t) => setTurbineTypes(prev => [...prev, t])} onCableAdded={(c) => setCableTypes(prev => [...prev, c])} />
@@ -1966,6 +1984,10 @@ export default function Planning() {
             setLayers(prev => [...prev, l]);
           }}
         />
+      )}
+
+      {showDataTables && (
+        <DataTablesPanel onClose={() => setShowDataTables(false)} />
       )}
       </div>
       );

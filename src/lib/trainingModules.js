@@ -10,70 +10,86 @@ export const MODULES = [
     lessons: [
       {
         id: 'l1',
-        title: 'Toolbar Modes',
-        content: `The toolbar runs across the top. The five mode buttons are:
+        title: '🖱️ Toolbar Modes',
+        content: `The toolbar has five drawing mode buttons at the top:
 
-**Select** — default. Click any map feature to open its properties panel.
+**Select** — default. Click any map feature to open its properties panel. Only in Select mode can you MOVE turbines, cables and substations.
+
+**Pan** — navigate the map and click features to inspect them (menus open, tooltips show) WITHOUT moving anything.
 
 **Polygon** — click to place vertices; double-click or hit "Finish" to close the shape.
 
-**Place Turbine** — click the map to drop a turbine. The tool auto-fetches real elevation and wind speed for that location from Open-Meteo.
+**Place Turbine** — click the map to drop a turbine. Auto-fetches real elevation and wind speed from Open-Meteo.
 
-**Draw Cable** — click two points to draw a cable segment. Length is calculated automatically.
+**Draw Cable** — click two or more points to draw a cable. Hover near a turbine/substation to snap to it.
 
-**Substation** — click to place a yellow substation marker. Click it in Select mode to fill in specs.
+**Substation** — click to place a yellow substation marker.
 
-> Try switching between modes in the Planning tool now — notice the cursor changes and the blue hint bar at the top of the map updates.`,
+> 🎯 Try activating each mode below. Notice the cursor icon changes and the blue hint bar at the top of the map updates.`,
       },
       {
         id: 'l2',
-        title: 'Save, Import & Export',
-        content: `Right side of the toolbar:
+        title: '💾 Save, Import & Export',
+        content: `The right side of the toolbar handles files:
 
-**Save** — writes to browser storage. The button flashes "Saved!" to confirm. Your work is also auto-saved on every change.
+**File menu** — New, Save, Open and Import Project.
 
-**Import** — loads a GeoJSON file from your computer as a new layer. Use this to bring in OS Open Data, SSSI boundaries, or flood zones.
+**Import** — load GeoJSON, Shapefile (.zip), or CSV files as new map layers. The classifier asks how to handle point/line features.
 
-**GeoJSON** — downloads all layers as a single GeoJSON file. Opens in QGIS, ArcGIS, or Google Earth.
+**Export** — export as GeoJSON, Shapefile, KML, CSV, or PDF. Choose your coordinate reference system (WGS84, ITM, Irish Grid).
 
-**KML** — downloads as KML with styling intact. Fully georeferenced; open in Google Earth or ArcGIS.
+**Auto-save** — your work is also written to browser storage every 500ms whenever layers change.
 
-> In the Planning tool: click Save now, then try exporting GeoJSON. Open the file in a text editor to see the raw coordinate data.`,
+> 🎯 Click File → Save now. Then try Import and explore the export formats.`,
       },
       {
         id: 'l3',
-        title: 'Map Overlay Toggles',
-        content: `Four toggle buttons sit in the top-right corner of the map:
+        title: '🗺️ Map Controls',
+        content: `Top-right corner of the map has two overlay controls:
 
-**Satellite** — switches between dark vector map and Esri World Imagery aerial photography.
+**Base Map selector** — switch between Dark (clean, good for line visibility), Satellite (Esri aerial photography), and Roads (OpenStreetMap).
 
-**Elevation** — overlays Esri shaded relief. Brighter = higher ground (better wind). Use this when deciding where to place turbines.
+**Substations toggle** — shows/hides placed substations. The count shows how many are currently on the map.
 
-**Wind** — coloured circles around each turbine showing hub wind speed. Blue < 6 m/s (poor) → green 6–8 → amber 8–10 → red > 10 m/s (excellent).
+**Layer hover tooltips** — hover over any polygon to see its name, layer, and description.
 
-**Substations (N)** — shows/hides placed substations. The count shows how many are on the map.
+**Right panel collapse** — the ▶ button on the right edge collapses/restores the right panel for a full-screen map view.
 
-> Go to Planning and toggle each overlay on and off. Satellite + Elevation together gives the best site picture.`,
+> 🎯 Toggle between Dark and Satellite. Then collapse the right panel and re-open it.`,
       },
       {
         id: 'l4',
-        title: 'Right Panel — Turbines & Cables Tabs',
-        content: `**Turbines tab** — select the active turbine type before placing. The dropdown shows manufacturer, model, MW, rotor diameter, hub height. Each placed turbine appears as a data row — edit name or hub height with the pencil icon.
+        title: '📊 Right Panel Tabs',
+        content: `The right panel has five tabs:
 
-**Cables tab** — select cable type (voltage, cost/m) before drawing. After drawing, each cable shows name, type, length, and cost. Edit a type's cost with the pencil icon to match site-specific contractor quotes.
+**Turbines** — select active turbine type, view all placed turbines with wind/AEP data, edit names, manage setback radii.
 
-> In the Planning tool: open the Turbines tab, expand the type selector, and switch between types. Note how the spec details change.`,
+**Cables** — select cable type, view all cables with length/cost/load data, optimise cable sizing.
+
+**Analysis** — Weibull wind distribution sliders + monthly energy chart + 6 KPI boxes (AEP, capacity factor, cable cost).
+
+**Layers** — list all map layers. Click to select (new polygons go into selected layer). Expand any layer to see individual features with their areas. Toggle visibility, reorder, delete.
+
+**Types** — turbine specification library. Edit or add custom turbine types.
+
+**Data Tables** — opens a popup with full editable data for all layers, plus turbine and cable library editors.
+
+> 🎯 Click through each tab and spend 20 seconds on each one.`,
       },
       {
         id: 'l5',
-        title: 'Right Panel — Analysis, Layers & Types Tabs',
-        content: `**Analysis** — Weibull wind distribution (adjustable k and λ sliders). Once turbines have wind data: monthly energy bar chart + 6 KPI boxes (Gross AEP, Net AEP, Capacity Factor, Avg Hub Wind, Cable Length, Cable Cost).
+        title: '🏗️ Cables: Nodes & Routing',
+        content: `The cable network supports **junction nodes** — not just turbine-to-substation connections:
 
-**Layers** — lists all layers. Click a row to select it (new polygons draw into the selected layer). Eye icon = toggle visibility. Bin = delete. "+ Add Zone" = new polygon layer.
+**Adding a cable node** — in Select mode, click any cable and choose "Add Node". This splits the cable at the clicked point. Other cables can now connect to that node.
 
-**Types** — turbine library. Edit any spec or add a custom turbine. This is where you enter a real manufacturer's power curve parameters.
+**Power flow** — current flows FROM turbines TOWARD substations. If multiple cables feed into a node, the outbound cable carries the **sum** of all incoming power. The cable load display auto-calculates this.
 
-> Open each tab in sequence and spend 30 seconds exploring. The next exercise will use all three.`,
+**Moving cables** — in Select mode, click a cable to select it, then drag a waypoint to reshape the route.
+
+**Overloaded cables** — shown in red with a dashed line when current exceeds the cable's ampacity. Click the cable to upgrade its type.
+
+> 🎯 Draw two cables from two turbines meeting at a node, then connect the node to a substation.`,
       },
     ],
   },
@@ -89,47 +105,50 @@ export const MODULES = [
     lessons: [
       {
         id: 'l1',
-        title: 'Drawing a Polygon',
-        content: `Click **Polygon** in the toolbar. The cursor becomes a crosshair and the hint bar reads "Click to add vertices • Double-click to finish".
+        title: '✏️ Drawing a Polygon',
+        content: `Click **Polygon** in Draw Tools. The cursor becomes a crosshair.
 
-Click 5–8 times to place vertices. A dashed line connects them as you go. Once you have 3+ points, the **"Finish (N pts)"** button appears — click it, or double-click, to close the polygon.
+Click 5–8 times to place vertices. A dashed cyan line connects them as you go. Once you have 3+ points, the **"Finish (N pts)"** button appears in the toolbar — click it, or double-click, to close the polygon.
 
-**Which layer does it go into?** The layer selected (highlighted) in the Layers tab. Clicking Polygon mode auto-selects the first polygon layer. If you want to draw into a different layer, click that layer in the Layers tab first.
+**Which layer does it go into?** Whichever layer is highlighted in the Layers tab. Polygon mode auto-selects the first polygon layer. To draw into a different layer, click that layer row first.
 
-> In the Planning tool: draw a rough site boundary now — 6 vertices, irregular shape. Check the Layers tab to confirm it appeared.`,
+**Area display** — once a polygon is drawn, hover over it to see its area in km² in the tooltip. The Layers tab also shows the area when you expand a layer.
+
+> 🎯 Draw a rough site boundary — 6 vertices, irregular shape. Hover over it to see the area.`,
       },
       {
         id: 'l2',
-        title: 'Editing Polygon Properties',
-        content: `Switch to **Select** mode. Click the polygon. A panel appears top-left:
+        title: '🎨 Editing Polygon Properties',
+        content: `Switch to **Select** mode (or **Pan** mode). Click the polygon. A panel appears top-left:
 
-- **Name** — e.g. "Site Boundary", "500m Residential Buffer", "Blanket Bog SSSI"
-- **Colour** — 10 presets, native colour picker, or type a hex code directly
-- **Fill Transparency** — 0–80%. Most polygons work at 15–30% so the basemap shows through
-- **Notes / Data** — free text: owner, lease status, planning reference, area (ha), constraint source
+- **Name** — e.g. "Site Boundary", "500m Residential Buffer"
+- **Colour** — 10 presets + native colour picker or hex code
+- **Fill Transparency** — 0–80%. Most polygons: 15–30% so basemap shows through
+- **No-Turbine Zone** — tick this to block turbine placement inside the polygon
+- **Notes / Data** — free text: owner, lease status, planning reference
 
-Click **Apply** to save. Changes take effect immediately on the map.
+Click **Apply** to save. Changes take effect immediately.
 
-> Edit your boundary now: name it "Gross Site Boundary", set cyan (#06b6d4), 15% opacity, and add a note with the approximate area.`,
+> 🎯 Edit your boundary: name it "Gross Site Boundary", set cyan (#06b6d4), 15% opacity.`,
       },
       {
         id: 'l3',
-        title: 'Vertex Editing',
-        content: `Open a polygon's panel (Select mode → click polygon). Click **"✏ Edit / Move Vertices"**.
+        title: '📐 Vertex Editing',
+        content: `Open a polygon's panel (Select mode → click polygon). Click **"✏ Edit Vertices"**.
 
 The outline becomes dashed. White circular handles appear at each vertex.
 
-**Move a vertex** — drag a handle to a new position. The polygon redraws instantly.
+**Move a vertex** — drag a handle to reshape.
 
-**Add a vertex** — click anywhere on the polygon's edge (between two handles). A new vertex inserts at the closest point on that edge. Drag it to the correct position.
+**Add a vertex** — click anywhere on the polygon's edge (between handles). A new vertex inserts at the closest edge point. Drag it into position.
 
-**Finish editing** — click anywhere on the polygon fill (not a handle).
+**Finish editing** — click the ✕ banner at the top of the map, or press Escape.
 
-> Try vertex-editing your boundary now: drag a corner to reshape it, then add an extra vertex on one edge.`,
+> 🎯 Vertex-edit your boundary: drag a corner, then add an extra vertex on one edge.`,
       },
       {
         id: 'l4',
-        title: 'Layers & Colour Conventions',
+        title: '🗂️ Layers & Colour Conventions',
         content: `Click **"+ Add Zone"** in the Layers tab to create a new layer. Select it, then draw polygons into it.
 
 **Professional colour conventions:**
@@ -140,7 +159,7 @@ The outline becomes dashed. White circular handles appear at each vertex.
 - 🔴 Red — Not pursuing
 
 *Planning constraints:*
-- 🔴 Red — Hard exclusion (SSSI, residential buffer)
+- 🔴 Red — Hard exclusion (SSSI, residential buffer, "No Turbine Zone" ticked)
 - 🟠 Orange — Soft constraint (AONB, PRoW corridor)
 - 🟡 Yellow — Advisory zone (noise, heritage)
 
@@ -148,20 +167,22 @@ The outline becomes dashed. White circular handles appear at each vertex.
 - 🟢 Lime — Habitat survey area
 - 🔵 Blue — Watercourse / Flood zone
 
-> Create three layers now — "Leased", "Negotiating", "Hard Constraint" — and assign the correct colours.`,
+> 🎯 Create three layers — "Leased", "Negotiating", "Hard Constraint" — with correct colours.`,
       },
       {
         id: 'l5',
-        title: 'Layer Visibility & Organisation',
+        title: '👁️ Layer Visibility & Organisation',
         content: `With 8–12 layers on a real project, visibility control is essential.
 
-**Eye icon** — toggle any layer on/off without deleting it. The map updates instantly. Use this when presenting to different stakeholders: show the ecologist only ecological constraints, show the landowner only their parcel.
+**Expand a layer** — click the ▶ arrow next to the layer name in the Layers tab to reveal individual features with their areas in km².
+
+**Eye icon** — toggle any layer on/off without deleting it. Use this when presenting to different stakeholders.
+
+**Reorder** — ↑↓ arrows change rendering order. Layers at the top of the list render on top of layers below.
 
 **Delete** — bin icon removes the layer and all its features. Core layers (Turbines, Cables, Substations) cannot be deleted.
 
-**Best practice:** One layer per constraint type — not everything in one "Constraints" layer. This lets you switch each constraint on/off independently.
-
-> Toggle your constraint layers on and off now. Then export KML and confirm the layers appear as separate folders.`,
+> 🎯 Expand a polygon layer to see its features. Toggle constraint layers on and off.`,
       },
     ],
   },
@@ -177,169 +198,179 @@ The outline becomes dashed. White circular handles appear at each vertex.
     lessons: [
       {
         id: 'l1',
-        title: 'Choosing a Turbine Type',
-        content: `Before placing, check the **Turbines tab** — the active type is shown in the selector. Click it to expand and choose:
+        title: '🔩 Choosing a Turbine Type',
+        content: `Before placing, check the **Turbines tab** — the active type is shown in the selector at the top. Click to expand and choose:
 
 - **Vestas V150-4.5** (4.5 MW, Ø150m, 105m hub) — standard large onshore turbine
 - **Siemens Gamesa SG 5.0-145** (5.0 MW, Ø145m, 115m hub)
 - **GE Cypress 5.3-158** (5.3 MW, Ø158m, 120m hub)
 - **Enercon E-138 EP3** (4.2 MW, Ø138m, 131m hub)
-- **Custom Profile** — edit in Types tab
 
-The type sets hub height (affects wind shear correction), rotor diameter (affects AEP), and rated power (affects total capacity KPI).
+Each type sets hub height (affects wind shear and AEP), rotor diameter (affects setback distances), and rated power (affects total capacity KPI).
 
-> In the Planning tool: open the Turbines tab, select V150-4.5, then open the Types tab to see its full spec.`,
+> 🎯 Open the Turbines tab and switch between turbine types. Note how specs change.`,
       },
       {
         id: 'l2',
-        title: 'Placing Turbines & Reading Live Data',
-        content: `Click **Place Turbine**, then click the map. The tool immediately:
+        title: '📍 Placing Turbines & Live Wind Data',
+        content: `Click **Place Turbine** in Draw Tools, then click the map. The tool immediately:
 
 1. Fetches ground elevation from Open-Elevation
-2. Fetches 30-year mean wind speed at 10m from Open-Meteo
-3. Applies power-law shear to calculate hub-height wind speed
-4. Estimates AEP using the turbine's power curve × Weibull distribution
+2. Fetches 30-day mean wind speed at 10m from Open-Meteo ERA5
+3. Applies power-law shear to calculate **hub-height wind speed**
+4. Estimates AEP using the power curve × Weibull distribution
 
-All four values appear in the turbine popup and the Turbines tab. The KPI strip at the bottom updates in real time: Turbines / Capacity / AEP / Cap. Factor.
+Wind data is shown in the turbine popup and Turbines tab. The KPI strip updates in real time.
 
-**Placement tip:** use the Elevation overlay to find ridges — higher ground = better wind. Avoid valley floors (sheltered = blue wind circles).
+**When you move a turbine** (Select mode → drag) the wind speed, elevation and AEP automatically refresh for the new location.
 
-> Place 5 turbines on a ridge. Watch the wind circles appear. Check the KPI strip.`,
+> 🎯 Place 5 turbines on a ridgeline. Watch wind circles appear. Move one to a lower location and watch its wind speed drop.`,
       },
       {
         id: 'l3',
-        title: 'Setback Radii',
-        content: `A setback radius is an orange dashed circle to visually check constraint clearances.
+        title: '🔴 Turbine Setback Radii',
+        content: `Setback radii are dashed circles around each turbine for constraint clearance checking.
 
-**To set one up:** Select mode → click a turbine → scroll to "Setback / Assessment Radius" → tick "Show on map" → choose distance → Apply.
+**Global radii** — in the Turbines tab, scroll down to "Turbine Setback Radii". Enable 5D (5× rotor diameter) as a wake spacing guide, or 7D as a strict no-go zone.
 
-Presets: **500m / 1km / 2km / 3km**. Or drag the slider for any value.
+**Blocking radii** — enable "Block Placement" on a radius to prevent other turbines (or substations) being placed within it. A red warning appears if you try.
 
 **UK guidance:**
-- 500m — minimum from nearest non-associated dwelling (noise screening)
+- 500m — minimum from nearest dwelling (noise screening)
 - 2× tip height — from public roads (~460m for a 5MW turbine)
-- 500m — from scheduled monuments / listed buildings (starting point)
+- 3D–4D — minimum rotor separation for same-row turbines
+- 6D–8D — downwind separation to reduce wake losses
 
-You can show different radii on different turbines — e.g. 500m on all, 2km on the one closest to a village.
-
-> Apply 500m setback radii to all 5 turbines. Check no circle overlaps your constraint polygons.`,
+> 🎯 Enable 5D radii in the Turbines tab. Toggle "Block Placement" on 7D and try placing a turbine too close to another.`,
       },
       {
         id: 'l4',
-        title: 'Editing & Renaming Turbines',
+        title: '✏️ Editing & Renaming Turbines',
         content: `Three ways to edit a turbine:
 
-**Map popup** — click turbine (Select mode): rename, change type, adjust setback radius, delete.
+**Map popup** — click turbine in Select/Pan mode: rename, change type, add custom fields, assign to a zone polygon, delete.
 
-**Turbines tab** — pencil icon on each row: edit name and hub height inline.
+**Turbines tab** — pencil icon on each row: edit name and hub height inline. Click the location target to fly the map to that turbine.
 
-**Data Tables page** — click any cell to edit. Change lat/lng here to fine-tune position without redrawing.
+**Data Tables** — click the Data Tables tab in the right panel: open the popup, click any cell to edit. Change lat/lng here to fine-tune position without redrawing.
 
 Changing turbine type via the popup updates rated power, rotor diameter, hub height, and AEP immediately.
 
-> Rename all 5 turbines T01–T05 using the Turbines tab pencil icons.`,
+> 🎯 Rename all turbines T01–T05 using the Turbines tab pencil icons. Then open Data Tables to verify.`,
       },
       {
         id: 'l5',
-        title: 'Layout Iteration Workflow',
+        title: '🔄 Layout Iteration Workflow',
         content: `Professional layout design is always iterative:
 
 1. **Draw site boundary** → defines study area
-2. **Map constraint layers** → red for hard exclusions, orange for soft
-3. **Place turbines** → on highest ground, 4–5 rotor diameters apart (600–750m for V150)
-4. **Enable 500m setback radii** → check for constraint overlaps
-5. **Check Analysis tab** → target >30% capacity factor, >7.5 m/s avg hub wind
-6. **Adjust** → move low-CF turbines to higher ground; delete constraint breachers; add turbines in better wind areas
+2. **Add constraint layers** → mark "No Turbine Zone" on hard exclusions
+3. **Place turbines** → on highest ground, 4–5 rotor diameters apart
+4. **Enable setback radii** → check constraint clearances visually
+5. **Check Analysis tab** → target >30% capacity factor, >7.5 m/s hub wind
+6. **Move turbines** → drag in Select mode; wind speed, elevation and AEP auto-refresh
 7. **Save & export** → GeoJSON + KML for QGIS / sharing with consultants
 
-> Use the Data Tables page to edit lat/lng directly if a turbine needs precise repositioning.`,
+> 🎯 Move a turbine to a better wind location. Watch the hub wind speed and AEP update automatically.`,
       },
     ],
   },
 
   {
     id: 'wind_resource',
-    title: 'Cables, Substations & Grid',
-    subtitle: 'Cable routing, substation specs, cost estimation & grid connection planning',
+    title: 'Cables, Nodes & Grid Connection',
+    subtitle: 'Cable routing, junction nodes, substation sizing & cost estimation',
     icon: 'BarChart2',
     xp_reward: 125,
     color: 'purple',
-    description: 'Design the electrical collection network — cable types, routing topology, substation sizing, and grid connection.',
+    description: 'Design the electrical collection network — cable types, routing topology, junction nodes, substation sizing, and grid connection.',
     lessons: [
       {
         id: 'l1',
-        title: 'The Three-Part Electrical Network',
+        title: '⚡ The Electrical Network',
         content: `Every wind farm has three electrical layers:
 
-**1. Internal collection cables** — typically 33kV underground, running from each turbine to the onsite substation. Buried alongside access tracks.
+**1. Internal collection cables** — typically 33kV underground, running from each turbine toward the onsite substation.
 
-**2. Onsite substation** — steps up from 33kV to 132kV (or higher). Positioned centrally to minimise cable lengths, near a road for access, and near the grid connection point.
+**2. Junction nodes** — optional midpoints where cables from multiple turbines meet before continuing to the substation. The outbound cable from a node automatically carries the summed power of all incoming cables.
 
-**3. Grid connection** — cable or overhead line from the onsite substation to the DNO (Distribution Network Operator) substation on the public grid. Often the most expensive single item.
+**3. Onsite substation** — steps up from 33kV to 132kV. Positioned centrally to minimise cable lengths.
 
-In the Planning tool, all three use the **Draw Cable** tool — just change the cable type for each segment.`,
+**4. Grid connection** — cable or overhead line from the substation to the DNO's grid. Often the most expensive single item.
+
+Power ALWAYS flows turbine → (nodes) → substation. The cable load display shows actual current and flags overloads in red.`,
       },
       {
         id: 'l2',
-        title: 'Cable Types & When to Use Them',
-        content: `Open the **Cables tab** and expand the type selector:
+        title: '🔌 Cable Types',
+        content: `Open the **Cables tab** and look at the type selector:
 
-- **33kV 150mm² XLPE Underground** (£120/m) — standard collection cable. Use for individual turbine connections.
-- **33kV 240mm² XLPE Underground** (£175/m) — higher current capacity. Use for main feeder cables carrying current from multiple turbine strings.
-- **33kV Overhead Line** (£45/m) — much cheaper, but visually intrusive. Only suitable in remote areas; requires statutory consent.
-- **132kV Overhead Line** (£85/m) — for long grid connections where underground is uneconomical.
+- **33kV 150mm² XLPE Underground** (€120/m) — standard collection cable for individual turbines
+- **33kV 240mm² XLPE Underground** (€175/m) — higher ampacity; use for main feeders carrying multiple strings
+- **33kV Overhead Line** (€45/m) — cheaper but visually intrusive
+- **132kV Overhead Line** (€85/m) — for long grid connections
 
-Click the pencil icon to edit any cable type's cost — replace with real contractor quotes when you have them.
+The cable load display shows:
+- **Current (A)** — calculated from power flowing through it
+- **Ampacity** — the cable's rated maximum
+- **Load %** — bar turns red if overloaded
 
-> Select each cable type and note the voltage, cost, and type before the next step.`,
+Click **Optimise** in the Cables tab to auto-assign the smallest cable type that handles the actual load.
+
+> 🎯 Note each cable type before drawing any cables.`,
       },
       {
         id: 'l3',
-        title: 'Drawing Cable Routes',
-        content: `Click **Draw Cable**. The hint bar reads "Click two points to draw a cable route (Type Name)".
+        title: '🗺️ Drawing Cable Routes',
+        content: `Click **Draw Cable** in Draw Tools.
 
-Click a turbine base → click the next turbine → cable draws instantly with length calculated.
+Click a turbine → click next point → click substation. Cables snap to turbines and substations (yellow snap ring appears on hover).
 
-**String topology** — T01 → T02 → T03 → Sub (chain). Less cable, lower cost, but one fault takes downstream turbines offline.
+**String topology** — T01 → T02 → T03 → Sub (chain). Less cable, lower cost.
 
-**Radial topology** — each turbine directly to Sub. More cable, higher cost, independent connections.
+**Using nodes** — T01 → Node → Sub, T02 → Node → Sub. The node carries T01+T02 power. Select the node cable → Auto-upgrades to handle combined load.
 
-**Route realism tip:** real cables follow access tracks. If the track adds 300m vs a straight line, add a waypoint mid-route by clicking an intermediate point on the track path.
+**Adding nodes** — in Select mode, click any cable, then click "Add Node". This splits the cable; new cables can connect to the node.
 
-> Draw two strings of 3 turbines each, connecting each string to the substation. Then draw the grid connection using 132kV OHL.`,
+**Moving cables** — in Select mode, click a cable waypoint and drag to reshape the route.
+
+> 🎯 Draw a string: T01→T02→T03→Sub. Check the cable popup to see how load accumulates along the string.`,
       },
       {
         id: 'l4',
-        title: 'Placing & Sizing the Substation',
-        content: `Click **Substation** → click the map. Click it in Select mode to edit:
+        title: '🏭 Placing & Sizing the Substation',
+        content: `Click **Substation** → click the map near the centre of your turbine cluster.
+
+Click it in Select/Pan mode to edit:
 
 - **Name** — e.g. "Knockroe 33/132kV Collection Substation"
-- **Transformer MVA** — rule of thumb: total MW capacity × 1.2. For 10 × 4.5MW = 45MW → 60 MVA.
-- **Gen Capacity MW** — match to total rated capacity
-- **Demand Capacity MW** — usually 0 for a dedicated wind farm
+- **Transformer MVA** — rule of thumb: total MW × 1.2. For 10 × 4.5 MW = 45 MW → 60 MVA
+- **Gen Capacity MW** — match total rated capacity
 - **Notes** — grid reference, DNO reference, connection application number
 
-Click **Done** to close. Substations also appear in the Data Tables page where you can edit lat/lng precisely.
+A green "Within Capacity" / red "Over Capacity" badge shows live load vs. rated capacity.
 
-> Place a substation and fill in all five fields. Check it appears in Data Tables.`,
+> 🎯 Place a substation and fill in all five fields. Connect all turbines to it and check the capacity badge.`,
       },
       {
         id: 'l5',
-        title: 'Reading Cable Costs',
-        content: `After drawing cables, open the **Analysis tab**. The bottom two KPI boxes show:
+        title: '💰 Reading Cable Costs',
+        content: `After drawing cables, open the **Analysis tab**. The bottom KPI boxes show:
 
-- **Cable Length** — total km across all drawn routes
+- **Cable Length** — total km across all routes
 - **Cable Cost** — sum of (length × cost/m) for each cable type
 
-Also check the **Cables tab** summary: routes, total length, total cost, average length per cable.
+Also check the **Cables tab** summary: total routes, length, cost, and any overloaded cables flagged in orange.
 
-**UK cost benchmarks (10-turbine, 50MW farm):**
-- Internal 33kV collection (8–15km total): £960k–£1.8M
-- 132kV grid connection underground (5km): ~£1.5M
-- 132kV overhead (10km): ~£850k
-- Total electrical infrastructure: £2.5M–£4M (5–10% of total project cost)
+**Click Optimise** (Cables tab) to automatically upgrade overloaded cables to the cheapest type that handles the actual load.
 
-> Check your current cable costs against these benchmarks. Are your cable routes realistic?`,
+**Irish benchmarks (10-turbine, 45 MW farm):**
+- Internal 33kV collection (8–15 km): €960k–€1.8M
+- 132kV grid connection underground (5 km): ~€1.5M
+- 132kV overhead (10 km): ~€850k
+- Total electrical infrastructure: €2.5M–€4M
+
+> 🎯 Optimise all cables. Check the cost reduction in the Analysis tab.`,
       },
     ],
   },
@@ -347,7 +378,7 @@ Also check the **Cables tab** summary: routes, total length, total cost, average
   {
     id: 'layer_data',
     title: 'Site Constraints & Layer Management',
-    subtitle: 'Constraint mapping, buffer analysis, data import & export',
+    subtitle: 'Constraint mapping, buffer zones, data import & export',
     icon: 'Layers',
     xp_reward: 175,
     color: 'blue',
@@ -355,80 +386,83 @@ Also check the **Cables tab** summary: routes, total length, total cost, average
     lessons: [
       {
         id: 'l1',
-        title: 'Why Layers Matter',
+        title: '🗂️ Why Layers Matter',
         content: `A wind farm planning application needs dozens of technical assessments — noise, ecology, heritage, hydrology, aviation, visual impact. Each produces a map layer.
 
 **Core project layers** (always present): Site Boundary, Turbines, Cables, Substations.
 
-**Constraint layers** (you create): 500m Residential Buffer, SSSI/SPA boundaries, Ancient Woodland, MOD Radar Zone, Flood Zone 2/3, Aviation Obstacle Surface, PRoW Corridor.
+**Constraint layers** (you create): 500m Residential Buffer, SSSI/SPA, Ancient Woodland, MOD Radar Zone, Flood Zone, Aviation Surface, PRoW Corridor.
 
 **Assessment layers**: Noise receptor points, ZTV contour, Shadow Flicker hours.
 
-Each layer gets its own colour, its own visibility toggle, and its own data attributes. Organised correctly, the same project file serves every consultant on the team.`,
+**Layer area display** — expand any polygon layer in the Layers tab to see each feature with its area in km² or hectares. This makes it easy to report constraint areas.
+
+Each layer gets its own colour, visibility toggle, and data attributes. Organised correctly, the same file serves every consultant on the team.`,
       },
       {
         id: 'l2',
-        title: 'Creating a Constraint Layer — Step by Step',
+        title: '🔴 Creating a Constraint Layer',
         content: `Example: 500m residential buffer.
 
-1. Layers tab → **"+ Add Zone"** → new layer appears
+1. Layers tab → **"+ Add Zone"** → name it "500m Residential Buffer"
 2. Click the new layer row to select it
 3. Switch to **Polygon** mode → draw a polygon around the dwelling location
 4. Switch to **Select** mode → click the polygon:
-   - Name: "500m Residential Buffer — Farmhouse A"
+   - Name: "500m Buffer — Farmhouse A"
    - Colour: Red (#ef4444)
    - Fill: 20%
-   - Notes: "Nearest dwelling 320m from proposed T3. ETSU-R-97 noise assessment required. Night-time limit 43 dB LA90."
+   - **No-Turbine Zone: ✓** — blocks turbine placement inside
+   - Notes: "Nearest dwelling 320m from proposed T3. ETSU-R-97 noise assessment required."
 5. Click **Apply**
 
-Repeat for each dwelling. Five farmhouses = five buffer polygons, all in the same layer.
+When "No-Turbine Zone" is enabled, the placement tool shows a ⛔ warning if you try to place a turbine inside.
 
-> Create this layer in the Planning tool now. Draw at least two buffer polygons.`,
+> 🎯 Create this constraint layer and draw two buffer polygons. Try placing a turbine inside one.`,
       },
       {
         id: 'l3',
-        title: 'Importing External GIS Data',
-        content: `Click **Import** in the toolbar → select a GeoJSON file → the data appears as a new layer.
+        title: '📥 Importing External GIS Data',
+        content: `Click **Import** in the toolbar → select a GeoJSON, Shapefile (.zip), or CSV file.
 
-**Where to get UK data (all free):**
-- OS Open Data (roads, buildings, water): data.os.uk
-- SSSI boundaries: magic.defra.gov.uk
-- Flood zones: environment.data.gov.uk
-- Ancient Woodland: data.forestry.gov.uk
-- MOD safeguarding: mod.gov.uk/DIO
+If the file has point or line features, the **Classify Imports** modal appears — choose whether to treat points as turbines, lines as cables, or keep as a plain layer.
 
-After importing: the layer is toggleable and included in GeoJSON/KML exports. Treat it as read-only reference data.
+**Warning** — if coordinates are in a projected CRS (e.g. Irish Grid ITM — large numbers), an amber warning shows. Re-export from your GIS as WGS84/EPSG:4326 first.
 
-**Practical example:** Import an SSSI GeoJSON. Set its colour to dark red (#dc2626). Toggle it on when placing turbines to check clearance.
+**Where to get Irish data (free):**
+- OS Open Data Ireland: data.gov.ie
+- Environmental data: epa.ie / npws.ie (NPWS SAC/SPA boundaries)
+- Ordnance Survey Ireland: osi.ie
 
-> Download the SSSI GeoJSON for any area from magic.defra.gov.uk and import it now.`,
+> 🎯 Import a GeoJSON file from data.gov.ie and classify it as a plain layer. Toggle it on/off.`,
       },
       {
         id: 'l4',
-        title: 'Organising for a Planning Deliverable',
+        title: '📋 Organising for a Planning Deliverable',
         content: `**Naming convention:**
-- "Hard Constraint — SSSI Boundary (NE)"
+- "Hard Constraint — SSSI/SPA Boundary (NPWS)"
 - "Hard Constraint — 500m Residential Buffer"
-- "Soft Constraint — AONB Boundary"
-- "Advisory — PRoW Corridor 50m"
+- "Soft Constraint — Scenic Route Corridor"
+- "Advisory — PRoW 50m Buffer"
 
 **Visibility presets before export:**
 - Constraint map: show constraints + site boundary, hide turbines and cables
 - Layout check: show turbines + boundary + residential buffers
 - Cable cost view: show cables + substations only
 
-Use eye icons to switch between these views in seconds.
+Use eye icons to switch between these views instantly.
 
-> Set up these three views in the Layers tab. Notice how quickly each audience's map is constructed.`,
+**Expand layers** in the Layers tab to audit individual features — check every polygon has a name and notes filled in before the planning submission.
+
+> 🎯 Set up these three visibility presets. Expand each layer to check features have names.`,
       },
       {
         id: 'l5',
-        title: 'Analysis Tab — Project Dashboard',
+        title: '📈 Analysis Tab — Project Dashboard',
         content: `The **Analysis tab** auto-updates as you add, move, or delete turbines.
 
-**Weibull sliders** — manually adjust k (shape) and λ (scale) if you have site-specific met mast data. Auto-populated once turbines have real wind data.
+**Weibull sliders** — adjust k (shape) and λ (scale) if you have site-specific met mast data. Auto-populated once turbines have real wind data.
 
-**Monthly energy profile** — seasonal breakdown. UK wind farms produce 20–30% more energy November–February vs June–August.
+**Monthly energy profile** — seasonal breakdown. Irish wind farms produce 25–35% more energy November–February vs June–August.
 
 **Six KPI boxes:**
 - Gross AEP / Net AEP (Net ≈ Gross − 9% losses)
@@ -436,11 +470,11 @@ Use eye icons to switch between these views in seconds.
 - Average Hub Wind Speed
 - Total Cable Length / Cost
 
-**UK onshore benchmarks:**
+**Irish onshore benchmarks:**
 - Capacity factor > 30% = good; < 25% = likely unviable
 - Average hub wind > 7.5 m/s = good; < 6.5 m/s = marginal
 
-> Place 5 turbines and check all six KPIs. Adjust Weibull sliders and watch the chart update.`,
+> 🎯 Place 5 turbines and check all six KPIs. Adjust Weibull sliders and watch the chart update.`,
       },
     ],
   },
@@ -452,112 +486,126 @@ Use eye icons to switch between these views in seconds.
     icon: 'ShieldAlert',
     xp_reward: 200,
     color: 'yellow',
-    description: 'Design a complete 10-turbine wind farm: site boundary, constraints, turbine layout, cables, substation, data review, and export.',
+    description: 'Design a complete 10-turbine wind farm: site boundary, constraints, turbine layout, cables, nodes, substation, data review, and export.',
     lessons: [
       {
         id: 'l1',
-        title: 'Step 1 — Project Setup & Site Boundary',
+        title: '🏁 Step 1 — Project Setup & Site Boundary',
         content: `In the Planning tool: click the project name (top-left) and rename it **"Knockroe Wind Farm — Indicative Layout"**.
 
 **Create layers** (Layers tab → "+ Add Zone" four times):
 - Site Boundary (cyan, 15%)
-- Hard Constraints (red, 20%)
+- Hard Constraints (red, 20%, No-Turbine Zone ✓)
 - Soft Constraints (orange, 15%)
 - Land Parcels (green, 10%)
 
-**Draw the site boundary:** Polygon mode → Site Boundary layer selected → draw a 6–8 vertex irregular polygon covering a ~5km × 4km upland ridge. Click the polygon in Select mode → name it "Knockroe Site Boundary" → note: "Gross area ~18 km². Upland grassland. Wind 8.5–10.5 m/s hub height."
+**Draw the site boundary:** Polygon mode → Site Boundary layer → draw a 6–8 vertex irregular polygon covering a ~5km × 4km upland ridge.
 
-> Do this step now. The exercise will track your polygon creation.`,
+Select the polygon (Select mode) → name it "Knockroe Site Boundary" → add notes: "Gross area ~18 km². Upland grassland. Wind 8.5–10.5 m/s hub height."
+
+**Check the area** — hover over the polygon to see its area in km² in the tooltip. Expand the Site Boundary layer to see the feature listed.
+
+> 🎯 Complete this step in the Planning tool.`,
       },
       {
         id: 'l2',
-        title: 'Step 2 — Map the Constraints',
+        title: '🚧 Step 2 — Map the Constraints',
         content: `Select **Hard Constraints** layer. Draw two polygons:
 
-**Residential buffer** — oval in the southwest corner. Name: "Knockroe Village — 500m Buffer". Notes: "Nearest dwelling 380m. ETSU-R-97 required. Night limit 43 dB LA90."
+**Residential buffer** — oval in the southwest corner.
+- Name: "Knockroe Village — 500m Buffer"
+- No-Turbine Zone: ✓
+- Notes: "Nearest dwelling 380m. ETSU-R-97 required. Night limit 43 dB LA90."
 
-**SSSI** — polygon in the northeast corner. Name: "Blanket Bog SSSI". Notes: "Natura 2000 SPA. No turbines within 500m. Hen harrier / golden plover survey required."
+**SAC/SPA** — polygon in the northeast corner.
+- Name: "Blanket Bog SAC"
+- No-Turbine Zone: ✓
+- Notes: "Natura 2000 SAC. No turbines within 500m. Curlew / golden plover survey required."
 
-Select **Soft Constraints** layer. Draw two more:
+Select **Soft Constraints** layer. Draw two more polygons — an AONB buffer along the eastern edge and a PRoW corridor diagonal.
 
-**AONB buffer** — along the eastern edge. Name: "AONB — 5km Buffer Zone". Notes: "LVIA and cumulative impact assessment required."
-
-**PRoW corridor** — thin diagonal across the site. Name: "PRoW Route 47 — 50m Corridor". Notes: "Public footpath. Access maintained during construction."
-
-> Toggle the Hard Constraints layer on/off with the eye icon to see the effect.`,
+> 🎯 Try placing a turbine inside the Hard Constraint layer — it should be blocked. Toggle the layer on/off with the eye icon.`,
       },
       {
         id: 'l3',
-        title: 'Step 3 — Select Turbine Type & Place Layout',
+        title: '💨 Step 3 — Turbine Type & Layout',
         content: `Turbines tab → select **Vestas V150-4.5 (4.5 MW)**.
 
-Click **Place Turbine**. Place 10 turbines in the developable area:
+Click **Place Turbine** in Draw Tools. Place 10 turbines:
 - Inside site boundary
-- Outside residential buffer and SSSI
-- Clear of PRoW corridor
-- Along the main ridge, spaced ~650m apart (roughly 4× rotor diameter)
+- Outside constraint polygons (they're blocked)
+- Along the main ridge, spaced ~650m apart (≈ 4× rotor diameter)
 - Stagger any second row ~400m laterally to reduce wake losses
 
-As each turbine places, it fetches real elevation and wind data. Green-to-red wind circles = good positions. Blue = move to higher ground.
+As each turbine places, real elevation and wind data load automatically.
 
-Check the KPI strip: target ~45 MW capacity, 130–180 GWh AEP, 33–45% capacity factor.
+**Enable radii** — in the Turbines tab, enable 5D radii to visualise spacing.
 
-> Place all 10 turbines before moving to Step 4.`,
+Check KPI strip: target ~45 MW capacity, 130–180 GWh AEP, 33–45% capacity factor.
+
+**Try moving a turbine** — drag in Select mode and watch wind speed update at the new location.
+
+> 🎯 Place all 10 turbines. Move the worst-performing one to better wind.`,
       },
       {
         id: 'l4',
-        title: 'Step 4 — Setbacks & Layout Refinement',
-        content: `Select mode → click each turbine → Show on map → **500m** → Apply. Do this for all 10.
+        title: '🔌 Step 4 — Cable Network with Nodes',
+        content: `**Place substation:** Substation tool → click near centre of turbines.
+Edit it: Name "Knockroe 33/132kV Collection Sub", Transformer 60 MVA, Gen Capacity 45 MW.
 
-Zoom out. Check: does any orange circle overlap a red constraint polygon?
+**Draw internal cables (33kV 150mm²):**
+Use the string topology with nodes:
+- Draw T01 → T02 → T03 → T04 → T05 forming a string
+- Add a node by selecting the T03→T04 cable → Add Node
+- Connect T06 and T07 to that node
+- Continue T05 string → Substation; continue node → Substation
 
-If yes: open Data Tables → edit that turbine's Lat/Lng to move it away, or delete and re-place.
+**Optimise** — click Optimise in Cables tab to auto-upgrade overloaded cables.
 
-**Spacing check:** No two turbines should be within 450m of each other (3× rotor diameter). In Data Tables, compare lat values — 0.005° ≈ 550m.
+**Grid connection:** Change cable type to 132kV Overhead → draw from substation to site boundary edge.
 
-Switch T1's radius to **1km** to check outlying dwellings.
-
-**Rename all turbines:** click each → type T01, T02… T10 → Apply. Professional naming is used in all technical reports and consultant drawings.
-
-> Complete this step before moving to Step 5.`,
+> 🎯 Draw the complete cable network. Use Optimise to handle overloads.`,
       },
       {
         id: 'l5',
-        title: 'Step 5 — Substation & Cable Network',
-        content: `**Place substation:** Substation tool → click near the centre of the turbine cluster (close to a road).
+        title: '📊 Step 5 — Data Review & Export',
+        content: `Navigate to **Data Tables** (click the Data Tables tab in the right panel) and check:
 
-Click it in Select mode. Fill in:
-- Name: "Knockroe 33/132kV Collection Substation"
-- Transformer MVA: 60
-- Gen Capacity MW: 45
-- Notes: "132kV underground to nearest DNO substation, ~12km."
+**Turbines:** All 10 listed T01–T10. Hub wind speed values present. AEP values reasonable. Hub height 105m for all.
 
-**Internal cables (33kV 150mm²):**
-- String 1: T01→T02→T03→T04→T05→Substation (5 cables)
-- String 2: T06→T07→T08→T09→T10→Substation (5 cables)
+**Cables:** 11+ cables. Grid connection type = 132kV OHL. Collection cables = 33kV 150mm². No 0,0 lat/lng.
 
-**Grid connection:** Change type to **132kV Overhead Line** → draw one cable from substation to site boundary edge.
+**Substations:** 1 listed, 60 MVA, 45 MW gen capacity.
 
-Check Analysis tab: target ~15–20km total cable, £1.5–£2.5M total cost.
+**Polygons:** Site boundary, 4 constraint polygons, all named with notes. Expand layers to confirm areas are shown.
 
-> Complete this step before moving to Step 6.`,
+Back in Planning: **File → Save** → then use the Export button to download GeoJSON and KML.
+
+> 🎯 Export complete. Your indicative wind farm layout is ready for consultants.`,
       },
       {
         id: 'l6',
-        title: 'Step 6 — Data Review & Export',
-        content: `Navigate to **Data Tables** (main nav). Check:
+        title: '🏆 Step 6 — Review & Iterate',
+        content: `With the full layout exported, do a final review:
 
-**Turbines:** All 10 listed T01–T10. Hub wind speed values present. AEP values reasonable (~13.8 GWh each at 35% CF). Hub height 105m for all. No 0,0 lat/lng.
+**Constraints check:**
+- No turbine is inside a Hard Constraint polygon
+- 5D radii don't overlap constraint zones
+- Substation is near a road and the grid connection point
 
-**Cables:** 11 total (10 collection + 1 grid). Grid connection type = 132kV OHL. Collection cables = 33kV 150mm². Lengths sensible (collection 300–800m, grid > 2km).
+**Electrical check:**
+- No overloaded cables (all should be green in Cables tab)
+- Substation shows "Within Capacity"
+- Grid connection cable is the right type (132kV)
 
-**Substations:** 1 listed, 60 MVA, 45 MW gen capacity, correct lat/lng.
+**Energy check (Analysis tab):**
+- Capacity factor > 30%
+- Average hub wind > 7.5 m/s
+- Monthly profile shows realistic seasonal variation
 
-**Polygons:** Site boundary, 4 constraint polygons, all named with notes.
+**Professional tip:** Save different visibility states using the eye icons — constraint view, layout view, electrical view — before presenting to different audiences.
 
-Back in Planning, click **Save** → **GeoJSON** → **KML**.
-
-> Export complete. Your indicative wind farm layout is ready to share with consultants.`,
+> 🎯 Congratulations! You've completed the full wind farm design walkthrough.`,
       },
     ],
   },

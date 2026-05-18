@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Wind, Zap, BarChart2, Layers, Settings } from 'lucide-react';
+import { Wind, Zap, BarChart2, Layers, Settings, Table } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function RightPanelTabs({ 
@@ -7,7 +7,8 @@ export default function RightPanelTabs({
   setRightTab, 
   features, 
   highlights,
-  rightPanelOpen 
+  rightPanelOpen,
+  onDataTables,
 }) {
   // Reset tab if Analysis is disabled but selected
   useEffect(() => {
@@ -38,6 +39,14 @@ export default function RightPanelTabs({
           <TabIcon className="w-3 h-3 shrink-0" /> {label}
         </button>
       ))}
+      {onDataTables && (
+        <button onClick={onDataTables}
+          className="flex items-center justify-center gap-1 py-2.5 text-[10px] font-medium transition-colors whitespace-nowrap px-1.5 shrink-0 text-slate-500 hover:text-slate-300 border-l border-slate-800"
+          title="Data Tables"
+        >
+          <Table className="w-3 h-3 shrink-0" />
+        </button>
+      )}
     </div>
   );
 }

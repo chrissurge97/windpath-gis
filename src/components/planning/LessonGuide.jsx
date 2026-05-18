@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import {
-  X, Minimize2, BookOpen, ChevronLeft, ChevronRight, CheckCircle2
+  X, Minimize2, BookOpen, ChevronLeft, ChevronRight, CheckCircle2, GripVertical
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MODULES } from '@/lib/trainingModules';
@@ -62,7 +62,6 @@ const LESSON_CONFIG = {
   },
 };
 
-
 export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, onClose }) {
   const navigate = useNavigate();
   const module = MODULES.find(m => m.id === moduleId);
@@ -70,15 +69,52 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
   const [minimized, setMinimized] = useState(false);
   const [completedTasks, setCompletedTasks] = useState({});
 
-  // Define these variables unconditionally for hooks
+  // Drag state
+  const panelRef = useRef(null);
+  const [pos, setPos] = useState({ bottom: 16, right: 16 }); // initial position
+  const [useFixed, setUseFixed] = useState(false); // switch to fixed positioning after first drag
+  const [fixedPos, setFixedPos] = useState({ x: null, y: null });
+  const dragging = useRef(false);
+  const dragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
+
+  const onMouseDown = useCallback((e) => {
+    if (!panelRef.current) return;
+    const rect = panelRef.current.getBoundingClientRect();
+    dragging.current = true;
+    dragStart.current = {
+      mx: e.clientX,
+      my: e.clientY,
+      px: rect.left,
+      py: rect.top,
+    };
+    // Switch to fixed positioning from now on
+    setUseFixed(true);
+    setFixedPos({ x: rect.left, y: rect.top });
+    e.preventDefault();
+  }, []);
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!dragging.current) return;
+      const dx = e.clientX - dragStart.current.mx;
+      const dy = e.clientY - dragStart.current.my;
+      setFixedPos({
+        x: Math.max(0, Math.min(window.innerWidth - 360, dragStart.current.px + dx)),
+        y: Math.max(0, Math.min(window.innerHeight - 80, dragStart.current.py + dy)),
+      });
+    };
+    const onUp = () => { dragging.current = false; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, []);
+
   let config = {};
   let tasks = [];
   if (module) {
     config = LESSON_CONFIG[moduleId]?.[lessonIndex] || {};
     tasks = config.tasks || [];
   }
-
-
 
   // Snap map to lesson location
   useEffect(() => {
@@ -89,7 +125,7 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
     }, 200);
   }, [lessonIndex, module, config.center, config.zoom]);
 
-  // Poll for task completion via global state set by Planning
+  // Poll for task completion
   useEffect(() => {
     if (!module || !tasks.length) return;
     const poll = setInterval(() => {
@@ -105,7 +141,6 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
     return () => clearInterval(poll);
   }, [tasks, completedTasks, module]);
 
-  // Reset tasks on lesson change
   useEffect(() => { setCompletedTasks({}); }, [lessonIndex]);
 
   if (!module) return null;
@@ -113,7 +148,6 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
   const lesson = module.lessons[lessonIndex];
   const isLast = lessonIndex === module.lessons.length - 1;
   const colors = COLOR_MAP[module.color] || COLOR_MAP.blue;
-
   const allTasksDone = tasks.length === 0 || tasks.every(t => completedTasks[t.id]);
 
   const advance = () => {
@@ -121,35 +155,50 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
     else { setLessonIndex(i => i + 1); setCompletedTasks({}); }
   };
 
+  const panelStyle = useFixed && fixedPos.x !== null
+    ? { position: 'fixed', left: fixedPos.x, top: fixedPos.y, width: 340, zIndex: 1500 }
+    : { position: 'absolute', bottom: 16, right: 16, width: 340, zIndex: 1500 };
+
   if (minimized) {
+    const minStyle = useFixed && fixedPos.x !== null
+      ? { position: 'fixed', left: fixedPos.x, bottom: undefined, top: fixedPos.y, zIndex: 1500 }
+      : { position: 'absolute', bottom: 16, left: 16, zIndex: 1500 };
     return (
       <button
+        ref={panelRef}
         onClick={() => setMinimized(false)}
-        className={cn(
-          "absolute bottom-4 left-4 z-[1500] w-12 h-12 rounded-full shadow-2xl flex items-center justify-center transition-all group hover:scale-110 bg-gradient-to-br",
-          `from-${module.color}-600 to-${module.color}-800`
-        )}
+        style={minStyle}
+        className={cn("w-12 h-12 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 bg-slate-800 border border-slate-600")}
         title={`${module.title} — Lesson ${lessonIndex + 1}/${module.lessons.length}`}
       >
-        <BookOpen className="w-5 h-5 text-white" />
+        <BookOpen className={cn('w-5 h-5', colors.text)} />
       </button>
     );
   }
 
   return (
     <div
-      className="absolute bottom-4 right-4 z-[1500] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
-      style={{ width: '340px', maxHeight: 'calc(100vh - 120px)' }}
+      ref={panelRef}
+      style={{ ...panelStyle, maxHeight: 'calc(100vh - 80px)', userSelect: dragging.current ? 'none' : 'auto' }}
+      className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
     >
-      {/* Header */}
-      <div className={cn('flex items-center gap-2 px-3 py-2.5 border-b border-slate-700 shrink-0', colors.bg)}>
+      {/* Header — drag handle */}
+      <div
+        className={cn('flex items-center gap-2 px-3 py-2.5 border-b border-slate-700 shrink-0 cursor-grab active:cursor-grabbing', colors.bg)}
+        onMouseDown={onMouseDown}
+      >
+        <GripVertical className="w-3 h-3 text-slate-600 shrink-0" />
         <BookOpen className={cn('w-3.5 h-3.5 shrink-0', colors.text)} />
         <div className="flex-1 min-w-0">
           <p className={cn('text-[10px] font-semibold uppercase tracking-wider', colors.text)}>{module.title}</p>
           <p className="text-[10px] text-slate-500 truncate">{lesson.title}</p>
         </div>
-        <button onClick={() => setMinimized(true)} className="p-0.5 text-slate-500 hover:text-white"><Minimize2 className="w-3 h-3" /></button>
-        <button onClick={onClose} className="p-0.5 text-slate-500 hover:text-white"><X className="w-3 h-3" /></button>
+        <button onClick={() => setMinimized(true)} className="p-0.5 text-slate-500 hover:text-white" onMouseDown={e => e.stopPropagation()}>
+          <Minimize2 className="w-3 h-3" />
+        </button>
+        <button onClick={onClose} className="p-0.5 text-slate-500 hover:text-white" onMouseDown={e => e.stopPropagation()}>
+          <X className="w-3 h-3" />
+        </button>
       </div>
 
       {/* Progress dots */}
@@ -166,7 +215,6 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
         <div className={cn('rounded-xl border p-3 text-xs leading-relaxed text-slate-300 whitespace-pre-line', colors.bg, colors.border)}>
           {lesson.content}
         </div>
-
 
         {/* Interactive tasks */}
         {tasks.length > 0 && (
