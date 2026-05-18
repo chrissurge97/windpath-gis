@@ -22,7 +22,6 @@ export default function RightPanelTabs({
     { id: 'cables', label: 'Cables', icon: Zap },
     ...(features.windAnalysis ? [{ id: 'analysis', label: 'Analysis', icon: BarChart2 }] : []),
     { id: 'layers', label: 'Layers', icon: Layers },
-    { id: 'types', label: 'Types', icon: Settings },
   ];
 
   if (!rightPanelOpen) return null;
