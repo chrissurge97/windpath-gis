@@ -4,8 +4,22 @@
  */
 import { geoJSONToLayer, geoJSONToLayers } from '@/lib/gisUtils';
 import { importProjectGeoJSON, importKML } from '@/lib/projectExport';
-import { importShapefile } from '@/lib/shapefileUtils';
 import { DEFAULT_TURBINE_TYPES, DEFAULT_CABLE_TYPES } from '@/lib/turbineTypes';
+
+/** Run shapefile parsing in a Web Worker to avoid blocking the main thread */
+function importShapefileOffThread(arrayBuffer, filename) {
+  return new Promise((resolve, reject) => {
+    const workerUrl = new URL('/src/lib/shapefileWorker.js', import.meta.url);
+    const worker = new Worker(workerUrl, { type: 'module' });
+    worker.onmessage = (e) => {
+      worker.terminate();
+      if (e.data.error) reject(new Error(e.data.error));
+      else resolve(e.data.result);
+    };
+    worker.onerror = (err) => { worker.terminate(); reject(err); };
+    worker.postMessage({ arrayBuffer, filename }, [arrayBuffer]);
+  });
+}
 
 /**
  * Split a flat GeoJSON FeatureCollection into separate layers by geometry type.
@@ -106,7 +120,7 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate }) {
 
         } else if (fname.endsWith('.shp') || fname.endsWith('.zip')) {
           const buf = await file.arrayBuffer();
-          const result = await importShapefile(buf, file.name);
+          const result = await importShapefileOffThread(buf, file.name);
           const toProcess = Array.isArray(result) ? result : [result];
           for (const geojson of toProcess) {
             const hasLayerMeta = geojson.features?.some(f => f.properties?._layerId);
