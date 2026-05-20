@@ -190,37 +190,42 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
     });
 
     // ── Phase 3: Rebuild cable node references via proximity matching ────────
-    // Since exported cable node IDs don't match imported turbine/substation IDs,
-    // snap cables to assets by proximity (first/last point of cable to nearest asset)
-    const allAssets = [...turbineFeaturesToAdd, ...substationFeaturesToAdd];
+    // Snap cables to nearest turbine/substation at cable endpoints
+    const allTurbines = turbineFeaturesToAdd.map(t => ({ ...t, assetType: 'turbine' }));
+    const allSubs = substationFeaturesToAdd.map(s => ({ ...s, assetType: 'substation' }));
+    const allAssets = [...allTurbines, ...allSubs];
+    
     const resolvedCables = cableFeaturesToAdd.map(cable => {
       if (!cable.geometry?.coordinates || cable.geometry.coordinates.length < 2) {
-        return cable; // No valid geometry, skip snapping
+        return cable;
       }
       
       const [startLng, startLat] = cable.geometry.coordinates[0];
       const [endLng, endLat] = cable.geometry.coordinates[cable.geometry.coordinates.length - 1];
       
-      // Find nearest asset to each end, within 100m tolerance
       const findNearestAsset = (lng, lat) => {
         let best = null, bestDist = Infinity;
         for (const asset of allAssets) {
           const [assetLng, assetLat] = asset.geometry.coordinates;
           const d = Math.hypot(lng - assetLng, lat - assetLat);
-          if (d < bestDist && d < 0.01) { // ~1km tolerance in degrees
+          if (d < bestDist) {
             bestDist = d;
-            best = { type: asset.properties?.turbine_type_id ? 'turbine' : 'substation', id: asset.id };
+            best = { type: asset.assetType, id: asset.id };
           }
         }
-        return best;
+        return bestDist < 0.01 ? best : null; // Only snap if within ~1km
       };
       
-      const newStartNode = findNearestAsset(startLng, startLat) || cable.properties.start_node;
-      const newEndNode = findNearestAsset(endLng, endLat) || cable.properties.end_node;
+      const newStartNode = findNearestAsset(startLng, startLat);
+      const newEndNode = findNearestAsset(endLng, endLat);
       
       return {
         ...cable,
-        properties: { ...cable.properties, start_node: newStartNode, end_node: newEndNode }
+        properties: {
+          ...cable.properties,
+          start_node: newStartNode || cable.properties.start_node,
+          end_node: newEndNode || cable.properties.end_node
+        }
       };
     });
 
