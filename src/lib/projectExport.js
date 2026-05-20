@@ -32,18 +32,20 @@ function layerMeta(layer) {
   };
 }
 
+const META_KEYS = new Set(['_layerId','_layerName','_layerType','_layerColor','_layerFillOpacity',
+  '_layerStrokeWeight','_layerStrokeOpacity','_layerNoTurbines','_layerVisible']);
+
 function stripLayerMeta(props) {
-  const p = { ...props };
-  delete p._layerId;
-  delete p._layerName;
-  delete p._layerType;
-  delete p._layerColor;
-  delete p._layerFillOpacity;
-  delete p._layerStrokeWeight;
-  delete p._layerStrokeOpacity;
-  delete p._layerNoTurbines;
-  delete p._layerVisible;
-  return p;
+  const out = {};
+  for (const [k, v] of Object.entries(props)) {
+    if (META_KEYS.has(k)) continue;
+    // Deserialize JSON-stringified objects (start_node, end_node, custom_fields, etc.)
+    if (typeof v === 'string' && (v.startsWith('{') || v.startsWith('['))) {
+      try { out[k] = JSON.parse(v); continue; } catch {}
+    }
+    out[k] = v;
+  }
+  return out;
 }
 
 // ── GeoJSON Project Export ────────────────────────────────────────────────────
@@ -207,7 +209,9 @@ export async function exportProjectKMZ(project) {
       // Build ExtendedData block with all properties (including layer metadata)
       let extData = '        <ExtendedData>\n';
       for (const [k, v] of Object.entries(props)) {
-        extData += `          <Data name="${escapeXml(k)}"><value>${escapeXml(String(v ?? ''))}</value></Data>\n`;
+        // Serialize objects/arrays to JSON so they survive KML round-trips
+        const serialized = (v !== null && typeof v === 'object') ? JSON.stringify(v) : String(v ?? '');
+        extData += `          <Data name="${escapeXml(k)}"><value>${escapeXml(serialized)}</value></Data>\n`;
       }
       extData += '        </ExtendedData>\n';
 

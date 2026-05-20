@@ -48,7 +48,7 @@ import LayerImportExport from '@/components/planning/LayerImportExport';
 import LayerList from '@/components/planning/LayerList';
 import NewZoneDialog from '@/components/planning/NewZoneDialog';
 import ProjectFileButtons, { saveProject, loadProject, OpenProjectModal, setupProjectImport } from '@/components/planning/ProjectManager';
-import { openImportFilePicker, partitionImportedLayers } from '@/lib/importHandler';
+import { openImportFilePicker } from '@/lib/importHandler';
 import ConfigMenuWrapper from '@/components/planning/ConfigMenuWrapper';
 import { loadCustomTurbines } from '@/components/planning/TurbineWizard';
 import { loadCustomCables } from '@/components/planning/CableWizard';
@@ -812,22 +812,15 @@ export default function Planning() {
         if (ct?.length) setCableTypes(ct);
       },
       onLayers: (importedLayers) => {
-        const { typed, plain } = partitionImportedLayers(importedLayers);
         startTransition(() => {
           setLayers(prev => {
             let next = [...prev];
-            // Merge typed layers into matching existing layer
-            for (const imp of typed) {
-              const existing = next.find(l => l.type === imp.type);
-              if (existing) {
-                next = next.map(l => l.id === existing.id
-                  ? { ...l, features: [...l.features, ...imp.features] } : l);
-              } else {
-                next = [...next, imp];
-              }
+            for (const imp of importedLayers) {
+              // Always add as a new layer — this preserves cable start_node/end_node
+              // references that point to turbine IDs within the same imported set.
+              // Merging into existing typed layers would break those cross-references.
+              next = [...next, imp];
             }
-            // Add plain layers directly (no classify modal — splitByGeometryType already typed them)
-            next = [...next, ...plain];
             return next;
           });
         });
