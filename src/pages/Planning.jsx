@@ -152,10 +152,16 @@ function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = n
   } else {
     // No direction hint: pick the non-substation end as upstream
     // (substation is always the sink/downstream)
-    if (end?.type === 'substation') upstreamNode = start;else
-    if (start?.type === 'substation') upstreamNode = end;else
-    {
-      // Neither end is a substation — pick start as upstream by default
+    // If both ends are substations, pick 'start' as upstream (flow goes start → end)
+    if (end?.type === 'substation' && start?.type !== 'substation') {
+      upstreamNode = start;
+    } else if (start?.type === 'substation' && end?.type !== 'substation') {
+      upstreamNode = end;
+    } else if (start?.type === 'substation' && end?.type === 'substation') {
+      // Both are substations — pick start as upstream (conventional flow direction)
+      upstreamNode = start;
+    } else {
+      // Neither is a substation — pick start as upstream by default
       upstreamNode = start;
     }
   }
