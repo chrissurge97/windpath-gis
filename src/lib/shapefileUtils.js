@@ -437,23 +437,54 @@ export function exportShapefile(geojson, baseName = 'export') {
       ev_noturb:  firstProps._layerNoTurbines ? 'true' : 'false',
     };
 
-    // Strip internal _layer* fields, serialize object-valued props (e.g. start_node/end_node),
-    // and inject short ev_* metadata into each feature
-    const cleanFeatures = features.map(f => ({
-      ...f,
-      properties: {
-        ...Object.fromEntries(
-          Object.entries(f.properties || {})
-            .filter(([k]) => !k.startsWith('_'))
-            .map(([k, v]) => {
-              // Serialize objects/arrays to JSON strings so DBF can store them
-              if (v !== null && typeof v === 'object') return [k, JSON.stringify(v)];
-              return [k, v];
-            })
-        ),
-        ...layerMeta,
-      },
-    }));
+    // Preserve ALL metadata with abbreviated names that fit DBF's 10-char field limit
+    // Map: _fieldName → abbrev (e.g., _layerId → lyrId, _featureCableTypeId → fCblTypId)
+    const metaMap = {
+      '_layerId': 'lyrId',
+      '_layerName': 'lyrName',
+      '_layerType': 'lyrType',
+      '_layerColor': 'lyrColor',
+      '_layerFillOpacity': 'lyrFillOp',
+      '_layerStrokeWeight': 'lyrStrkWt',
+      '_layerStrokeOpacity': 'lyrStrkOp',
+      '_layerNoTurbines': 'lyrNoTurb',
+      '_layerVisible': 'lyrVisible',
+      '_featureCableTypeId': 'fCblTypId',
+      '_featureTransformerMva': 'fTransMva',
+      '_featureCapacityGenerationMw': 'fCapGenMw',
+      '_featureCapacityDemandMw': 'fCapDmdMw',
+    };
+    
+    const cleanFeatures = features.map(f => {
+      const props = { ...f.properties };
+      // Serialize objects/arrays to JSON strings
+      const serialized = Object.fromEntries(
+        Object.entries(props)
+          .map(([k, v]) => {
+            if (v !== null && typeof v === 'object') return [k, JSON.stringify(v)];
+            return [k, v];
+          })
+      );
+      
+      // Preserve all _* metadata with abbreviated names
+      const abbreviated = {};
+      for (const [key, val] of Object.entries(serialized)) {
+        if (key.startsWith('_')) {
+          const abbrev = metaMap[key] || key.slice(0, 10); // fallback: truncate
+          abbreviated[abbrev] = val;
+        } else {
+          abbreviated[key] = val;
+        }
+      }
+      
+      return {
+        ...f,
+        properties: {
+          ...abbreviated,
+          ...layerMeta,
+        },
+      };
+    });
 
     const { shp, shx } = buildSHP(cleanFeatures);
     const dbf = buildDBF(cleanFeatures);
@@ -495,12 +526,31 @@ async function readZip(arrayBuffer) {
 }
 
 function deserializeProps(props) {
+  // Reverse the abbreviated metadata names back to their full names
+  const abbrevToMeta = {
+    'lyrId': '_layerId',
+    'lyrName': '_layerName',
+    'lyrType': '_layerType',
+    'lyrColor': '_layerColor',
+    'lyrFillOp': '_layerFillOpacity',
+    'lyrStrkWt': '_layerStrokeWeight',
+    'lyrStrkOp': '_layerStrokeOpacity',
+    'lyrNoTurb': '_layerNoTurbines',
+    'lyrVisible': '_layerVisible',
+    'fCblTypId': '_featureCableTypeId',
+    'fTransMva': '_featureTransformerMva',
+    'fCapGenMw': '_featureCapacityGenerationMw',
+    'fCapDmdMw': '_featureCapacityDemandMw',
+  };
+
   const out = {};
   for (const [k, v] of Object.entries(props)) {
+    // Restore full metadata names
+    const fullKey = abbrevToMeta[k] || k;
     if (typeof v === 'string' && (v.startsWith('{') || v.startsWith('['))) {
-      try { out[k] = JSON.parse(v); continue; } catch {}
+      try { out[fullKey] = JSON.parse(v); continue; } catch {}
     }
-    out[k] = v;
+    out[fullKey] = v;
   }
   return out;
 }
