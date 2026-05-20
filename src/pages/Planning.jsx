@@ -48,7 +48,7 @@ import LayerImportExport from '@/components/planning/LayerImportExport';
 import LayerList from '@/components/planning/LayerList';
 import NewZoneDialog from '@/components/planning/NewZoneDialog';
 import ProjectFileButtons, { saveProject, loadProject, OpenProjectModal, setupProjectImport } from '@/components/planning/ProjectManager';
-import { openImportFilePicker } from '@/lib/importHandler';
+import { useHandleImport } from '@/lib/useHandleImport';
 import ConfigMenuWrapper from '@/components/planning/ConfigMenuWrapper';
 import { loadCustomTurbines } from '@/components/planning/TurbineWizard';
 import { loadCustomCables } from '@/components/planning/CableWizard';
@@ -800,43 +800,12 @@ export default function Planning() {
     setImportLogs(prev => [...prev.slice(-99), { msg, level, ts: Date.now() }]);
   };
 
-  const handleImport = () => {
-    setImportLogs([]);
-    setShowImportConsole(true);
-    openImportFilePicker({
-      onLoading: (loading) => setImportLoading(loading),
-      onLog: addImportLog,
-      defaultTurbineType: selectedTurbineType,
-      defaultCableTypeId: selectedCableTypeId,
-      onClassifyMode: (rawLayers) => {
-        setImportLoading(false);
-        setImportClassifyLayers(rawLayers);
-      },
-      onProject: (project) => {
-        // Switch project locally — auto-save will persist it
-        const tempId = '__imported_' + Date.now() + '__';
-        handleSwitchProject(tempId, { ...project, id: tempId });
-      },
-      onTypesUpdate: ({ turbineTypes: tt, cableTypes: ct }) => {
-        if (tt?.length) setTurbineTypes(tt);
-        if (ct?.length) setCableTypes(ct);
-      },
-      onLayers: (importedLayers) => {
-        startTransition(() => {
-          setLayers(prev => {
-            let next = [...prev];
-            for (const imp of importedLayers) {
-              // Always add as a new layer — this preserves cable start_node/end_node
-              // references that point to turbine IDs within the same imported set.
-              // Merging into existing typed layers would break those cross-references.
-              next = [...next, imp];
-            }
-            return next;
-          });
-        });
-      },
-    });
-  };
+  const handleImport = useHandleImport({
+    selectedTurbineType, selectedCableTypeId,
+    setImportLoading, addImportLog, setImportClassifyLayers,
+    handleSwitchProject, setTurbineTypes, setCableTypes,
+    setLayers, setShowImportConsole, setImportLogs,
+  });
 
   // ── Computed stats ─────────────────────────────────────────────────────────
   const totalCapacity_mw = turbines.reduce((s, t) => s + (t.properties.rated_power_mw || selectedTurbineType?.rated_power_mw || 3.5), 0);

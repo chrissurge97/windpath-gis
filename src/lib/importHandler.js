@@ -424,6 +424,7 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
 
     if (allImported.length > 0 && onLayers) {
       // Strip internal flags before handing off, defer to let UI repaint
+      // Merge typed layers (turbine, cable, substation) into existing layers — preserve IDs for topology
       const cleanLayers = allImported.map(({ _hadEvMeta, ...l }) => l);
       setTimeout(() => onLayers(cleanLayers), 0);
     }
