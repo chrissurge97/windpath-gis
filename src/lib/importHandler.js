@@ -261,12 +261,12 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           
           if (onLoading) onLoading(false);
           if (onProject) { 
-            // Show topology modal if KML has cables
-            if (cableLayer && cableLayer.features?.length && onCableTopology) {
-              onCableTopology(cableLayer.features, turbineLayer?.features || [], substationLayer?.features || [], project);
-            } else {
-              onProject(project);
-            }
+            // DISABLED FOR TESTING: Skip topology modal
+            // if (cableLayer && cableLayer.features?.length && onCableTopology) {
+            //   onCableTopology(cableLayer.features, turbineLayer?.features || [], substationLayer?.features || [], project);
+            // } else {
+            onProject(project);
+            // }
             return; 
           }
           if (project.layers?.length) allImported.push(...project.layers);
