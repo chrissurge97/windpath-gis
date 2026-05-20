@@ -237,7 +237,7 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           log(`Parsing shapefile…`);
           const result = await importShapefileMainThread(buf, file.name, onLog);
           const toProcess = (Array.isArray(result) ? result : [result]).filter(Boolean);
-          log(`Parsed ${toProcess.length} shapefile layer(s) — opening classify menu`, 'success');
+          log(`Parsed ${toProcess.length} shapefile layer(s)`, 'success');
 
           // Build raw layers for classify modal.
           // Each .shp in the ZIP becomes its own layer, preserving the shapefile's
@@ -272,6 +272,7 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
                 ),
               }));
 
+              const hasEvMeta = !!sample.ev_type; // true = came from EagleView export
               const layerId = `lyr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
               rawLayers.push({
                 id: layerId,
@@ -284,11 +285,25 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
                 strokeOpacity: evSopac,
                 no_turbines: evNoturb,
                 features: cleanFeatures,
+                _hadEvMeta: hasEvMeta,
               });
             }
           }
           if (rawLayers.length > 0 && onLoading) onLoading(false);
-          if (rawLayers.length > 0 && onClassify) { onClassify(rawLayers); return; }
+
+          // If ALL raw layers came from an EagleView export (have ev_* metadata),
+          // we can auto-import without the classify wizard.
+          const allHaveEvMeta = rawLayers.every(l =>
+            l._hadEvMeta === true
+          );
+
+          if (rawLayers.length > 0 && !allHaveEvMeta && onClassify) {
+            log(`Opening classify wizard for ${rawLayers.length} layer(s)`, 'info');
+            onClassify(rawLayers); return;
+          }
+
+          // Auto-import: all layers have ev_* metadata, restore directly without wizard
+          log(`Auto-importing ${rawLayers.length} layer(s) with restored styles`, 'success');
           rawLayers.forEach(l => allImported.push(l));
 
         } else if (fname.endsWith('.json') || fname.endsWith('.geojson')) {
@@ -355,8 +370,9 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
     if (onLoading) onLoading(false);
 
     if (allImported.length > 0 && onLayers) {
-      // Defer the state update by one frame so the UI can repaint the loading indicator first
-      setTimeout(() => onLayers(allImported), 0);
+      // Strip internal flags before handing off, defer to let UI repaint
+      const cleanLayers = allImported.map(({ _hadEvMeta, ...l }) => l);
+      setTimeout(() => onLayers(cleanLayers), 0);
     }
   };
 
