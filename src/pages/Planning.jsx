@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, startTransition } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { usePlanningProject } from '@/lib/PlanningContext';
 import {
@@ -129,6 +129,9 @@ function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = n
 
   const start = cable.properties.start_node;
   const end = cable.properties.end_node;
+
+  // Short-circuit: if neither node is connected, no load can flow
+  if (!start && !end) return 0;
 
   // Determine upstream node (the end we're collecting power FROM)
   let upstreamNode = null;
@@ -806,21 +809,23 @@ export default function Planning() {
       },
       onLayers: (importedLayers) => {
         const { typed, plain } = partitionImportedLayers(importedLayers);
-        setLayers(prev => {
-          let next = [...prev];
-          // Merge typed layers into matching existing layer
-          for (const imp of typed) {
-            const existing = next.find(l => l.type === imp.type);
-            if (existing) {
-              next = next.map(l => l.id === existing.id
-                ? { ...l, features: [...l.features, ...imp.features] } : l);
-            } else {
-              next = [...next, imp];
+        startTransition(() => {
+          setLayers(prev => {
+            let next = [...prev];
+            // Merge typed layers into matching existing layer
+            for (const imp of typed) {
+              const existing = next.find(l => l.type === imp.type);
+              if (existing) {
+                next = next.map(l => l.id === existing.id
+                  ? { ...l, features: [...l.features, ...imp.features] } : l);
+              } else {
+                next = [...next, imp];
+              }
             }
-          }
-          // Add plain layers directly (no classify modal — splitByGeometryType already typed them)
-          next = [...next, ...plain];
-          return next;
+            // Add plain layers directly (no classify modal — splitByGeometryType already typed them)
+            next = [...next, ...plain];
+            return next;
+          });
         });
       },
     });
