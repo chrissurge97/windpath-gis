@@ -83,7 +83,7 @@ function haversineM(lat1, lng1, lat2, lng2) {
 
 // ── Snap to nearest turbine/substation (pixel distance on screen) ───────────
 const SNAP_PX = 25; // pixels
-function findSnapNode(latlng, turbines, substations, map) {
+function findSnapNode(latlng, turbines, substations, map, cables = []) {
   if (!map) return null;
   const clickPt = map.latLngToContainerPoint(latlng);
   let best = null,bestDist = SNAP_PX;
@@ -99,6 +99,15 @@ function findSnapNode(latlng, turbines, substations, map) {
     const d = Math.hypot(pt.x - clickPt.x, pt.y - clickPt.y);
     if (d < bestDist) {bestDist = d;best = { type: 'substation', id: s.id, lat, lng };}
   }
+  cables.forEach(c => {
+    if (c.geometry?.type === 'LineString' && c.geometry.coordinates?.length >= 2) {
+      const [sL, sLa] = c.geometry.coordinates[0], [eL, eLa] = c.geometry.coordinates[c.geometry.coordinates.length - 1];
+      const sp = map.latLngToContainerPoint([sLa, sL]), ep = map.latLngToContainerPoint([eLa, eL]);
+      const ds = Math.hypot(sp.x - clickPt.x, sp.y - clickPt.y), de = Math.hypot(ep.x - clickPt.x, ep.y - clickPt.y);
+      if (ds < bestDist) {bestDist = ds;best = { type: 'cable_point', id: c.id, lat: sLa, lng: sL };}
+      if (de < bestDist) {bestDist = de;best = { type: 'cable_point', id: c.id, lat: eLa, lng: eL };}
+    }
+  });
   return best;
 }
 
@@ -489,7 +498,7 @@ export default function Planning() {
     }
 
     if (mode === 'draw_cable') {
-      const snap = mapRef.current ? findSnapNode(latlng, turbines, substations, mapRef.current) : null;
+      const snap = mapRef.current ? findSnapNode(latlng, turbines, substations, mapRef.current, cables) : null;
       const point = snap ? [snap.lat, snap.lng] : [latlng.lat, latlng.lng];
       setDrawingPoints((prev) => [...prev, point]);
       setDrawingSnapNodes((prev) => [...prev, snap || null]);
