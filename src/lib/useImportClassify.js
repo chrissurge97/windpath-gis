@@ -15,6 +15,8 @@ function haversineM(lat1, lng1, lat2, lng2) {
 function deserializeProps(props) {
   const out = {};
   for (const [k, v] of Object.entries(props)) {
+    // Skip all layer metadata fields
+    if (k.startsWith('_layer')) continue;
     if (typeof v === 'string' && (v.startsWith('{') || v.startsWith('['))) {
       try { out[k] = JSON.parse(v); continue; } catch {}
     }
@@ -119,10 +121,10 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
             id: newId,
             properties: {
               name: restoredProps.name || `Substation ${i + 1}`,
-              transformer_mva: 60,
-              capacity_demand_mw: 30,
-              capacity_generation_mw: 30,
-              notes: '',
+              transformer_mva: restoredProps.transformer_mva || 60,
+              capacity_demand_mw: restoredProps.capacity_demand_mw || 30,
+              capacity_generation_mw: restoredProps.capacity_generation_mw || 30,
+              notes: restoredProps.notes || '',
               ...Object.fromEntries(Object.entries(restoredProps).filter(([k]) => !['name', 'transformer_mva', 'capacity_demand_mw', 'capacity_generation_mw', 'notes'].includes(k))),
             },
           };
