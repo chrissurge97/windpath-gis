@@ -21,6 +21,22 @@ function calcLineLength(coords) {
   return +len.toFixed(0);
 }
 
+// ── Main-thread shapefile parsing (always reliable) ─────────────────────────
+async function importShapefileMainThread(arrayBuffer, filename, onLog) {
+  const log = (msg, level = 'info') => {
+    console.log('[importHandler]', msg);
+    if (onLog) onLog(msg, level);
+  };
+  log(`Parsing on main thread — ${(arrayBuffer.byteLength / 1024).toFixed(1)} KB`);
+  const { importShapefile } = await import('@/lib/shapefileUtils');
+  const result = await importShapefile(arrayBuffer, filename);
+  const count = Array.isArray(result)
+    ? result.reduce((s, r) => s + (r.features?.length || 0), 0)
+    : (result?.features?.length || 0);
+  log(`Parse OK — ${count} features`, 'success');
+  return result;
+}
+
 // ── Shapefile off-thread via Web Worker ──────────────────────────────────────
 function importShapefileOffThread(arrayBuffer, filename, onLog) {
   const log = (msg, level = 'info') => {
@@ -33,29 +49,35 @@ function importShapefileOffThread(arrayBuffer, filename, onLog) {
     try {
       worker = new Worker(new URL('./shapefileWorker.js', import.meta.url), { type: 'module' });
     } catch (workerErr) {
-      log(`Worker creation failed: ${workerErr.message} — falling back to main thread`, 'warn');
-      import('@/lib/shapefileUtils').then(({ importShapefile }) => {
-        log('Main-thread parse started…');
-        importShapefile(arrayBuffer, filename).then(r => { log('Main-thread parse OK'); resolve(r); }).catch(e => { log(`Main-thread parse error: ${e.message}`, 'error'); reject(e); });
-      }).catch(reject);
+      log(`Worker unavailable (${workerErr.message}) — using main thread`, 'warn');
+      importShapefileMainThread(arrayBuffer, filename, onLog).then(resolve).catch(reject);
       return;
     }
 
-    const timeout = setTimeout(() => {
+    // If worker doesn't respond within 5s of creation, assume it failed to load
+    const startupTimeout = setTimeout(() => {
+      log('Worker failed to start — using main thread', 'warn');
+      worker.terminate();
+      importShapefileMainThread(arrayBuffer, filename, onLog).then(resolve).catch(reject);
+    }, 5000);
+    let workerStarted = false;
+
+    const parseTimeout = setTimeout(() => {
       log('Worker timed out after 60s', 'error');
       worker.terminate();
       reject(new Error('Shapefile parsing timed out. The file may be too large.'));
-    }, 60000);
+    }, 65000);
 
-    // Single message handler — distinguishes log forwarding from result/error
     worker.addEventListener('message', (e) => {
+      if (!workerStarted) {
+        workerStarted = true;
+        clearTimeout(startupTimeout);
+      }
       if (e.data?.log) {
-        // Log-forwarding message from worker's console.log override — just display it
         log(`[worker] ${e.data.log}`, e.data.level || 'info');
         return;
       }
-      // Final result or error
-      clearTimeout(timeout);
+      clearTimeout(parseTimeout);
       worker.terminate();
       if (e.data.error) {
         log(`Worker error: ${e.data.error}`, 'error');
@@ -71,13 +93,11 @@ function importShapefileOffThread(arrayBuffer, filename, onLog) {
     });
 
     worker.onerror = (err) => {
-      clearTimeout(timeout);
-      log(`Worker onerror: ${err.message || err} — falling back to main thread`, 'warn');
+      clearTimeout(startupTimeout);
+      clearTimeout(parseTimeout);
+      log(`Worker error (${err.message || err}) — using main thread`, 'warn');
       worker.terminate();
-      import('@/lib/shapefileUtils').then(({ importShapefile }) => {
-        log('Main-thread parse started (fallback)…');
-        importShapefile(arrayBuffer, filename).then(r => { log('Main-thread parse OK'); resolve(r); }).catch(e => { log(`Main-thread parse error: ${e.message}`, 'error'); reject(e); });
-      }).catch(reject);
+      importShapefileMainThread(arrayBuffer, filename, onLog).then(resolve).catch(reject);
     };
 
     log(`Sending to worker — ${(arrayBuffer.byteLength / 1024).toFixed(1)} KB`);
