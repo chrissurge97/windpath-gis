@@ -245,7 +245,15 @@ export function geoJSONToLayer(geojson, layerName) {
     const p = { ...f.properties };
     ['_layerId','_layerName','_layerType','_layerColor','_layerFillOpacity',
      '_layerStrokeWeight','_layerStrokeOpacity','_layerNoTurbines','_layerVisible'].forEach(k => delete p[k]);
-    return { id: f.id || crypto.randomUUID(), layerId: null, geometry: f.geometry, properties: p };
+    // Deserialize JSON-stringified objects (start_node, end_node, custom_fields)
+    const deserialized = {};
+    for (const [k, v] of Object.entries(p)) {
+      if (typeof v === 'string' && (v.startsWith('{') || v.startsWith('['))) {
+        try { deserialized[k] = JSON.parse(v); continue; } catch {}
+      }
+      deserialized[k] = v;
+    }
+    return { id: f.id || crypto.randomUUID(), layerId: null, geometry: f.geometry, properties: deserialized };
   });
 
   return createLayer({

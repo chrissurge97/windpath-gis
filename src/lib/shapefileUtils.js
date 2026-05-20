@@ -494,6 +494,17 @@ async function readZip(arrayBuffer) {
   return files;
 }
 
+function deserializeProps(props) {
+  const out = {};
+  for (const [k, v] of Object.entries(props)) {
+    if (typeof v === 'string' && (v.startsWith('{') || v.startsWith('['))) {
+      try { out[k] = JSON.parse(v); continue; } catch {}
+    }
+    out[k] = v;
+  }
+  return out;
+}
+
 function parseDBF(arrayBuffer) {
   const dv = new DataView(arrayBuffer);
   const numRec     = dv.getUint32(4,  true);
@@ -521,7 +532,8 @@ function parseDBF(arrayBuffer) {
       props[name] = (!isNaN(val) && val !== '') ? Number(val) : val;
       recOff += len;
     }
-    records.push(props);
+    // Deserialize JSON-stringified objects (start_node, end_node, custom_fields)
+    records.push(deserializeProps(props));
   }
   return records;
 }

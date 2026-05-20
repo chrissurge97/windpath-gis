@@ -272,6 +272,16 @@ export function importKML(kmlText) {
     const pmName = pm.querySelector(':scope > name')?.textContent;
     if (pmName && !props.name) props.name = pmName;
 
+    // Deserialize JSON-stringified objects (start_node, end_node, custom_fields, etc.)
+    const deserializedProps = {};
+    for (const [k, v] of Object.entries(props)) {
+      if (typeof v === 'string' && (v.startsWith('{') || v.startsWith('['))) {
+        try { deserializedProps[k] = JSON.parse(v); continue; } catch {}
+      }
+      deserializedProps[k] = v;
+    }
+    Object.assign(props, deserializedProps);
+
     // Parse geometry
     let geometry = null;
     const pointEl = pm.querySelector('Point > coordinates');
