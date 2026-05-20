@@ -720,11 +720,33 @@ export default function Planning() {
     setImportLogs(prev => [...prev.slice(-99), { msg, level, ts: Date.now() }]);
   };
 
+  const recalcLoadFlow = (layersToRecalc) => {
+    const turbineLayer = layersToRecalc.find(l => l.type === 'turbine');
+    if (!turbineLayer) return layersToRecalc;
+    // Re-assign each turbine to its current type to trigger load recalc
+    const updated = turbineLayer.features.map(t => {
+      const tt = turbineTypes.find(ty => ty.id === t.properties.turbine_type_id) || turbineTypes[0];
+      return {
+        ...t,
+        properties: {
+          ...t.properties,
+          turbine_type_id: tt.id,
+          rated_power_mw: tt.rated_power_mw
+        }
+      };
+    });
+    return layersToRecalc.map(l => l.id === turbineLayer.id ? { ...l, features: updated } : l);
+  };
+
   const handleImport = useHandleImport({
     selectedTurbineType, selectedCableTypeId,
     setImportLoading, addImportLog, setImportClassifyLayers,
     handleSwitchProject, setTurbineTypes, setCableTypes,
-    setLayers, setShowImportConsole, setImportLogs,
+    setLayers: (importedLayers) => {
+      const recalced = recalcLoadFlow(importedLayers);
+      setLayers(recalced);
+    },
+    setShowImportConsole, setImportLogs,
     onCableTopology: (cables, turbines, substations, project) => {
       setPendingCableTopology({ cables, turbines, substations, project });
     },

@@ -163,23 +163,37 @@ function autoClassifyGeojson(geojson, baseName, defaultTurbineType, defaultCable
   let cableLayer = null;
 
   if (points.length) {
-    turbineFeatures = points.map((f, i) => ({
-      ...f,
-      properties: {
-        name: f.properties?.Name || f.properties?.name || `T${i + 1}`,
-        turbine_type_id: tt?.id,
-        hub_height: tt?.hub_height_m || 100,
-        rotor_diameter: tt?.rotor_diameter_m || 120,
-        rated_power_mw: tt?.rated_power_mw || 3.5,
-        ...Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name', 'Name', 'turbine_type_id'].includes(k))),
-      },
-    }));
-    layers.push({
-      id: layerId(), name: `${baseName} (Turbines)`,
-      type: 'turbine', visible: true,
-      color: tt?.color || '#10b981', fillOpacity: 0.8, strokeWeight: 2, strokeOpacity: 0.9,
-      no_turbines: false, features: turbineFeatures,
-    });
+    turbineFeatures = points.map((f, i) => {
+      const baseProps = Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name', 'Name', 'turbine_type_id'].includes(k)));
+      // Preserve any capacity fields from shapefile (transformer_mva, capacity_generation_mw, etc.)
+      const isSubstationType = baseProps.transformer_mva != null || baseProps.capacity_generation_mw != null || baseProps.capacity_demand_mw != null;
+      
+      if (isSubstationType) {
+        // This is actually a substation point—skip it from turbines
+        return null;
+      }
+      
+      return {
+        ...f,
+        properties: {
+          name: f.properties?.Name || f.properties?.name || `T${i + 1}`,
+          turbine_type_id: tt?.id,
+          hub_height: tt?.hub_height_m || 100,
+          rotor_diameter: tt?.rotor_diameter_m || 120,
+          rated_power_mw: tt?.rated_power_mw || 3.5,
+          ...baseProps,
+        },
+      };
+    }).filter(Boolean);
+    
+    if (turbineFeatures.length > 0) {
+      layers.push({
+        id: layerId(), name: `${baseName} (Turbines)`,
+        type: 'turbine', visible: true,
+        color: tt?.color || '#10b981', fillOpacity: 0.8, strokeWeight: 2, strokeOpacity: 0.9,
+        no_turbines: false, features: turbineFeatures,
+      });
+    }
   }
 
   if (lines.length) {
