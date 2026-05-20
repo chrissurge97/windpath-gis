@@ -63,7 +63,7 @@ function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = n
     total += calcCableLoad(fc.id, cables, turbines, upstreamNode.id, new Set(visited));
   }
 
-  return +(total.toFixed(1));
+  return total;
 }
 
 export default function CableDataTable({
