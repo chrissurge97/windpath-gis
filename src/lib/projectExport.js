@@ -242,6 +242,10 @@ export function importKML(kmlText) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(kmlText, 'application/xml');
 
+  // Check for XML parse errors
+  const parseError = doc.querySelector('parsererror');
+  if (parseError) throw new Error('KML file could not be parsed: ' + parseError.textContent.slice(0, 120));
+
   // Try to extract project metadata from Document/description
   let projectMeta = null;
   const docDesc = doc.querySelector('Document > description');
@@ -268,24 +272,26 @@ export function importKML(kmlText) {
     let geometry = null;
     const pointEl = pm.querySelector('Point > coordinates');
     if (pointEl) {
-      const [lng, lat] = pointEl.textContent.trim().split(',').map(Number);
-      geometry = { type: 'Point', coordinates: [lng, lat] };
+      const parts = pointEl.textContent.trim().split(',').map(Number);
+      if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        geometry = { type: 'Point', coordinates: [parts[0], parts[1]] };
+      }
     }
     const lineEl = pm.querySelector('LineString > coordinates');
     if (lineEl) {
-      const coords = lineEl.textContent.trim().split(/\s+/).map(c => {
-        const [lng, lat] = c.split(',').map(Number);
-        return [lng, lat];
-      });
-      geometry = { type: 'LineString', coordinates: coords };
+      const coords = lineEl.textContent.trim().split(/\s+/)
+        .map(c => { const p = c.split(',').map(Number); return p; })
+        .filter(p => p.length >= 2 && !isNaN(p[0]) && !isNaN(p[1]))
+        .map(p => [p[0], p[1]]);
+      if (coords.length >= 2) geometry = { type: 'LineString', coordinates: coords };
     }
     const polyEl = pm.querySelector('Polygon outerBoundaryIs LinearRing coordinates');
     if (polyEl) {
-      const coords = polyEl.textContent.trim().split(/\s+/).map(c => {
-        const [lng, lat] = c.split(',').map(Number);
-        return [lng, lat];
-      });
-      geometry = { type: 'Polygon', coordinates: [coords] };
+      const coords = polyEl.textContent.trim().split(/\s+/)
+        .map(c => { const p = c.split(',').map(Number); return p; })
+        .filter(p => p.length >= 2 && !isNaN(p[0]) && !isNaN(p[1]))
+        .map(p => [p[0], p[1]]);
+      if (coords.length >= 3) geometry = { type: 'Polygon', coordinates: [coords] };
     }
 
     if (!geometry) continue;

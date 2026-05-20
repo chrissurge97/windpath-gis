@@ -8,6 +8,56 @@ import { importShapefile } from '@/lib/shapefileUtils';
 import { DEFAULT_TURBINE_TYPES, DEFAULT_CABLE_TYPES } from '@/lib/turbineTypes';
 
 /**
+ * Split a flat GeoJSON FeatureCollection into separate layers by geometry type.
+ * - Polygon/MultiPolygon → polygon layer
+ * - LineString/MultiLineString → cable-style layer (type: 'cable')
+ * - Point/MultiPoint → turbine-candidate layer (type: 'turbine')
+ *
+ * Each layer gets `_featureType` metadata stamped on features for re-import recognition.
+ */
+function splitByGeometryType(geojson, baseName) {
+  const groups = { polygon: [], line: [], point: [] };
+
+  for (const f of geojson.features || []) {
+    const t = f.geometry?.type;
+    const id = f.id || crypto.randomUUID();
+    const stamped = { ...f, id, properties: { ...f.properties, _importGeomType: t } };
+    if (t === 'Polygon' || t === 'MultiPolygon') groups.polygon.push(stamped);
+    else if (t === 'LineString' || t === 'MultiLineString') groups.line.push(stamped);
+    else if (t === 'Point' || t === 'MultiPoint') groups.point.push(stamped);
+  }
+
+  const layers = [];
+
+  if (groups.polygon.length) {
+    layers.push({
+      id: crypto.randomUUID(), name: `${baseName} (Polygons)`,
+      type: 'polygon', visible: true,
+      color: '#06b6d4', fillOpacity: 0.15, strokeWeight: 2, strokeOpacity: 0.9,
+      no_turbines: false, features: groups.polygon,
+    });
+  }
+  if (groups.line.length) {
+    layers.push({
+      id: crypto.randomUUID(), name: `${baseName} (Lines)`,
+      type: 'cable', visible: true,
+      color: '#f97316', fillOpacity: 0.8, strokeWeight: 2, strokeOpacity: 0.9,
+      no_turbines: false, features: groups.line,
+    });
+  }
+  if (groups.point.length) {
+    layers.push({
+      id: crypto.randomUUID(), name: `${baseName} (Points)`,
+      type: 'turbine', visible: true,
+      color: '#10b981', fillOpacity: 0.8, strokeWeight: 2, strokeOpacity: 0.9,
+      no_turbines: false, features: groups.point,
+    });
+  }
+
+  return layers;
+}
+
+/**
  * Merge imported layers into existing project layers.
  * - Typed layers (turbine/cable/substation) are merged INTO the matching existing layer
  * - Plain polygon layers are returned separately (caller may show classify modal)
@@ -49,8 +99,9 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate }) {
           const project = importKML(text);
           if (!project.turbineTypes?.length) project.turbineTypes = DEFAULT_TURBINE_TYPES;
           if (!project.cableTypes?.length) project.cableTypes = DEFAULT_CABLE_TYPES;
-          // If KML has embedded type libraries, update them
           if (onTypesUpdate) onTypesUpdate({ turbineTypes: project.turbineTypes, cableTypes: project.cableTypes });
+          // Treat KML as a project switch so layers/types are all loaded properly
+          if (onProject) { onProject(project); return; }
           if (project.layers?.length) allImported.push(...project.layers);
 
         } else if (fname.endsWith('.shp') || fname.endsWith('.zip')) {
@@ -62,7 +113,8 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate }) {
             if (hasLayerMeta) {
               geoJSONToLayers(geojson).forEach(l => allImported.push(l));
             } else {
-              allImported.push(geoJSONToLayer(geojson, geojson._layerName || baseName));
+              // Split by geometry type so Points/Lines/Polygons become separate layers
+              splitByGeometryType(geojson, geojson._layerName || baseName).forEach(l => allImported.push(l));
             }
           }
 
