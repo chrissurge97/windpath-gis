@@ -213,7 +213,7 @@ export function partitionImportedLayers(importedLayers) {
 }
 
 // ── Main import entry point ──────────────────────────────────────────────────
-export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoading, onLog, onClassify, defaultTurbineType, defaultCableTypeId }) {
+export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoading, onLog, onClassify, onClassifyMode, defaultTurbineType, defaultCableTypeId }) {
   const log = (msg, level = 'info') => { console.log('[import]', msg); if (onLog) onLog(msg, level); };
   const input = document.createElement('input');
   input.type = 'file';
@@ -310,9 +310,9 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           );
 
           if (rawLayers.length > 0 && !allHaveEvMeta) {
-            if (onClassify) {
-              log(`Opening classify wizard for ${rawLayers.length} layer(s)`, 'info');
-              onClassify(rawLayers); 
+            if (onClassifyMode) {
+              log(`Asking for classification mode`, 'info');
+              onClassifyMode(rawLayers); 
             }
             return;
           }
