@@ -31,6 +31,9 @@ function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = n
   const start = cable.properties.start_node;
   const end = cable.properties.end_node;
 
+  // If neither end is connected, no load can flow
+  if (!start && !end) return 0;
+
   let upstreamNode = null;
   if (fromNodeId !== null) {
     if (start?.id === fromNodeId) upstreamNode = end;
@@ -39,7 +42,7 @@ function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = n
   } else {
     if (end?.type === 'substation') upstreamNode = start;
     else if (start?.type === 'substation') upstreamNode = end;
-    else upstreamNode = start;
+    else upstreamNode = start || end;
   }
 
   if (!upstreamNode) return 0;
@@ -60,7 +63,7 @@ function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = n
     total += calcCableLoad(fc.id, cables, turbines, upstreamNode.id, new Set(visited));
   }
 
-  return total;
+  return +(total.toFixed(1));
 }
 
 export default function CableDataTable({
