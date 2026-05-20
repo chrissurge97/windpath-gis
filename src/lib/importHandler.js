@@ -558,8 +558,9 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           }))
         ];
         
-        // Match cable endpoints to nearest nodes (within 50m tolerance)
-        const SNAP_THRESHOLD = 0.0005; // ~50m in degrees
+        // Match cable endpoints to nearest nodes (larger tolerance for imports)
+        const SNAP_THRESHOLD = 0.001; // ~100m in degrees
+        let snappedCount = 0;
         cableLayer.features = cableLayer.features.map(cable => {
           if (!cable.geometry.coordinates?.length) return cable;
           
@@ -585,6 +586,8 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           const startNode = findNearestNode(startCoord);
           const endNode = findNearestNode(endCoord);
           
+          if (startNode || endNode) snappedCount++;
+          
           return {
             ...cable,
             properties: {
@@ -594,6 +597,17 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
             }
           };
         });
+        
+        // If many cables failed to snap, trigger topology modal so user can set manually
+        if (snappedCount < cableLayer.features.length * 0.5 && onCableTopology) {
+          const allTurbines = turbineLayer?.features || [];
+          const allSubstations = substationLayer?.features || [];
+          const allCables = cableLayer.features;
+          const project = { layers: cleanLayers, turbineTypes: [], cableTypes: [] };
+          onCableTopology(allCables, allTurbines, allSubstations, project);
+          onLoading(false);
+          return; // Skip setLayers; modal will handle the final import
+        }
       }
       
       setTimeout(() => onLayers(cleanLayers), 0);
