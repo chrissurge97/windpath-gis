@@ -53,6 +53,7 @@ import { useHandleImport } from '@/lib/useHandleImport';
 import ConfigMenuWrapper from '@/components/planning/ConfigMenuWrapper';
 import { loadCustomTurbines } from '@/components/planning/TurbineWizard';
 import { loadCustomCables } from '@/components/planning/CableWizard';
+import { calcCableLoad, calcSubstationLoad } from '@/lib/cableLoadUtils';
 
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -112,120 +113,8 @@ function findSnapNode(latlng, turbines, substations, map, cables = []) {
   return best;
 }
 
-// ── Topology: compute cumulative MW load carried by a cable ─────────────────
-// Power flows FROM the upstream node (away from substation) TOWARD the downstream node.
-// A cable's load = power of turbine(s) at its upstream node
-//                + loads of all OTHER cables whose downstream node is that same upstream node.
-//
-// "upstreamNode" = the node of this cable that is NOT a substation, and is not the
-//                  node that other cables are flowing FROM toward.
-// We determine direction by: given we're coming from `fromNodeId` (the downstream side),
-// the upstream side is the OTHER end of this cable.
-
-function turbineMW(nodeId, turbines) {
-  const t = turbines.find((t) => t.id === nodeId);
-  return t?.properties?.rated_power_mw || 0;
-}
-
-// Returns the MW load flowing through cableId, given that flow is coming FROM fromNodeId
-// (i.e. fromNodeId is the downstream end — toward the substation).
-// If fromNodeId is null, we detect direction: substation end is downstream.
-function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = new Set()) {
-  if (visited.has(cableId)) return 0;
-  visited.add(cableId);
-
-  const cable = cables.find((c) => c.id === cableId);
-  if (!cable) return 0;
-
-  const start = cable.properties.start_node;
-  const end = cable.properties.end_node;
-  const coords = cable.geometry.coordinates;
-
-  // Determine upstream node and coordinate
-  let upstreamNode = null;
-  let upstreamCoord = null;
-
-  if (fromNodeId !== null) {
-    // Direction is explicit: fromNodeId is downstream
-    if (start?.id === fromNodeId) {
-      upstreamNode = end;
-      if (!upstreamNode && coords?.length) upstreamCoord = coords[0];
-    } else if (end?.id === fromNodeId) {
-      upstreamNode = start;
-      if (!upstreamNode && coords?.length) upstreamCoord = coords[coords.length - 1];
-    } else {
-      return 0;
-    }
-  } else {
-    // No direction hint: detect based on node types
-    if (end?.type === 'substation' && start?.type !== 'substation') {
-      upstreamNode = start;
-      if (!upstreamNode && coords?.length) upstreamCoord = coords[0];
-    } else if (start?.type === 'substation' && end?.type !== 'substation') {
-      upstreamNode = end;
-      if (!upstreamNode && coords?.length) upstreamCoord = coords[coords.length - 1];
-    } else if (start?.type === 'substation' && end?.type === 'substation') {
-      upstreamNode = start;
-      if (!upstreamNode && coords?.length) upstreamCoord = coords[0];
-    } else {
-      upstreamNode = start;
-      if (!upstreamNode && coords?.length) upstreamCoord = coords[0];
-    }
-  }
-
-  if (!upstreamNode && !upstreamCoord) return 0;
-
-  let total = 0;
-
-  // Add power of turbine at upstream node
-  if (upstreamNode?.type === 'turbine') {
-    total += turbineMW(upstreamNode.id, turbines);
-  }
-
-  // Find feeding cables: match by explicit node references OR by coordinate proximity
-  const feedingCables = cables.filter((c) => {
-    if (c.id === cableId) return false;
-    if (!c.geometry?.coordinates?.length) return false;
-
-    // Check node-based connections
-    if (upstreamNode && (c.properties.start_node?.id === upstreamNode.id || c.properties.end_node?.id === upstreamNode.id)) {
-      return true;
-    }
-
-    // Check coordinate-based connections (for cable strings with implicit nodes)
-    // Cable feeds INTO upstream if its END matches the upstream coord
-    if (upstreamCoord) {
-      const cCoords = c.geometry.coordinates;
-      const cEnd = cCoords[cCoords.length - 1];
-      const epsilon = 0.00001;
-      const matches = (a, b) => Math.abs(a[0] - b[0]) < epsilon && Math.abs(a[1] - b[1]) < epsilon;
-      // Only match if this cable's END reaches our upstream coord (feeding toward it)
-      return matches(cEnd, upstreamCoord);
-    }
-
-    return false;
-  });
-
-  // Recurse through feeding cables
-  for (const fc of feedingCables) {
-    const load = calcCableLoad(fc.id, cables, turbines, upstreamNode?.id || null, new Set(visited));
-    total += (typeof load === 'number' ? load : 0);
-  }
-
-  return Math.max(0, Number(total) || 0);
-}
-
-// ── Substation total load: sum cables feeding INTO the substation ────────────
-function calcSubstationLoad(substationId, cables, turbines) {
-  const incomingCables = cables.filter((c) =>
-  c.properties.start_node?.id === substationId ||
-  c.properties.end_node?.id === substationId
-  );
-  return incomingCables.reduce((sum, c) => {
-    // Flow direction: substation is downstream, so pass substationId as fromNodeId
-    return sum + calcCableLoad(c.id, cables, turbines, substationId, new Set());
-  }, 0);
-}
+// Cable load calculations now in cableLoadUtils.js
+// Imported: calcCableLoad, calcSubstationLoad
 
 function MapMouseHandler({ mode, turbines, substations, onSnapPreview, draggingRef, onPolygonDrag, onPolygonDragEnd }) {
   useMapEvents({
