@@ -217,6 +217,18 @@ function parseShapefileSet(shpBuf, dbfBuf, prjText, layerName) {
   return geojson;
 }
 
+// Forward console.log to main thread so it shows in the import debug console
+const _origLog = console.log.bind(console);
+console.log = (...args) => {
+  _origLog(...args);
+  try { self.postMessage({ log: args.map(a => String(a)).join(' '), level: 'info' }); } catch {}
+};
+const _origError = console.error.bind(console);
+console.error = (...args) => {
+  _origError(...args);
+  try { self.postMessage({ log: args.map(a => String(a)).join(' '), level: 'error' }); } catch {}
+};
+
 self.onmessage = async function(e) {
   const { arrayBuffer, filename } = e.data;
   try {

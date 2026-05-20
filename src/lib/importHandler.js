@@ -22,25 +22,27 @@ function calcLineLength(coords) {
 }
 
 // ── Shapefile off-thread via Web Worker ──────────────────────────────────────
-// Vite requires the worker URL to be constructed with import.meta.url so it can
-// bundle the worker file correctly. The `type: 'module'` flag is needed for ESM.
-function importShapefileOffThread(arrayBuffer, filename) {
+function importShapefileOffThread(arrayBuffer, filename, onLog) {
+  const log = (msg, level = 'info') => {
+    console.log('[importHandler]', msg);
+    if (onLog) onLog(msg, level);
+  };
+
   return new Promise((resolve, reject) => {
     let worker;
     try {
-      // Vite will resolve this URL and bundle the worker correctly
       worker = new Worker(new URL('./shapefileWorker.js', import.meta.url), { type: 'module' });
     } catch (workerErr) {
-      // Fallback: parse synchronously on main thread if Worker creation fails
-      console.warn('[importHandler] Worker creation failed, falling back to main thread:', workerErr);
+      log(`Worker creation failed: ${workerErr.message} — falling back to main thread`, 'warn');
       import('@/lib/shapefileUtils').then(({ importShapefile }) => {
-        importShapefile(arrayBuffer, filename).then(resolve).catch(reject);
+        log('Main-thread parse started…');
+        importShapefile(arrayBuffer, filename).then(r => { log('Main-thread parse OK'); resolve(r); }).catch(e => { log(`Main-thread parse error: ${e.message}`, 'error'); reject(e); });
       }).catch(reject);
       return;
     }
 
     const timeout = setTimeout(() => {
-      console.error('[importHandler] Worker timed out after 60s');
+      log('Worker timed out after 60s', 'error');
       worker.terminate();
       reject(new Error('Shapefile parsing timed out. The file may be too large.'));
     }, 60000);
@@ -48,24 +50,36 @@ function importShapefileOffThread(arrayBuffer, filename) {
     worker.onmessage = (e) => {
       clearTimeout(timeout);
       worker.terminate();
-      console.log('[importHandler] Worker responded:', e.data.error ? 'ERROR' : 'OK');
-      if (e.data.error) reject(new Error(e.data.error));
-      else resolve(e.data.result);
+      if (e.data.error) {
+        log(`Worker error: ${e.data.error}`, 'error');
+        reject(new Error(e.data.error));
+      } else {
+        const result = e.data.result;
+        const count = Array.isArray(result)
+          ? result.reduce((s, r) => s + (r.features?.length || 0), 0)
+          : (result?.features?.length || 0);
+        log(`Worker OK — ${count} features parsed`, 'success');
+        resolve(result);
+      }
     };
 
     worker.onerror = (err) => {
       clearTimeout(timeout);
-      console.error('[importHandler] Worker onerror:', err);
+      log(`Worker onerror: ${err.message || err} — falling back to main thread`, 'warn');
       worker.terminate();
-      // Fallback to main-thread parsing
-      console.warn('[importHandler] Falling back to main-thread parsing');
       import('@/lib/shapefileUtils').then(({ importShapefile }) => {
-        importShapefile(arrayBuffer, filename).then(resolve).catch(reject);
+        log('Main-thread parse started (fallback)…');
+        importShapefile(arrayBuffer, filename).then(r => { log('Main-thread parse OK'); resolve(r); }).catch(e => { log(`Main-thread parse error: ${e.message}`, 'error'); reject(e); });
       }).catch(reject);
     };
 
-    console.log('[importHandler] Posting to worker, bytes:', arrayBuffer.byteLength);
-    // Transfer the buffer so it doesn't get copied (zero-copy)
+    // Also capture worker console.log messages forwarded via postMessage
+    const _origOnMsg = worker.onmessage;
+    worker.addEventListener('message', (e) => {
+      if (e.data?.log) log(`[worker] ${e.data.log}`, e.data.level || 'info');
+    });
+
+    log(`Sending to worker — ${(arrayBuffer.byteLength / 1024).toFixed(1)} KB`);
     worker.postMessage({ arrayBuffer, filename }, [arrayBuffer]);
   });
 }
@@ -166,7 +180,8 @@ export function partitionImportedLayers(importedLayers) {
 }
 
 // ── Main import entry point ──────────────────────────────────────────────────
-export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoading, defaultTurbineType, defaultCableTypeId }) {
+export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoading, onLog, defaultTurbineType, defaultCableTypeId }) {
+  const log = (msg, level = 'info') => { console.log('[import]', msg); if (onLog) onLog(msg, level); };
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.json,.geojson,.shp,.zip,.csv,.kml,.kmz';
@@ -184,38 +199,45 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
       const baseName = file.name.replace(/\.[^.]+$/, '');
       try {
         if (fname.endsWith('.kml') || fname.endsWith('.kmz')) {
+          log(`Parsing KML/KMZ: ${file.name}`);
           const text = await file.text();
           const project = importKML(text);
           if (!project.turbineTypes?.length) project.turbineTypes = DEFAULT_TURBINE_TYPES;
           if (!project.cableTypes?.length) project.cableTypes = DEFAULT_CABLE_TYPES;
           if (onTypesUpdate) onTypesUpdate({ turbineTypes: project.turbineTypes, cableTypes: project.cableTypes });
+          log(`KML parsed — ${project.layers?.length || 0} layers`, 'success');
           if (onLoading) onLoading(false);
           if (onProject) { onProject(project); return; }
           if (project.layers?.length) allImported.push(...project.layers);
 
         } else if (fname.endsWith('.shp') || fname.endsWith('.zip')) {
-          console.log('[importHandler] Reading arrayBuffer for', file.name, 'size:', file.size);
+          log(`Reading file buffer — ${(file.size / 1024).toFixed(1)} KB`);
           const buf = await file.arrayBuffer();
-          console.log('[importHandler] Sending to worker...');
-          const result = await importShapefileOffThread(buf, file.name);
-          console.log('[importHandler] Worker returned result');
+          log(`Buffer ready — sending to worker…`);
+          const result = await importShapefileOffThread(buf, file.name, onLog);
           const toProcess = Array.isArray(result) ? result : [result];
+          log(`Processing ${toProcess.length} shapefile layer(s)…`);
           for (const geojson of toProcess) {
             const hasLayerMeta = geojson.features?.some(f => f.properties?._layerId);
             if (hasLayerMeta) {
-              geoJSONToLayers(geojson).forEach(l => allImported.push(l));
+              const lys = geoJSONToLayers(geojson);
+              log(`Layer-meta mode: ${lys.length} layers extracted`);
+              lys.forEach(l => allImported.push(l));
             } else {
-              autoClassifyGeojson(geojson, geojson._layerName || baseName, defaultTurbineType, defaultCableTypeId)
-                .forEach(l => allImported.push(l));
+              const lys = autoClassifyGeojson(geojson, geojson._layerName || baseName, defaultTurbineType, defaultCableTypeId);
+              log(`Auto-classify: ${lys.length} typed layers from ${geojson.features?.length || 0} features`, 'success');
+              lys.forEach(l => allImported.push(l));
             }
           }
 
         } else if (fname.endsWith('.json') || fname.endsWith('.geojson')) {
+          log(`Parsing GeoJSON: ${file.name}`);
           const text = await file.text();
           const data = JSON.parse(text);
           const isProjectExport = data.properties?.format === 'eagleview-wind-farm-project' ||
                                   data.properties?.format === 'base44-wind-farm-project';
           if (isProjectExport) {
+            log('Detected project export format', 'success');
             const project = importProjectGeoJSON(data);
             if (!project.turbineTypes?.length) project.turbineTypes = DEFAULT_TURBINE_TYPES;
             if (!project.cableTypes?.length) project.cableTypes = DEFAULT_CABLE_TYPES;
@@ -225,12 +247,16 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           }
           const hasLayerMeta = data.features?.some(f => f.properties?._layerId);
           if (hasLayerMeta) {
-            geoJSONToLayers(data).forEach(l => allImported.push(l));
+            const lys = geoJSONToLayers(data);
+            log(`Layer-meta GeoJSON: ${lys.length} layers`, 'success');
+            lys.forEach(l => allImported.push(l));
           } else {
+            log(`Plain GeoJSON: ${data.features?.length || 0} features → 1 layer`, 'success');
             allImported.push(geoJSONToLayer(data, baseName));
           }
 
         } else if (fname.endsWith('.csv')) {
+          log(`Parsing CSV: ${file.name}`);
           const text = await file.text();
           const lines = text.split('\n').filter(Boolean);
           const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
@@ -248,15 +274,18 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
             });
           }
           if (csvFeatures.length > 0) {
+            log(`CSV: ${csvFeatures.length} point features`, 'success');
             allImported.push({
               id: `lyr_csv_${Date.now()}`, name: baseName, type: 'polygon',
               visible: true, color: '#8b5cf6', fillOpacity: 0.2,
               strokeOpacity: 0.8, strokeWeight: 2, no_turbines: false, features: csvFeatures
             });
+          } else {
+            log('CSV: no valid lat/lng rows found', 'warn');
           }
         }
       } catch (err) {
-        console.error('[importHandler] Import error for', file.name, err);
+        log(`ERROR for ${file.name}: ${err.message}`, 'error');
         if (onLoading) onLoading(false);
         alert(`Could not import ${file.name}: ${err.message}`);
       }

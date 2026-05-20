@@ -293,6 +293,8 @@ export default function Planning() {
   const [rightTab, setRightTab] = useState('turbines');
   const [loadingWind, setLoadingWind] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
+  const [importLogs, setImportLogs] = useState([]); // { msg, level, ts }
+  const [showImportConsole, setShowImportConsole] = useState(false);
   const [windFetched, setWindFetched] = useState(false);
   const [projectName, setProjectName] = useState(() => initProj.name || 'Wind Farm Project');
 
@@ -781,9 +783,16 @@ export default function Planning() {
     }
   }, []);
 
+  const addImportLog = (msg, level = 'info') => {
+    setImportLogs(prev => [...prev.slice(-99), { msg, level, ts: Date.now() }]);
+  };
+
   const handleImport = () => {
+    setImportLogs([]);
+    setShowImportConsole(true);
     openImportFilePicker({
       onLoading: (loading) => setImportLoading(loading),
+      onLog: addImportLog,
       defaultTurbineType: selectedTurbineType,
       defaultCableTypeId: selectedCableTypeId,
       onProject: (project) => {
@@ -1938,6 +1947,41 @@ export default function Planning() {
 
       {showDataTables &&
       <DataTablesPanel onClose={() => setShowDataTables(false)} />
+      }
+
+      {/* Import Debug Console */}
+      {showImportConsole &&
+      <div className="fixed bottom-4 left-4 z-[9000] w-[480px] max-h-[280px] flex flex-col bg-slate-950 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className={cn("w-2 h-2 rounded-full", importLoading ? "bg-cyan-400 animate-pulse" : importLogs.some(l => l.level === 'error') ? "bg-red-400" : "bg-emerald-400")} />
+            <span className="text-[11px] font-semibold text-slate-300">Import Console</span>
+            {importLoading && <RefreshCw className="w-3 h-3 text-cyan-400 animate-spin" />}
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setImportLogs([])} className="text-[10px] text-slate-600 hover:text-slate-400 px-1.5 py-0.5 rounded hover:bg-slate-800">Clear</button>
+            <button onClick={() => setShowImportConsole(false)} className="text-slate-500 hover:text-white p-0.5">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-3 py-2 font-mono text-[10px] space-y-0.5">
+          {importLogs.length === 0
+            ? <p className="text-slate-600 italic">Waiting for import…</p>
+            : importLogs.map((entry, i) => (
+              <div key={i} className={cn("leading-relaxed",
+                entry.level === 'error' ? "text-red-400" :
+                entry.level === 'warn' ? "text-amber-400" :
+                entry.level === 'success' ? "text-emerald-400" :
+                "text-slate-400"
+              )}>
+                <span className="text-slate-700 mr-1.5">{new Date(entry.ts).toLocaleTimeString('en-IE', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                {entry.msg}
+              </div>
+            ))
+          }
+        </div>
+      </div>
       }
       </div>);
 
