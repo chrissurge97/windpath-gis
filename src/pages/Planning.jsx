@@ -185,6 +185,7 @@ function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = n
   // Find feeding cables: match by explicit node references OR by coordinate proximity
   const feedingCables = cables.filter((c) => {
     if (c.id === cableId) return false;
+    if (!c.geometry?.coordinates?.length) return false;
 
     // Check node-based connections
     if (upstreamNode && (c.properties.start_node?.id === upstreamNode.id || c.properties.end_node?.id === upstreamNode.id)) {
@@ -192,13 +193,14 @@ function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = n
     }
 
     // Check coordinate-based connections (for cable strings with implicit nodes)
-    if (upstreamCoord && c.geometry.coordinates?.length > 0) {
+    // Cable feeds INTO upstream if its END matches the upstream coord
+    if (upstreamCoord) {
       const cCoords = c.geometry.coordinates;
       const cEnd = cCoords[cCoords.length - 1];
-      const cStart = cCoords[0];
       const epsilon = 0.00001;
       const matches = (a, b) => Math.abs(a[0] - b[0]) < epsilon && Math.abs(a[1] - b[1]) < epsilon;
-      return matches(cEnd, upstreamCoord) || matches(cStart, upstreamCoord);
+      // Only match if this cable's END reaches our upstream coord (feeding toward it)
+      return matches(cEnd, upstreamCoord);
     }
 
     return false;
