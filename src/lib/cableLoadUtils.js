@@ -108,7 +108,7 @@ export function calcCableLoad(cableId, cables, turbines, fromNodeId = null, from
   for (const fc of feedingCables) {
     const nextDownstreamId = upstreamNode?.id || null;
     const nextDownstreamCoord = upstreamCoord || null;
-    const load = calcCableLoad(fc.id, cables, turbines, nextDownstreamId, nextDownstreamCoord, new Set(visited));
+    const load = calcCableLoad(fc.id, cables, turbines, nextDownstreamId, nextDownstreamCoord, visited);
     total += (typeof load === 'number' ? load : 0);
   }
 
