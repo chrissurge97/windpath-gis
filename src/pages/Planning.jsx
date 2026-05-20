@@ -1138,6 +1138,7 @@ export default function Planning() {
                   return (
                     <React.Fragment key={f.id}>
                     <Polygon positions={positions} pathOptions={polyOpts}
+
                       bubblingMouseEvents={nonSelectMode}
                       eventHandlers={{
                         click: (e) => {

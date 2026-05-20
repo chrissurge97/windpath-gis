@@ -11,19 +11,54 @@ const SHP_POINT    = 1;
 const SHP_POLYLINE = 3;
 const SHP_POLYGON  = 5;
 
-function readZip(arrayBuffer) {
+async function decompressDeflate(compressedBuffer) {
+  // Use DecompressionStream (available in modern browsers and workers)
+  const ds = new DecompressionStream('deflate-raw');
+  const writer = ds.writable.getWriter();
+  const reader = ds.readable.getReader();
+
+  writer.write(new Uint8Array(compressedBuffer));
+  writer.close();
+
+  const chunks = [];
+  let totalLen = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    totalLen += value.length;
+  }
+  const result = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.length; }
+  return result.buffer;
+}
+
+async function readZip(arrayBuffer) {
   const buf = new Uint8Array(arrayBuffer);
   const dv  = new DataView(arrayBuffer);
   const files = {};
   let i = 0;
   while (i < buf.length - 4) {
     if (dv.getUint32(i, true) === 0x04034B50) {
+      const compression = dv.getUint16(i + 8, true);
       const nameLen  = dv.getUint16(i + 26, true);
       const extraLen = dv.getUint16(i + 28, true);
       const compSize = dv.getUint32(i + 18, true);
+      const uncompSize = dv.getUint32(i + 22, true);
       const name = new TextDecoder().decode(buf.slice(i + 30, i + 30 + nameLen));
       const dataStart = i + 30 + nameLen + extraLen;
-      files[name.toLowerCase()] = arrayBuffer.slice(dataStart, dataStart + compSize);
+      const compressedSlice = arrayBuffer.slice(dataStart, dataStart + compSize);
+
+      if (compression === 0) {
+        // Stored (no compression)
+        files[name.toLowerCase()] = compressedSlice;
+      } else if (compression === 8) {
+        // DEFLATE — decompress
+        files[name.toLowerCase()] = await decompressDeflate(compressedSlice);
+      }
+      // Skip unsupported compression methods
+
       i = dataStart + compSize;
     } else { i++; }
   }
@@ -182,7 +217,7 @@ function parseShapefileSet(shpBuf, dbfBuf, prjText, layerName) {
   return geojson;
 }
 
-self.onmessage = function(e) {
+self.onmessage = async function(e) {
   const { arrayBuffer, filename } = e.data;
   try {
     console.log('[ShapefileWorker] starting parse, bytes:', arrayBuffer.byteLength);
@@ -196,7 +231,7 @@ self.onmessage = function(e) {
       return;
     }
 
-    const files = readZip(arrayBuffer);
+    const files = await readZip(arrayBuffer);
     console.log('[ShapefileWorker] zip entries:', Object.keys(files));
 
     const groups = {};
