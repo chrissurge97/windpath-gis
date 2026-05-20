@@ -60,10 +60,11 @@ function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = n
     )
   );
   for (const fc of feedingCables) {
-    total += calcCableLoad(fc.id, cables, turbines, upstreamNode.id, new Set(visited));
+    const load = calcCableLoad(fc.id, cables, turbines, upstreamNode.id, new Set(visited));
+    total += (typeof load === 'number' ? load : 0);
   }
 
-  return total;
+  return Math.max(0, Number(total) || 0);
 }
 
 export default function CableDataTable({
