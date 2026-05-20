@@ -13,6 +13,18 @@ function haversineM(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Deserialize JSON-stringified object props (start_node, end_node, custom_fields, etc.)
+function deserializeProps(props) {
+  const out = {};
+  for (const [k, v] of Object.entries(props)) {
+    if (typeof v === 'string' && (v.startsWith('{') || v.startsWith('['))) {
+      try { out[k] = JSON.parse(v); continue; } catch {}
+    }
+    out[k] = v;
+  }
+  return out;
+}
+
 function calcLineLength(coords) {
   let len = 0;
   for (let i = 0; i < coords.length - 1; i++) {
@@ -269,15 +281,7 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
                 const stripped = Object.fromEntries(
                   Object.entries(f.properties || {}).filter(([k]) => !k.startsWith('ev_'))
                 );
-                // Restore JSON-stringified objects
-                const deserialized = {};
-                for (const [k, v] of Object.entries(stripped)) {
-                  if (typeof v === 'string' && (v.startsWith('{') || v.startsWith('['))) {
-                    try { deserialized[k] = JSON.parse(v); continue; } catch {}
-                  }
-                  deserialized[k] = v;
-                }
-                return { ...f, properties: deserialized };
+                return { ...f, properties: deserializeProps(stripped) };
               });
 
               const hasEvMeta = !!sample.ev_type; // true = came from EagleView export
@@ -305,14 +309,30 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
             l._hadEvMeta === true
           );
 
-          if (rawLayers.length > 0 && !allHaveEvMeta && onClassify) {
-            log(`Opening classify wizard for ${rawLayers.length} layer(s)`, 'info');
-            onClassify(rawLayers); return;
+          if (rawLayers.length > 0 && !allHaveEvMeta) {
+            if (onClassify) {
+              log(`Opening classify wizard for ${rawLayers.length} layer(s)`, 'info');
+              onClassify(rawLayers); 
+            }
+            return;
           }
 
-          // Auto-import: all layers have ev_* metadata, restore directly without wizard
-          log(`Auto-importing ${rawLayers.length} layer(s) with restored styles`, 'success');
-          rawLayers.forEach(l => allImported.push(l));
+          // All layers have ev_* metadata — ask user: auto-import or manual classify?
+          if (rawLayers.length > 0 && allHaveEvMeta) {
+            const choice = window.confirm(
+              `Shapefile contains ${rawLayers.length} layer(s) with restored metadata.\n\n` +
+              `Auto-import with saved styles, or manually reclassify?` +
+              `\n\nOK = Auto-import  |  Cancel = Manual Classify`
+            );
+            if (!choice && onClassify) {
+              log(`Opening classify wizard for manual reclassification`, 'info');
+              onClassify(rawLayers);
+              return;
+            }
+            // Auto-import path
+            log(`Auto-importing ${rawLayers.length} layer(s) with restored styles`, 'success');
+            rawLayers.forEach(l => allImported.push(l));
+          }
 
         } else if (fname.endsWith('.json') || fname.endsWith('.geojson')) {
           log(`Parsing GeoJSON: ${file.name}`);
