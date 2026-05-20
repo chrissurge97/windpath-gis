@@ -782,6 +782,7 @@ export default function Planning() {
 
   const handleImport = () => {
     openImportFilePicker({
+      onLoading: (loading) => setLoadingWind(loading),
       onProject: (project) => {
         // Switch project locally — auto-save will persist it
         const tempId = '__imported_' + Date.now() + '__';

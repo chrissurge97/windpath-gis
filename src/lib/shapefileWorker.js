@@ -2,6 +2,8 @@
  * Web Worker for shapefile parsing — keeps the main thread unblocked.
  * Receives: { arrayBuffer, filename }
  * Posts back: { result } or { error }
+ *
+ * NOTE: Loaded via Vite's ?worker import — do NOT use ES module imports here.
  */
 
 const SHP_NULL     = 0;
@@ -63,18 +65,21 @@ function parseSHP(arrayBuffer) {
   const fileByteLen = dv.getInt32(24, false) * 2;
   const features = [];
   let off = 100;
+  let recIdx = 0;
   while (off + 8 <= fileByteLen) {
     const contentWords = dv.getInt32(off + 4, false);
     const contentBytes = contentWords * 2;
     off += 8;
     if (contentBytes === 0) continue;
     const shpType = dv.getInt32(off, true);
+    // Generate IDs in the worker to avoid main-thread crypto.randomUUID() cost
+    const id = `f_${recIdx++}`;
     if (shpType === SHP_NULL) {
       features.push(null);
     } else if (shpType === SHP_POINT) {
       const x = dv.getFloat64(off + 4,  true);
       const y = dv.getFloat64(off + 12, true);
-      features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [x, y] }, properties: {} });
+      features.push({ id, type: 'Feature', geometry: { type: 'Point', coordinates: [x, y] }, properties: {} });
     } else if (shpType === SHP_POLYLINE || shpType === SHP_POLYGON) {
       const numParts  = dv.getInt32(off + 36, true);
       const numPoints = dv.getInt32(off + 40, true);
@@ -87,9 +92,9 @@ function parseSHP(arrayBuffer) {
       }
       const rings = partStarts.map((start, i) => pts.slice(start, partStarts[i + 1] || numPoints));
       if (shpType === SHP_POLYLINE) {
-        features.push({ type: 'Feature', geometry: { type: rings.length === 1 ? 'LineString' : 'MultiLineString', coordinates: rings.length === 1 ? rings[0] : rings }, properties: {} });
+        features.push({ id, type: 'Feature', geometry: { type: rings.length === 1 ? 'LineString' : 'MultiLineString', coordinates: rings.length === 1 ? rings[0] : rings }, properties: {} });
       } else {
-        features.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: rings }, properties: {} });
+        features.push({ id, type: 'Feature', geometry: { type: 'Polygon', coordinates: rings }, properties: {} });
       }
     } else {
       features.push(null);
@@ -180,16 +185,20 @@ function parseShapefileSet(shpBuf, dbfBuf, prjText, layerName) {
 self.onmessage = function(e) {
   const { arrayBuffer, filename } = e.data;
   try {
+    console.log('[ShapefileWorker] starting parse, bytes:', arrayBuffer.byteLength);
     const isZip = filename.toLowerCase().endsWith('.zip') ||
       (arrayBuffer.byteLength >= 4 && new DataView(arrayBuffer).getUint32(0, true) === 0x04034B50);
 
     if (!isZip) {
       const result = parseShapefileSet(arrayBuffer, null, null, filename.replace(/\.[^.]+$/, ''));
+      console.log('[ShapefileWorker] done, features:', result.features.length);
       self.postMessage({ result });
       return;
     }
 
     const files = readZip(arrayBuffer);
+    console.log('[ShapefileWorker] zip entries:', Object.keys(files));
+
     const groups = {};
     for (const key of Object.keys(files)) {
       const parts = key.split('/');
@@ -201,15 +210,21 @@ self.onmessage = function(e) {
     }
 
     const shpGroups = Object.entries(groups).filter(([, g]) => g['shp']);
-    if (shpGroups.length === 0) { self.postMessage({ error: 'No .shp file found in ZIP' }); return; }
+    if (shpGroups.length === 0) {
+      self.postMessage({ error: 'No .shp file found in ZIP. Files found: ' + Object.keys(files).join(', ') });
+      return;
+    }
 
     const results = shpGroups.map(([base, g]) => {
       const prjText = g['prj'] ? new TextDecoder().decode(g['prj']) : null;
-      return parseShapefileSet(g['shp'], g['dbf'] || null, prjText, base);
+      const r = parseShapefileSet(g['shp'], g['dbf'] || null, prjText, base);
+      console.log('[ShapefileWorker] layer:', base, 'features:', r.features.length);
+      return r;
     });
 
     self.postMessage({ result: results.length === 1 ? results[0] : results });
   } catch (err) {
-    self.postMessage({ error: err.message });
+    console.error('[ShapefileWorker] error:', err);
+    self.postMessage({ error: err.message + '\n' + (err.stack || '') });
   }
 };
