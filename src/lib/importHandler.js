@@ -215,9 +215,13 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           const buf = await file.arrayBuffer();
           log(`Buffer ready — sending to worker…`);
           const result = await importShapefileOffThread(buf, file.name, onLog);
-          const toProcess = Array.isArray(result) ? result : [result];
+          const toProcess = (Array.isArray(result) ? result : [result]).filter(Boolean);
           log(`Processing ${toProcess.length} shapefile layer(s)…`);
           for (const geojson of toProcess) {
+            if (!geojson || !Array.isArray(geojson.features)) {
+              log(`Skipping layer with no features array (type: ${geojson?.type})`, 'warn');
+              continue;
+            }
             const hasLayerMeta = geojson.features?.some(f => f.properties?._layerId);
             if (hasLayerMeta) {
               const lys = geoJSONToLayers(geojson);

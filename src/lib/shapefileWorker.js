@@ -263,11 +263,21 @@ self.onmessage = async function(e) {
     }
 
     const results = shpGroups.map(([base, g]) => {
-      const prjText = g['prj'] ? new TextDecoder().decode(g['prj']) : null;
-      const r = parseShapefileSet(g['shp'], g['dbf'] || null, prjText, base);
-      console.log('[ShapefileWorker] layer:', base, 'features:', r.features.length);
-      return r;
-    });
+      try {
+        const prjText = g['prj'] ? new TextDecoder().decode(g['prj']) : null;
+        const r = parseShapefileSet(g['shp'], g['dbf'] || null, prjText, base);
+        console.log('[ShapefileWorker] layer:', base, 'features:', r.features.length);
+        return r;
+      } catch (layerErr) {
+        console.error('[ShapefileWorker] failed to parse layer:', base, layerErr.message);
+        return null; // will be filtered out on main thread
+      }
+    }).filter(Boolean);
+
+    if (results.length === 0) {
+      self.postMessage({ error: 'All shapefile layers failed to parse. Check the ZIP contents.' });
+      return;
+    }
 
     self.postMessage({ result: results.length === 1 ? results[0] : results });
   } catch (err) {
