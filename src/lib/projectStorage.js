@@ -1,34 +1,35 @@
 /**
  * Server-side project storage using Base44 entities.
- * Projects are stored in the WindFarmProject entity as full JSON blobs.
- * Falls back to localStorage for the demo project.
+ * Large project blobs are uploaded as files; the entity stores only the URL.
  */
 import { base44 } from '@/api/base44Client';
 
 const ENTITY = base44.entities.WindFarmProject;
 
 // ── Serialize / deserialize ──────────────────────────────────────────────────
-// The entity stores layers, turbineTypes, cableTypes, windParams as JSON strings
-// in specific fields. We use `description` to store the full project blob.
 
-function serialize(projectData) {
-  return {
-    name: projectData.name || 'Unnamed Project',
-    description: JSON.stringify({
-      layers: projectData.layers || [],
-      turbineTypes: projectData.turbineTypes || [],
-      cableTypes: projectData.cableTypes || [],
-      windParams: projectData.windParams || { k: 2.0, lambda: 7.0 },
-      globalRadii: projectData.globalRadii || null,
-    }),
-  };
+function buildBlob(projectData) {
+  return JSON.stringify({
+    layers: projectData.layers || [],
+    turbineTypes: projectData.turbineTypes || [],
+    cableTypes: projectData.cableTypes || [],
+    windParams: projectData.windParams || { k: 2.0, lambda: 7.0 },
+    globalRadii: projectData.globalRadii || null,
+  });
 }
 
-function deserialize(record) {
-  let extra = {};
-  try {
-    extra = JSON.parse(record.description || '{}');
-  } catch {}
+async function uploadBlob(jsonString) {
+  const file = new File([jsonString], 'project.json', { type: 'application/json' });
+  const { file_url } = await base44.integrations.Core.UploadFile({ file });
+  return file_url;
+}
+
+async function fetchBlob(url) {
+  const res = await fetch(url);
+  return res.json();
+}
+
+function deserialize(record, extra) {
   return {
     id: record.id,
     name: record.name,
@@ -55,16 +56,28 @@ export async function listProjects() {
 
 export async function loadProject(id) {
   if (!id || id === '__demo__') return null;
-  // Base44 SDK: filter by built-in id field
   const records = await ENTITY.filter({ id });
   if (!records || records.length === 0) return null;
-  return deserialize(records[0]);
+  const record = records[0];
+
+  // Support both old (inline JSON in description) and new (file URL) formats
+  let extra = {};
+  if (record.description) {
+    if (record.description.startsWith('http')) {
+      extra = await fetchBlob(record.description);
+    } else {
+      try { extra = JSON.parse(record.description); } catch {}
+    }
+  }
+  return deserialize(record, extra);
 }
 
 export async function saveProject(id, projectData) {
-  const payload = serialize(projectData);
+  const jsonString = buildBlob(projectData);
+  const fileUrl = await uploadBlob(jsonString);
+  const payload = { name: projectData.name || 'Unnamed Project', description: fileUrl };
+
   if (id && id !== '__new__') {
-    // Update existing
     try {
       await ENTITY.update(id, payload);
       return id;
@@ -72,7 +85,6 @@ export async function saveProject(id, projectData) {
       // Record may not exist yet — fall through to create
     }
   }
-  // Create new
   const created = await ENTITY.create(payload);
   return created.id;
 }
@@ -82,15 +94,8 @@ export async function deleteProject(id) {
 }
 
 export async function createNewProject(name) {
-  const defaultLayers = null; // Planning.jsx will supply defaults
-  const created = await ENTITY.create({
-    name: name || 'New Wind Farm Project',
-    description: JSON.stringify({
-      layers: [],
-      turbineTypes: [],
-      cableTypes: [],
-      windParams: { k: 2.0, lambda: 7.0 },
-    }),
-  });
+  const jsonString = buildBlob({ layers: [], turbineTypes: [], cableTypes: [], windParams: { k: 2.0, lambda: 7.0 } });
+  const fileUrl = await uploadBlob(jsonString);
+  const created = await ENTITY.create({ name: name || 'New Wind Farm Project', description: fileUrl });
   return created.id;
 }
