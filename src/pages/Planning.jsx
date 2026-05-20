@@ -808,7 +808,7 @@ export default function Planning() {
       onLog: addImportLog,
       defaultTurbineType: selectedTurbineType,
       defaultCableTypeId: selectedCableTypeId,
-      onClassify: (rawLayers) => {
+      onClassifyMode: (rawLayers) => {
         setImportLoading(false);
         setImportClassifyLayers(rawLayers);
       },
