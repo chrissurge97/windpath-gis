@@ -5,6 +5,22 @@ import { geoJSONToLayer, geoJSONToLayers } from '@/lib/gisUtils';
 import { importProjectGeoJSON, importKML } from '@/lib/projectExport';
 import { DEFAULT_TURBINE_TYPES, DEFAULT_CABLE_TYPES } from '@/lib/turbineTypes';
 
+function haversineM(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function calcLineLength(coords) {
+  let len = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    len += haversineM(coords[i][1], coords[i][0], coords[i + 1][1], coords[i + 1][0]);
+  }
+  return +len.toFixed(0);
+}
+
 // ── Shapefile off-thread via Web Worker ──────────────────────────────────────
 // Vite requires the worker URL to be constructed with import.meta.url so it can
 // bundle the worker file correctly. The `type: 'module'` flag is needed for ESM.
@@ -54,46 +70,86 @@ function importShapefileOffThread(arrayBuffer, filename) {
   });
 }
 
-// ── Split a flat GeoJSON into per-geometry-type layers ───────────────────────
-function splitByGeometryType(geojson, baseName) {
-  const groups = { polygon: [], line: [], point: [] };
+// ── Auto-classify shapefile GeoJSON into typed project layers ─────────────────
+// Points → turbine layer, Lines → cable layer, Polygons → polygon layer
+// Applies proper properties so features work correctly in the planning tool.
+function autoClassifyGeojson(geojson, baseName, defaultTurbineType, defaultCableTypeId) {
+  const points = [], lines = [], polygons = [];
   let idx = 0;
 
   for (const f of geojson.features || []) {
     const t = f.geometry?.type;
-    // Reuse IDs that were assigned inside the worker (already unique strings)
     const id = f.id || `imp_${idx++}`;
-    const stamped = { ...f, id, properties: { ...f.properties, _importGeomType: t } };
-    if (t === 'Polygon' || t === 'MultiPolygon') groups.polygon.push(stamped);
-    else if (t === 'LineString' || t === 'MultiLineString') groups.line.push(stamped);
-    else if (t === 'Point' || t === 'MultiPoint') groups.point.push(stamped);
+    const base = { ...f, id };
+    if (t === 'Point') points.push(base);
+    else if (t === 'LineString') lines.push(base);
+    else if (t === 'MultiLineString') {
+      // Flatten multi to individual lines
+      for (const coords of f.geometry.coordinates) {
+        lines.push({ ...base, id: `imp_${idx++}`, geometry: { type: 'LineString', coordinates: coords } });
+      }
+    }
+    else if (t === 'Polygon' || t === 'MultiPolygon') polygons.push(base);
   }
 
   const layers = [];
   const layerId = () => `lyr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const tt = defaultTurbineType || DEFAULT_TURBINE_TYPES[0];
+  const ctId = defaultCableTypeId;
 
-  if (groups.polygon.length) {
+  if (points.length) {
+    const turbineFeatures = points.map((f, i) => ({
+      ...f,
+      properties: {
+        name: f.properties?.Name || f.properties?.name || `T${i + 1}`,
+        turbine_type_id: tt?.id,
+        hub_height: tt?.hub_height_m || 100,
+        rotor_diameter: tt?.rotor_diameter_m || 120,
+        rated_power_mw: tt?.rated_power_mw || 3.5,
+        ...Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name', 'Name', 'turbine_type_id'].includes(k))),
+      },
+    }));
+    layers.push({
+      id: layerId(), name: `${baseName} (Turbines)`,
+      type: 'turbine', visible: true,
+      color: tt?.color || '#10b981', fillOpacity: 0.8, strokeWeight: 2, strokeOpacity: 0.9,
+      no_turbines: false, features: turbineFeatures,
+    });
+  }
+
+  if (lines.length) {
+    const cableFeatures = lines.map((f, i) => ({
+      ...f,
+      properties: {
+        name: f.properties?.Name || f.properties?.name || `Cable ${i + 1}`,
+        cable_type_id: ctId,
+        length_m: calcLineLength(f.geometry.coordinates),
+        start_node: null,
+        end_node: null,
+        ...Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name', 'Name', 'cable_type_id', 'length_m'].includes(k))),
+      },
+    }));
+    layers.push({
+      id: layerId(), name: `${baseName} (Cables)`,
+      type: 'cable', visible: true,
+      color: '#f97316', fillOpacity: 0.8, strokeWeight: 2, strokeOpacity: 0.9,
+      no_turbines: false, features: cableFeatures,
+    });
+  }
+
+  if (polygons.length) {
+    const polyFeatures = polygons.map((f, i) => ({
+      ...f,
+      properties: {
+        name: f.properties?.Name || f.properties?.name || `${baseName} ${i + 1}`,
+        ...f.properties,
+      },
+    }));
     layers.push({
       id: layerId(), name: `${baseName} (Polygons)`,
       type: 'polygon', visible: true,
       color: '#06b6d4', fillOpacity: 0.15, strokeWeight: 2, strokeOpacity: 0.9,
-      no_turbines: false, features: groups.polygon,
-    });
-  }
-  if (groups.line.length) {
-    layers.push({
-      id: layerId(), name: `${baseName} (Lines)`,
-      type: 'cable', visible: true,
-      color: '#f97316', fillOpacity: 0.8, strokeWeight: 2, strokeOpacity: 0.9,
-      no_turbines: false, features: groups.line,
-    });
-  }
-  if (groups.point.length) {
-    layers.push({
-      id: layerId(), name: `${baseName} (Points)`,
-      type: 'turbine', visible: true,
-      color: '#10b981', fillOpacity: 0.8, strokeWeight: 2, strokeOpacity: 0.9,
-      no_turbines: false, features: groups.point,
+      no_turbines: false, features: polyFeatures,
     });
   }
 
@@ -110,7 +166,7 @@ export function partitionImportedLayers(importedLayers) {
 }
 
 // ── Main import entry point ──────────────────────────────────────────────────
-export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoading }) {
+export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoading, defaultTurbineType, defaultCableTypeId }) {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.json,.geojson,.shp,.zip,.csv,.kml,.kmz';
@@ -149,7 +205,8 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
             if (hasLayerMeta) {
               geoJSONToLayers(geojson).forEach(l => allImported.push(l));
             } else {
-              splitByGeometryType(geojson, geojson._layerName || baseName).forEach(l => allImported.push(l));
+              autoClassifyGeojson(geojson, geojson._layerName || baseName, defaultTurbineType, defaultCableTypeId)
+                .forEach(l => allImported.push(l));
             }
           }
 
