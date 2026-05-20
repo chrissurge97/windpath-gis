@@ -721,6 +721,7 @@ export default function Planning() {
   };
 
   const recalcLoadFlow = (layersToRecalc) => {
+    if (!Array.isArray(layersToRecalc)) return layersToRecalc;
     const turbineLayer = layersToRecalc.find(l => l.type === 'turbine');
     if (!turbineLayer) return layersToRecalc;
     // Re-assign each turbine to its current type to trigger load recalc
