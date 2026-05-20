@@ -47,7 +47,14 @@ function importShapefileOffThread(arrayBuffer, filename, onLog) {
       reject(new Error('Shapefile parsing timed out. The file may be too large.'));
     }, 60000);
 
-    worker.onmessage = (e) => {
+    // Single message handler — distinguishes log forwarding from result/error
+    worker.addEventListener('message', (e) => {
+      if (e.data?.log) {
+        // Log-forwarding message from worker's console.log override — just display it
+        log(`[worker] ${e.data.log}`, e.data.level || 'info');
+        return;
+      }
+      // Final result or error
       clearTimeout(timeout);
       worker.terminate();
       if (e.data.error) {
@@ -61,7 +68,7 @@ function importShapefileOffThread(arrayBuffer, filename, onLog) {
         log(`Worker OK — ${count} features parsed`, 'success');
         resolve(result);
       }
-    };
+    });
 
     worker.onerror = (err) => {
       clearTimeout(timeout);
@@ -72,12 +79,6 @@ function importShapefileOffThread(arrayBuffer, filename, onLog) {
         importShapefile(arrayBuffer, filename).then(r => { log('Main-thread parse OK'); resolve(r); }).catch(e => { log(`Main-thread parse error: ${e.message}`, 'error'); reject(e); });
       }).catch(reject);
     };
-
-    // Also capture worker console.log messages forwarded via postMessage
-    const _origOnMsg = worker.onmessage;
-    worker.addEventListener('message', (e) => {
-      if (e.data?.log) log(`[worker] ${e.data.log}`, e.data.level || 'info');
-    });
 
     log(`Sending to worker — ${(arrayBuffer.byteLength / 1024).toFixed(1)} KB`);
     worker.postMessage({ arrayBuffer, filename }, [arrayBuffer]);
