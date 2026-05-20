@@ -1,7 +1,56 @@
 // Comprehensive project export with full data preservation
 
+const FORMAT_TAG = 'eagleview-wind-farm-project';
+const FORMAT_VERSION = '2.0';
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function escapeXml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 /**
- * Export entire project as GeoJSON with embedded metadata
+ * Build the set of per-feature layer metadata properties that get
+ * embedded in every exported feature so they survive round-trips.
+ */
+function layerMeta(layer) {
+  return {
+    _layerId: layer.id,
+    _layerName: layer.name,
+    _layerType: layer.type,
+    _layerColor: layer.color,
+    _layerFillOpacity: layer.fillOpacity,
+    _layerStrokeWeight: layer.strokeWeight,
+    _layerStrokeOpacity: layer.strokeOpacity,
+    _layerNoTurbines: layer.no_turbines || false,
+    _layerVisible: layer.visible !== false,
+  };
+}
+
+function stripLayerMeta(props) {
+  const p = { ...props };
+  delete p._layerId;
+  delete p._layerName;
+  delete p._layerType;
+  delete p._layerColor;
+  delete p._layerFillOpacity;
+  delete p._layerStrokeWeight;
+  delete p._layerStrokeOpacity;
+  delete p._layerNoTurbines;
+  delete p._layerVisible;
+  return p;
+}
+
+// ── GeoJSON Project Export ────────────────────────────────────────────────────
+
+/**
+ * Export entire project as a GeoJSON FeatureCollection with embedded metadata.
+ * This is the canonical lossless project format.
  */
 export function exportProjectGeoJSON(project) {
   const geojson = {
@@ -13,28 +62,22 @@ export function exportProjectGeoJSON(project) {
       turbineTypes: project.turbineTypes || [],
       cableTypes: project.cableTypes || [],
       windParams: project.windParams || { k: 2.0, lambda: 7.0 },
+      globalRadii: project.globalRadii || null,
       exportDate: new Date().toISOString(),
-      format: 'base44-wind-farm-project',
-      version: '1.0',
+      format: FORMAT_TAG,
+      version: FORMAT_VERSION,
     },
   };
 
-  // Add all features from all layers
   if (project.layers) {
     for (const layer of project.layers) {
       for (const feature of layer.features || []) {
         geojson.features.push({
           ...feature,
+          type: 'Feature',
           properties: {
             ...feature.properties,
-            _layerId: layer.id,
-            _layerName: layer.name,
-            _layerType: layer.type,
-            _layerColor: layer.color,
-            _layerFillOpacity: layer.fillOpacity,
-            _layerStrokeWeight: layer.strokeWeight,
-            _layerStrokeOpacity: layer.strokeOpacity,
-            _layerNoTurbines: layer.no_turbines || false,
+            ...layerMeta(layer),
           },
         });
       }
@@ -45,138 +88,248 @@ export function exportProjectGeoJSON(project) {
 }
 
 /**
- * Import GeoJSON project file
+ * Import a GeoJSON project file — works with both v1.0 and v2.0 formats.
  */
 export function importProjectGeoJSON(geojson) {
-  if (!geojson.properties || geojson.properties.format !== 'base44-wind-farm-project') {
-    throw new Error('Invalid project file format. Expected Base44 wind farm project.');
+  const props = geojson.properties || {};
+  // Accept both old and new format tags
+  const isProject = props.format === FORMAT_TAG || props.format === 'base44-wind-farm-project';
+  if (!isProject) {
+    throw new Error('Invalid project file format. Export using the Project (GeoJSON) option.');
   }
 
-  const props = geojson.properties;
-  const layers = {};
+  const layerMap = {};
 
-  // Reconstruct layers from features
   for (const feature of geojson.features || []) {
-    const layerId = feature.properties._layerId;
-    const layerName = feature.properties._layerName;
-    const layerType = feature.properties._layerType;
+    const fp = feature.properties || {};
+    const layerId = fp._layerId || 'default';
+    const layerName = fp._layerName || 'Imported Layer';
+    const layerType = fp._layerType || 'polygon';
 
-    if (!layers[layerId]) {
-      layers[layerId] = {
+    if (!layerMap[layerId]) {
+      layerMap[layerId] = {
         id: layerId,
         name: layerName,
         type: layerType,
-        color: feature.properties._layerColor || '#06b6d4',
-        fillOpacity: feature.properties._layerFillOpacity ?? 0.1,
-        strokeWeight: feature.properties._layerStrokeWeight || 2,
-        strokeOpacity: feature.properties._layerStrokeOpacity || 0.9,
-        visible: true,
-        no_turbines: feature.properties._layerNoTurbines || false,
+        color: fp._layerColor || '#06b6d4',
+        fillOpacity: fp._layerFillOpacity ?? 0.1,
+        strokeWeight: fp._layerStrokeWeight || 2,
+        strokeOpacity: fp._layerStrokeOpacity || 0.9,
+        visible: fp._layerVisible !== false,
+        no_turbines: fp._layerNoTurbines || false,
         features: [],
       };
     }
 
-    // Remove layer metadata from properties
-    const cleanProps = { ...feature.properties };
-    delete cleanProps._layerId;
-    delete cleanProps._layerName;
-    delete cleanProps._layerType;
-    delete cleanProps._layerColor;
-    delete cleanProps._layerFillOpacity;
-    delete cleanProps._layerStrokeWeight;
-    delete cleanProps._layerStrokeOpacity;
-    delete cleanProps._layerNoTurbines;
-
-    layers[layerId].features.push({
+    layerMap[layerId].features.push({
       ...feature,
-      properties: cleanProps,
+      properties: stripLayerMeta(fp),
     });
   }
 
   return {
     name: props.projectName || 'Imported Project',
     description: props.projectDescription || '',
-    layers: Object.values(layers),
+    layers: Object.values(layerMap),
     turbineTypes: props.turbineTypes || [],
     cableTypes: props.cableTypes || [],
     windParams: props.windParams || { k: 2.0, lambda: 7.0 },
+    globalRadii: props.globalRadii || null,
   };
 }
 
+// ── Plain GeoJSON export (with embedded layer metadata) ───────────────────────
+
 /**
- * Export project as KMZ (compressed KML)
+ * Export all layers as a standard GeoJSON FeatureCollection.
+ * Layer styling metadata is embedded in each feature so reimporting restores it.
+ */
+export function exportLayersGeoJSON(layers) {
+  return {
+    type: 'FeatureCollection',
+    // Top-level metadata sidecar — preserved by many GIS tools
+    _eagleview: {
+      format: FORMAT_TAG,
+      version: FORMAT_VERSION,
+      exportDate: new Date().toISOString(),
+    },
+    features: layers.flatMap(layer =>
+      (layer.features || []).map(f => ({
+        type: 'Feature',
+        id: f.id,
+        geometry: f.geometry,
+        properties: {
+          ...f.properties,
+          ...layerMeta(layer),
+        },
+      }))
+    ),
+  };
+}
+
+// ── KML Export ────────────────────────────────────────────────────────────────
+
+/**
+ * Export project as KML with embedded ExtendedData for all layer/feature properties.
+ * On reimport the metadata is parsed back from ExtendedData.
  */
 export async function exportProjectKMZ(project) {
-  // For now, just export as KML string - KMZ requires zip library
-  // User can save as .kml or .kmz
+  const layers = project.layers || [];
+
+  // Embed the full project metadata as a JSON blob in the KML description
+  const projectMeta = {
+    format: FORMAT_TAG,
+    version: FORMAT_VERSION,
+    projectName: project.name,
+    turbineTypes: project.turbineTypes || [],
+    cableTypes: project.cableTypes || [],
+    windParams: project.windParams || { k: 2.0, lambda: 7.0 },
+    globalRadii: project.globalRadii || null,
+  };
+
   let kml = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <name>${escapeXml(project.name)}</name>
-    <description>${escapeXml(project.description || '')}</description>
+    <description><![CDATA[${JSON.stringify(projectMeta)}]]></description>
 `;
 
-  // Add placemarks for all features
-  if (project.layers) {
-    for (const layer of project.layers) {
-      kml += `    <Folder><name>${escapeXml(layer.name)}</name>`;
+  for (const layer of layers) {
+    const meta = layerMeta(layer);
+    kml += `    <Folder>
+      <name>${escapeXml(layer.name)}</name>
+`;
 
-      for (const feature of layer.features || []) {
-        const props = feature.properties;
-        const geom = feature.geometry;
+    for (const feature of layer.features || []) {
+      const props = { ...feature.properties, ...meta };
+      const geom = feature.geometry;
 
-        if (geom.type === 'Point') {
-          const [lng, lat] = geom.coordinates;
-          kml += `
-      <Placemark>
-        <name>${escapeXml(props.name || 'Point')}</name>
-        <description>${escapeXml(props.notes || props.description || '')}</description>
-        <Point><coordinates>${lng},${lat}</coordinates></Point>
-      </Placemark>`;
-        } else if (geom.type === 'LineString') {
-          const coords = geom.coordinates.map(([lng, lat]) => `${lng},${lat},0`).join(' ');
-          kml += `
-      <Placemark>
-        <name>${escapeXml(props.name || 'Line')}</name>
-        <description>${escapeXml(props.notes || '')}</description>
-        <LineString><coordinates>${coords}</coordinates></LineString>
-      </Placemark>`;
-        } else if (geom.type === 'Polygon') {
-          const coords = geom.coordinates[0].map(([lng, lat]) => `${lng},${lat},0`).join(' ');
-          kml += `
-      <Placemark>
-        <name>${escapeXml(props.name || 'Polygon')}</name>
-        <description>${escapeXml(props.notes || '')}</description>
-        <Polygon><outerBoundaryIs><LinearRing><coordinates>${coords}</coordinates></LinearRing></outerBoundaryIs></Polygon>
-      </Placemark>`;
-        }
+      // Build ExtendedData block with all properties (including layer metadata)
+      let extData = '        <ExtendedData>\n';
+      for (const [k, v] of Object.entries(props)) {
+        extData += `          <Data name="${escapeXml(k)}"><value>${escapeXml(String(v ?? ''))}</value></Data>\n`;
+      }
+      extData += '        </ExtendedData>\n';
+
+      kml += `      <Placemark>
+        <name>${escapeXml(props.name || feature.id || 'Feature')}</name>
+${extData}`;
+
+      if (geom?.type === 'Point') {
+        const [lng, lat] = geom.coordinates;
+        kml += `        <Point><coordinates>${lng},${lat},0</coordinates></Point>\n`;
+      } else if (geom?.type === 'LineString') {
+        const coords = geom.coordinates.map(([lng, lat]) => `${lng},${lat},0`).join(' ');
+        kml += `        <LineString><coordinates>${coords}</coordinates></LineString>\n`;
+      } else if (geom?.type === 'Polygon') {
+        const coords = geom.coordinates[0].map(([lng, lat]) => `${lng},${lat},0`).join(' ');
+        kml += `        <Polygon><outerBoundaryIs><LinearRing><coordinates>${coords}</coordinates></LinearRing></outerBoundaryIs></Polygon>\n`;
       }
 
-      kml += `    </Folder>`;
+      kml += `      </Placemark>\n`;
     }
+
+    kml += `    </Folder>\n`;
   }
 
-  kml += `
-  </Document>
-</kml>`;
-
+  kml += `  </Document>\n</kml>`;
   return kml;
 }
 
-function escapeXml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+// ── KML Import ────────────────────────────────────────────────────────────────
+
+export function importKML(kmlText) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(kmlText, 'application/xml');
+
+  // Try to extract project metadata from Document/description
+  let projectMeta = null;
+  const docDesc = doc.querySelector('Document > description');
+  if (docDesc) {
+    try { projectMeta = JSON.parse(docDesc.textContent); } catch {}
+  }
+
+  const layerMap = {};
+  const placemarks = doc.querySelectorAll('Placemark');
+
+  for (const pm of placemarks) {
+    // Extract ExtendedData
+    const props = {};
+    pm.querySelectorAll('ExtendedData > Data').forEach(d => {
+      const name = d.getAttribute('name');
+      const val = d.querySelector('value')?.textContent ?? '';
+      props[name] = val;
+    });
+    // Also grab name
+    const pmName = pm.querySelector(':scope > name')?.textContent;
+    if (pmName && !props.name) props.name = pmName;
+
+    // Parse geometry
+    let geometry = null;
+    const pointEl = pm.querySelector('Point > coordinates');
+    if (pointEl) {
+      const [lng, lat] = pointEl.textContent.trim().split(',').map(Number);
+      geometry = { type: 'Point', coordinates: [lng, lat] };
+    }
+    const lineEl = pm.querySelector('LineString > coordinates');
+    if (lineEl) {
+      const coords = lineEl.textContent.trim().split(/\s+/).map(c => {
+        const [lng, lat] = c.split(',').map(Number);
+        return [lng, lat];
+      });
+      geometry = { type: 'LineString', coordinates: coords };
+    }
+    const polyEl = pm.querySelector('Polygon outerBoundaryIs LinearRing coordinates');
+    if (polyEl) {
+      const coords = polyEl.textContent.trim().split(/\s+/).map(c => {
+        const [lng, lat] = c.split(',').map(Number);
+        return [lng, lat];
+      });
+      geometry = { type: 'Polygon', coordinates: [coords] };
+    }
+
+    if (!geometry) continue;
+
+    const layerId = props._layerId || `kml_layer_${pm.closest('Folder')?.querySelector(':scope > name')?.textContent || 'default'}`;
+    const layerName = props._layerName || pm.closest('Folder')?.querySelector(':scope > name')?.textContent || 'Imported';
+
+    if (!layerMap[layerId]) {
+      layerMap[layerId] = {
+        id: layerId,
+        name: layerName,
+        type: props._layerType || 'polygon',
+        color: props._layerColor || '#06b6d4',
+        fillOpacity: parseFloat(props._layerFillOpacity) || 0.1,
+        strokeWeight: parseFloat(props._layerStrokeWeight) || 2,
+        strokeOpacity: parseFloat(props._layerStrokeOpacity) || 0.9,
+        visible: props._layerVisible !== 'false',
+        no_turbines: props._layerNoTurbines === 'true',
+        features: [],
+      };
+    }
+
+    layerMap[layerId].features.push({
+      id: crypto.randomUUID(),
+      geometry,
+      properties: stripLayerMeta(props),
+    });
+  }
+
+  return {
+    name: projectMeta?.projectName || doc.querySelector('Document > name')?.textContent || 'KML Import',
+    layers: Object.values(layerMap),
+    turbineTypes: projectMeta?.turbineTypes || [],
+    cableTypes: projectMeta?.cableTypes || [],
+    windParams: projectMeta?.windParams || { k: 2.0, lambda: 7.0 },
+    globalRadii: projectMeta?.globalRadii || null,
+  };
 }
 
-/**
- * Download file helper
- */
+// ── Download helper ───────────────────────────────────────────────────────────
+
 export function downloadFile(content, filename, mimeType = 'application/json') {
-  const blob = new Blob([content], { type: mimeType });
+  const isBytes = content instanceof Uint8Array || content instanceof ArrayBuffer;
+  const blob = isBytes ? new Blob([content], { type: mimeType }) : new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

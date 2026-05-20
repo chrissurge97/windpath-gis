@@ -47,7 +47,7 @@ import { useImportClassify } from '@/lib/useImportClassify';
 import LayerImportExport from '@/components/planning/LayerImportExport';
 import LayerList from '@/components/planning/LayerList';
 import NewZoneDialog from '@/components/planning/NewZoneDialog';
-import ProjectFileButtons, { saveProject, loadProject, createNewProject, loadProjectIndex, OpenProjectModal } from '@/components/planning/ProjectManager';
+import ProjectFileButtons, { saveProject, loadProject, OpenProjectModal, setupProjectImport } from '@/components/planning/ProjectManager';
 import ConfigMenuWrapper from '@/components/planning/ConfigMenuWrapper';
 import { loadCustomTurbines } from '@/components/planning/TurbineWizard';
 import { loadCustomCables } from '@/components/planning/CableWizard';
@@ -407,24 +407,24 @@ export default function Planning() {
   // ── Auto-load lesson project from navigation state ────────────────────────
   useEffect(() => {
     if (!lessonProjectId) return;
-    const proj = loadProject(lessonProjectId);
-    if (proj) {
-      switchProject(lessonProjectId, proj);
-      handleSwitchProject(lessonProjectId, proj);
-    }
-  }, [lessonProjectId, switchProject]);
+    loadProject(lessonProjectId).then(proj => {
+      if (proj) {
+        switchProject(lessonProjectId, proj);
+        handleSwitchProject(lessonProjectId, proj);
+      }
+    });
+  }, [lessonProjectId]);
 
   // ── Persist (debounced) ────────────────────────────────────────────────────
   const saveTimer = useRef(null);
   useEffect(() => {
-    if (!currentProjectId) return;
+    if (!currentProjectId || currentProjectId === '__demo__') return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     const data = { id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams, globalRadii };
-    // Defer BOTH the context update and localStorage write — avoids re-render cascade on large imports
     saveTimer.current = setTimeout(() => {
       updateProjectState(data);
-      saveProject(currentProjectId, data);
-    }, 500);
+      saveProject(currentProjectId, data).catch(err => console.warn('Auto-save error:', err));
+    }, 1500);
     return () => clearTimeout(saveTimer.current);
   }, [layers, turbineTypes, cableTypes, projectName, currentProjectId, windParams]);
 
@@ -909,11 +909,23 @@ export default function Planning() {
         </div>
         <div className="flex flex-col gap-3 w-64">
           <button
-            onClick={() => {
+            onClick={async () => {
               const name = window.prompt('New project name:', 'New Wind Farm Project');
               if (!name?.trim()) return;
-              const { id, data } = createNewProject(name.trim());
-              handleNewProject(id, data);
+              const defaultData = {
+                name: name.trim(),
+                layers: [
+                  createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }),
+                  createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }),
+                  createLayer({ name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8 }),
+                  createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 }),
+                ],
+                turbineTypes: DEFAULT_TURBINE_TYPES,
+                cableTypes: DEFAULT_CABLE_TYPES,
+                windParams: { k: 2.0, lambda: 7.0 },
+              };
+              const id = await saveProject(null, defaultData);
+              handleNewProject(id, { ...defaultData, id });
             }}
             className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-colors">
             
@@ -948,7 +960,7 @@ export default function Planning() {
             currentData={{ id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams }}
             onSwitchProject={handleSwitchProject}
             onNewProject={handleNewProject}
-            onSaved={(name) => setProjectName(name)} />
+            onSaved={(name, newId) => { setProjectName(name); if (newId && newId !== currentProjectId) switchProject(newId, { ...currentProject, id: newId, name }); }} />
         </div>
         <input
           value={projectName}
@@ -1049,10 +1061,10 @@ export default function Planning() {
           </button>
           <div data-lesson-id="btn-export">
             <ExportMenu
-              onExportProject={(crs) => { const geojson = exportProjectGeoJSON({ name: projectName, description: '', layers, turbineTypes, cableTypes, windParams }); const projected = reprojectGeoJSON(geojson, crs); downloadFile(JSON.stringify(projected, null, 2), `${projectName}-project.geojson`, 'application/json'); }}
+              onExportProject={(crs) => { const geojson = exportProjectGeoJSON({ name: projectName, description: '', layers, turbineTypes, cableTypes, windParams, globalRadii }); const projected = reprojectGeoJSON(geojson, crs); downloadFile(JSON.stringify(projected, null, 2), `${projectName}-project.geojson`, 'application/json'); }}
               onExportGeoJSON={(crs) => { const geojson = layersToGeoJSON(layers); const projected = reprojectGeoJSON(geojson, crs); downloadFile(JSON.stringify(projected, null, 2), `${projectName}.geojson`, 'application/json'); }}
               onExportShapefile={(crs) => { const geojson = layersToGeoJSON(layers); const projected = reprojectGeoJSON(geojson, crs); projected._crsName = crs; const zipBytes = exportShapefile(projected, projectName); downloadFile(zipBytes, `${projectName}-shapefile.zip`, 'application/zip'); }}
-              onExportKML={() => { exportProjectKMZ({ name: projectName, layers }).then((kml) => downloadFile(kml, `${projectName}.kml`, 'application/vnd.google-earth.kml+xml')); }}
+              onExportKML={() => { exportProjectKMZ({ name: projectName, layers, turbineTypes, cableTypes, windParams, globalRadii }).then((kml) => downloadFile(kml, `${projectName}.kml`, 'application/vnd.google-earth.kml+xml')); }}
               onExportCSV={(crs) => { const geojson = layersToGeoJSON(layers); const projected = reprojectGeoJSON(geojson, crs); const rows = [['layer','feature_id','name','geometry_type','x','y','notes'].join(',')]; const esc=(v)=>`"${String(v??'').replace(/"/g,'""')}"`; for(const f of projected.features){const g=f.geometry;let x='',y='';if(g.type==='Point'){[x,y]=g.coordinates;}else if(g.type==='Polygon'){[x,y]=g.coordinates[0][0];}else if(g.type==='LineString'){[x,y]=g.coordinates[0];}rows.push([esc(f.properties?._layerName||''),esc(f.id),esc(f.properties?.name||''),esc(g.type),esc(x),esc(y),esc(f.properties?.notes||'')].join(','));} const blob=new Blob([rows.join('\n')],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`${projectName}.csv`;a.click();URL.revokeObjectURL(url); }}
               onExportPDF={() => exportProjectPDF({ projectName, turbines, turbineTypes, cables, cableTypes, substations, totalCapacity_mw, totalAEP, avgCapFactor, avgWindSpeed, totalCableLength, totalCableCost, windParams, monthlyData, layers, mapRef })} />
           </div>

@@ -5,23 +5,21 @@ const PlanningContext = createContext();
 
 /**
  * PlanningContext keeps the FULL live project state in memory.
- * Any page can read currentProject and get up-to-date data without
- * re-reading localStorage. Planning.jsx calls updateProjectState()
- * whenever layers / turbineTypes / cableTypes / windParams change,
- * which also debounces a localStorage write.
+ * Planning.jsx calls updateProjectState() on every meaningful change,
+ * which debounces a server-side save via the Base44 entities SDK.
  */
 export function PlanningProvider({ children }) {
   const [currentProjectId, setCurrentProjectId] = useState(null);
   const [currentProject, setCurrentProject] = useState(null);
   const saveTimer = useRef(null);
 
-  // Debounced persist – avoids hammering localStorage on every keystroke
+  // Debounced server persist
   const persistProject = useCallback((id, data) => {
     if (!id || id === '__demo__') return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      saveProject(id, data);
-    }, 600);
+      saveProject(id, data).catch(err => console.warn('Auto-save failed:', err));
+    }, 1500); // slightly longer debounce for network calls
   }, []);
 
   const switchProject = useCallback((id, projectData) => {
@@ -31,13 +29,13 @@ export function PlanningProvider({ children }) {
 
   /**
    * Called by Planning.jsx on every meaningful state change.
-   * Keeps the in-memory snapshot fresh AND persists to localStorage.
+   * Keeps the in-memory snapshot fresh AND debounces a server save.
    */
   const updateProjectState = useCallback((patch) => {
     setCurrentProject(prev => {
       if (!prev) return prev;
       const next = { ...prev, ...patch };
-      persistProject(patch._id || prev.id, next);
+      persistProject(patch._id || prev.id || patch.id, next);
       return next;
     });
   }, [persistProject]);

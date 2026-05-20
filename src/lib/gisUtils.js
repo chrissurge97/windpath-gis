@@ -124,11 +124,48 @@ export function layersToGeoJSON(layers) {
           _layerId: layer.id,
           _layerName: layer.name,
           _layerType: layer.type,
+          _layerColor: layer.color,
+          _layerFillOpacity: layer.fillOpacity,
+          _layerStrokeWeight: layer.strokeWeight,
+          _layerStrokeOpacity: layer.strokeOpacity,
+          _layerNoTurbines: layer.no_turbines || false,
+          _layerVisible: layer.visible !== false,
         },
       });
     }
   }
   return featureCollection;
+}
+
+/**
+ * Reconstruct layers from a GeoJSON FeatureCollection that was exported with layer metadata.
+ * Falls back gracefully if metadata is missing.
+ */
+export function geoJSONToLayers(geojson) {
+  const layerMap = {};
+  for (const f of geojson.features || []) {
+    const fp = f.properties || {};
+    const layerId = fp._layerId || crypto.randomUUID();
+    if (!layerMap[layerId]) {
+      layerMap[layerId] = {
+        id: layerId,
+        name: fp._layerName || 'Imported Layer',
+        type: fp._layerType || 'polygon',
+        color: fp._layerColor || '#06b6d4',
+        fillOpacity: fp._layerFillOpacity ?? 0.3,
+        strokeWeight: fp._layerStrokeWeight || 2,
+        strokeOpacity: fp._layerStrokeOpacity || 0.9,
+        visible: fp._layerVisible !== false,
+        no_turbines: fp._layerNoTurbines || false,
+        features: [],
+      };
+    }
+    const cleanProps = { ...fp };
+    ['_layerId','_layerName','_layerType','_layerColor','_layerFillOpacity',
+     '_layerStrokeWeight','_layerStrokeOpacity','_layerNoTurbines','_layerVisible'].forEach(k => delete cleanProps[k]);
+    layerMap[layerId].features.push({ id: f.id || crypto.randomUUID(), layerId, geometry: f.geometry, properties: cleanProps });
+  }
+  return Object.values(layerMap);
 }
 
 export function layerToGeoJSON(layer) {
@@ -172,7 +209,12 @@ export function exportSchema(layers) {
 // ── GeoJSON import ─────────────────────────────────────────────────────────
 export function geoJSONToLayer(geojson, layerName) {
   const meta = geojson.metadata || {};
-  // Collect all unique property keys as schema
+  // Use per-feature layer metadata if present (from EagleView exports)
+  const firstFeature = geojson.features?.[0];
+  const fp = firstFeature?.properties || {};
+  const hasEmbeddedMeta = !!fp._layerName || !!fp._layerType;
+
+  // Collect all unique property keys as schema (skip internal _keys)
   const schemaKeys = new Set();
   (geojson.features || []).forEach(f => {
     Object.keys(f.properties || {}).forEach(k => {
@@ -185,18 +227,24 @@ export function geoJSONToLayer(geojson, layerName) {
     type: typeof (geojson.features?.[0]?.properties?.[k]) === 'number' ? 'number' : 'string',
   }));
 
+  const cleanFeatures = (geojson.features || []).map(f => {
+    const p = { ...f.properties };
+    ['_layerId','_layerName','_layerType','_layerColor','_layerFillOpacity',
+     '_layerStrokeWeight','_layerStrokeOpacity','_layerNoTurbines','_layerVisible'].forEach(k => delete p[k]);
+    return { id: f.id || crypto.randomUUID(), layerId: null, geometry: f.geometry, properties: p };
+  });
+
   return createLayer({
-    name: meta.layerName || layerName || 'Imported Layer',
-    type: meta.layerType || 'polygon',
-    color: meta.color || '#06b6d4',
-    fillOpacity: meta.fillOpacity ?? 0.3,
+    name: (hasEmbeddedMeta ? fp._layerName : null) || meta.layerName || layerName || 'Imported Layer',
+    type: (hasEmbeddedMeta ? fp._layerType : null) || meta.layerType || 'polygon',
+    color: (hasEmbeddedMeta ? fp._layerColor : null) || meta.color || '#06b6d4',
+    fillOpacity: (hasEmbeddedMeta ? fp._layerFillOpacity : null) ?? meta.fillOpacity ?? 0.3,
+    strokeWeight: (hasEmbeddedMeta ? fp._layerStrokeWeight : null) || 2,
+    strokeOpacity: (hasEmbeddedMeta ? fp._layerStrokeOpacity : null) || 0.9,
+    no_turbines: hasEmbeddedMeta ? (fp._layerNoTurbines || false) : false,
+    visible: hasEmbeddedMeta ? (fp._layerVisible !== false) : true,
     schema: meta.schema || schema,
-    features: (geojson.features || []).map(f => ({
-      id: f.id || crypto.randomUUID(),
-      layerId: null, // will be set
-      geometry: f.geometry,
-      properties: f.properties || {},
-    })),
+    features: cleanFeatures,
   });
 }
 

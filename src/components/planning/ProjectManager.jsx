@@ -1,13 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FolderOpen, Plus, Trash2, Save, X, FileText, Clock, ChevronRight, Wind, ChevronDown, Upload } from 'lucide-react';
+import { FolderOpen, Plus, Trash2, Save, X, FileText, Clock, ChevronRight, Wind, ChevronDown, Upload, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createLayer } from '@/lib/gisUtils';
 import { DEFAULT_TURBINE_TYPES, DEFAULT_CABLE_TYPES } from '@/lib/turbineTypes';
 import { buildDemoProject } from '@/lib/demoProject';
-import { setupProjectImport } from '@/components/planning/ProjectImportHandler';
+import { listProjects, loadProject as serverLoadProject, saveProject as serverSaveProject, deleteProject as serverDeleteProject, createNewProject as serverCreateNewProject } from '@/lib/projectStorage';
+import { importProjectGeoJSON, importKML } from '@/lib/projectExport';
 
-const PROJECTS_INDEX_KEY = 'planning_projects_index';
-const PROJECT_PREFIX = 'planning_project_';
+const DEMO_ID = '__demo__';
 
 function emptyProject(name = 'New Project') {
   return {
@@ -24,46 +24,6 @@ function emptyProject(name = 'New Project') {
   };
 }
 
-export function loadProjectIndex() {
-  try { return JSON.parse(localStorage.getItem(PROJECTS_INDEX_KEY) || '[]'); } catch { return []; }
-}
-
-function saveProjectIndex(index) {
-  localStorage.setItem(PROJECTS_INDEX_KEY, JSON.stringify(index));
-}
-
-export function loadProject(id) {
-  try { return JSON.parse(localStorage.getItem(PROJECT_PREFIX + id)); } catch { return null; }
-}
-
-export function saveProject(id, data) {
-  localStorage.setItem(PROJECT_PREFIX + id, JSON.stringify(data));
-  const index = loadProjectIndex();
-  const existing = index.find(p => p.id === id);
-  if (existing) {
-    existing.name = data.name;
-    existing.updatedAt = Date.now();
-  } else {
-    index.push({ id, name: data.name, createdAt: Date.now(), updatedAt: Date.now() });
-  }
-  saveProjectIndex(index);
-}
-
-export function deleteProject(id) {
-  localStorage.removeItem(PROJECT_PREFIX + id);
-  const index = loadProjectIndex().filter(p => p.id !== id);
-  saveProjectIndex(index);
-  return index;
-}
-
-export function createNewProject(name) {
-  const id = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  const data = emptyProject(name);
-  data.id = id;
-  saveProject(id, data);
-  return { id, data };
-}
-
 function formatDate(ts) {
   if (!ts) return '—';
   const d = new Date(ts);
@@ -71,17 +31,24 @@ function formatDate(ts) {
     ' ' + d.toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit' });
 }
 
-const DEMO_ID = '__demo__';
+// ── File Explorer Modal ───────────────────────────────────────────────────────
 
 function FileExplorerModal({ mode, currentProjectId, currentProjectName, currentData, onClose, onOpen, onSaved }) {
-  const [projects, setProjects] = useState(loadProjectIndex());
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState(mode === 'open' ? DEMO_ID : currentProjectId);
   const [saveName, setSaveName] = useState(currentProjectName);
   const overlayRef = useRef(null);
 
-  const refresh = () => setProjects(loadProjectIndex());
+  useEffect(() => {
+    listProjects().then(ps => {
+      setProjects(ps);
+      setLoading(false);
+    });
+  }, []);
 
-  const handleOpen = () => {
+  const handleOpen = async () => {
     if (selected === DEMO_ID) {
       const demo = buildDemoProject();
       const demoData = {
@@ -96,25 +63,28 @@ function FileExplorerModal({ mode, currentProjectId, currentProjectName, current
       onClose();
       return;
     }
-    const proj = loadProject(selected);
-    if (proj) { onOpen(selected, proj); onClose(); }
+    setLoading(true);
+    const proj = await serverLoadProject(selected);
+    setLoading(false);
+    if (proj) { onOpen(proj.id, proj); onClose(); }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!saveName.trim()) return;
+    setSaving(true);
     const data = { ...currentData, name: saveName.trim() };
-    saveProject(currentProjectId, data);
-    onSaved(saveName.trim());
-    refresh();
+    const id = await serverSaveProject(currentProjectId, data);
+    setSaving(false);
+    onSaved(saveName.trim(), id);
     onClose();
   };
 
-  const handleDelete = (e, id) => {
+  const handleDelete = async (e, id) => {
     e.stopPropagation();
     if (!window.confirm('Delete this project permanently?')) return;
-    const updated = deleteProject(id);
-    setProjects(updated);
-    if (selected === id) setSelected(updated[0]?.id || DEMO_ID);
+    await serverDeleteProject(id);
+    setProjects(prev => prev.filter(p => p.id !== id));
+    if (selected === id) setSelected(projects.find(p => p.id !== id)?.id || DEMO_ID);
   };
 
   return (
@@ -154,71 +124,79 @@ function FileExplorerModal({ mode, currentProjectId, currentProjectName, current
 
         {/* File list */}
         <div className="flex-1 overflow-y-auto px-3 py-2">
-          <div className="space-y-1">
-            {/* Demo project — always first */}
-            {mode === 'open' && (
-              <div
-                onClick={() => setSelected(DEMO_ID)}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all group',
-                  selected === DEMO_ID ? 'bg-emerald-500/15 border border-emerald-500/30' : 'hover:bg-slate-800 border border-transparent'
-                )}
-              >
-                <Wind className={cn('w-4 h-4 shrink-0', selected === DEMO_ID ? 'text-emerald-400' : 'text-slate-500')} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className={cn('text-sm font-medium truncate', selected === DEMO_ID ? 'text-white' : 'text-slate-300')}>
-                      Ballycraggan Wind Farm — Demo
-                    </p>
-                    <span className="text-[9px] bg-emerald-900/60 text-emerald-400 px-1.5 py-0.5 rounded font-semibold shrink-0 border border-emerald-700/40">DEMO</span>
-                  </div>
-                  <p className="text-[10px] text-slate-600 mt-0.5">Co. Galway · 12 turbines · 50.4 MW</p>
-                </div>
-                {selected === DEMO_ID && <ChevronRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
-              </div>
-            )}
-
-            {projects.length === 0 && mode === 'open' ? null : projects.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-slate-600">
-                <FileText className="w-10 h-10 mb-3 opacity-30" />
-                <p className="text-sm">No saved projects yet</p>
-              </div>
-            ) : (
-              projects.map(p => {
-                const isActive = p.id === selected;
-                const isCurrent = p.id === currentProjectId;
-                return (
-                  <div
-                    key={p.id}
-                    onClick={() => { setSelected(p.id); if (mode === 'save') setSaveName(p.name); }}
-                    className={cn(
-                      'flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all group',
-                      isActive ? 'bg-emerald-500/15 border border-emerald-500/30' : 'hover:bg-slate-800 border border-transparent'
-                    )}
-                  >
-                    <FileText className={cn('w-4 h-4 shrink-0', isActive ? 'text-emerald-400' : 'text-slate-500')} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className={cn('text-sm font-medium truncate', isActive ? 'text-white' : 'text-slate-300')}>{p.name}</p>
-                        {isCurrent && <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-semibold shrink-0">OPEN</span>}
-                      </div>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <Clock className="w-2.5 h-2.5 text-slate-600" />
-                        <p className="text-[10px] text-slate-600">{formatDate(p.updatedAt)}</p>
-                      </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-slate-500">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading…
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {/* Demo project — always first in open mode */}
+              {mode === 'open' && (
+                <div
+                  onClick={() => setSelected(DEMO_ID)}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all group',
+                    selected === DEMO_ID ? 'bg-emerald-500/15 border border-emerald-500/30' : 'hover:bg-slate-800 border border-transparent'
+                  )}
+                >
+                  <Wind className={cn('w-4 h-4 shrink-0', selected === DEMO_ID ? 'text-emerald-400' : 'text-slate-500')} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className={cn('text-sm font-medium truncate', selected === DEMO_ID ? 'text-white' : 'text-slate-300')}>
+                        Ballycraggan Wind Farm — Demo
+                      </p>
+                      <span className="text-[9px] bg-emerald-900/60 text-emerald-400 px-1.5 py-0.5 rounded font-semibold shrink-0 border border-emerald-700/40">DEMO</span>
                     </div>
-                    {mode === 'open' && isActive && <ChevronRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
-                    <button
-                      onClick={e => handleDelete(e, p.id)}
-                      className="p-1 text-slate-700 hover:text-red-400 shrink-0 opacity-0 group-hover:opacity-100 transition-all rounded"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                    <p className="text-[10px] text-slate-600 mt-0.5">Co. Galway · 12 turbines · 50.4 MW</p>
                   </div>
-                );
-              })
-            )}
-          </div>
+                  {selected === DEMO_ID && <ChevronRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                </div>
+              )}
+
+              {projects.length === 0 ? (
+                mode === 'open' ? null : (
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-600">
+                    <FileText className="w-10 h-10 mb-3 opacity-30" />
+                    <p className="text-sm">No saved projects yet</p>
+                  </div>
+                )
+              ) : (
+                projects.map(p => {
+                  const isActive = p.id === selected;
+                  const isCurrent = p.id === currentProjectId;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => { setSelected(p.id); if (mode === 'save') setSaveName(p.name); }}
+                      className={cn(
+                        'flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all group',
+                        isActive ? 'bg-emerald-500/15 border border-emerald-500/30' : 'hover:bg-slate-800 border border-transparent'
+                      )}
+                    >
+                      <FileText className={cn('w-4 h-4 shrink-0', isActive ? 'text-emerald-400' : 'text-slate-500')} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className={cn('text-sm font-medium truncate', isActive ? 'text-white' : 'text-slate-300')}>{p.name}</p>
+                          {isCurrent && <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-semibold shrink-0">OPEN</span>}
+                        </div>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <Clock className="w-2.5 h-2.5 text-slate-600" />
+                          <p className="text-[10px] text-slate-600">{formatDate(p.updatedAt)}</p>
+                        </div>
+                      </div>
+                      {mode === 'open' && isActive && <ChevronRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                      <button
+                        onClick={e => handleDelete(e, p.id)}
+                        className="p-1 text-slate-700 hover:text-red-400 shrink-0 opacity-0 group-hover:opacity-100 transition-all rounded"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -227,14 +205,14 @@ function FileExplorerModal({ mode, currentProjectId, currentProjectName, current
             Cancel
           </button>
           {mode === 'open' ? (
-            <button onClick={handleOpen} disabled={!selected}
+            <button onClick={handleOpen} disabled={!selected || loading}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-semibold rounded-lg transition-colors">
-              <FolderOpen className="w-3.5 h-3.5" /> Open
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderOpen className="w-3.5 h-3.5" />} Open
             </button>
           ) : (
-            <button onClick={handleSave} disabled={!saveName.trim()}
+            <button onClick={handleSave} disabled={!saveName.trim() || saving}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-semibold rounded-lg transition-colors">
-              <Save className="w-3.5 h-3.5" /> Save
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
             </button>
           )}
         </div>
@@ -242,6 +220,8 @@ function FileExplorerModal({ mode, currentProjectId, currentProjectName, current
     </div>
   );
 }
+
+// ── Open Project Modal (standalone) ─────────────────────────────────────────
 
 export function OpenProjectModal({ onOpen, onClose }) {
   return (
@@ -257,9 +237,64 @@ export function OpenProjectModal({ onOpen, onClose }) {
   );
 }
 
-export default function ProjectFileButtons({ currentProjectId, currentProjectName, currentData, onNewProject, onSwitchProject, onSaved }) {
+// ── Import project from file (GeoJSON / KML) ─────────────────────────────────
+
+export function setupProjectImport(onProjectLoaded) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.geojson,.json,.kml,.kmz';
+
+  input.onchange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const fname = file.name.toLowerCase();
+
+    try {
+      if (fname.endsWith('.kml') || fname.endsWith('.kmz')) {
+        const project = importKML(text);
+        // Fill in missing defaults
+        if (!project.turbineTypes?.length) project.turbineTypes = DEFAULT_TURBINE_TYPES;
+        if (!project.cableTypes?.length) project.cableTypes = DEFAULT_CABLE_TYPES;
+        onProjectLoaded(project);
+        return;
+      }
+
+      // JSON / GeoJSON
+      const data = JSON.parse(text);
+      const isProject = data.properties?.format === 'eagleview-wind-farm-project' ||
+                        data.properties?.format === 'base44-wind-farm-project';
+      if (isProject) {
+        const project = importProjectGeoJSON(data);
+        if (!project.turbineTypes?.length) project.turbineTypes = DEFAULT_TURBINE_TYPES;
+        if (!project.cableTypes?.length) project.cableTypes = DEFAULT_CABLE_TYPES;
+        onProjectLoaded(project);
+        return;
+      }
+
+      alert('This file does not appear to be an EagleView project export.\nUse the "Project (GeoJSON)" export option to create a portable project file.');
+    } catch (err) {
+      console.error('Import error:', err);
+      alert('Failed to import file: ' + err.message);
+    }
+  };
+
+  return input;
+}
+
+// ── Main ProjectFileButtons component ────────────────────────────────────────
+
+export default function ProjectFileButtons({
+  currentProjectId,
+  currentProjectName,
+  currentData,
+  onNewProject,
+  onSwitchProject,
+  onSaved,
+}) {
   const [modal, setModal] = useState(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const dropdownRef = useRef(null);
 
   useEffect(() => {
@@ -270,24 +305,37 @@ export default function ProjectFileButtons({ currentProjectId, currentProjectNam
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const handleNew = () => {
+  const handleNew = async () => {
     setDropdownOpen(false);
     if (!window.confirm('Create a new empty project? Unsaved changes will be lost.')) return;
     const name = window.prompt('New project name:', 'New Wind Farm Project');
     if (!name?.trim()) return;
-    const { id, data } = createNewProject(name.trim());
-    onNewProject(id, data);
+    const data = emptyProject(name.trim());
+    setSaving(true);
+    const id = await serverSaveProject(null, data);
+    setSaving(false);
+    onNewProject(id, { ...data, id });
   };
 
   const handleImportProject = () => {
     setDropdownOpen(false);
-    const input = setupProjectImport((project) => {
-      const { id, data } = createNewProject(project.name);
-      const merged = { ...data, ...project };
-      saveProject(id, merged);
-      onNewProject(id, merged);
+    const input = setupProjectImport(async (project) => {
+      setSaving(true);
+      const id = await serverSaveProject(null, project);
+      setSaving(false);
+      onNewProject(id, { ...project, id });
     });
     input.click();
+  };
+
+  const handleQuickSave = async () => {
+    if (!currentProjectId || currentProjectId === DEMO_ID) {
+      setModal('save');
+      return;
+    }
+    setSaving(true);
+    await serverSaveProject(currentProjectId, currentData);
+    setSaving(false);
   };
 
   const MENU_ITEMS = [
@@ -299,13 +347,15 @@ export default function ProjectFileButtons({ currentProjectId, currentProjectNam
 
   return (
     <>
-      <div className="relative shrink-0" ref={dropdownRef}>
+      <div className="relative shrink-0 flex items-center gap-1" ref={dropdownRef}>
         <button
           onClick={() => setDropdownOpen(v => !v)}
           className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-all"
         >
           <FileText className="w-3 h-3" /> File <ChevronDown className={cn("w-3 h-3 transition-transform", dropdownOpen && "rotate-180")} />
         </button>
+        {/* Quick save indicator */}
+        {saving && <Loader2 className="w-3 h-3 text-emerald-400 animate-spin" />}
         {dropdownOpen && (
           <div className="absolute top-full left-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-[9999] overflow-hidden min-w-[140px]">
             {MENU_ITEMS.map(({ label, icon: Icon, action }) => (
@@ -326,9 +376,12 @@ export default function ProjectFileButtons({ currentProjectId, currentProjectNam
           currentData={currentData}
           onClose={() => setModal(null)}
           onOpen={(id, proj) => onSwitchProject(id, proj)}
-          onSaved={name => onSaved(name)}
+          onSaved={(name, id) => onSaved(name, id)}
         />
       )}
     </>
   );
 }
+
+// ── Re-export helpers for backward compat ────────────────────────────────────
+export { serverSaveProject as saveProject, serverLoadProject as loadProject, serverCreateNewProject as createNewProject, listProjects as loadProjectIndex };
