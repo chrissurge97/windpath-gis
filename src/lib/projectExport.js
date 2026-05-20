@@ -178,46 +178,82 @@ export function exportLayersGeoJSON(layers) {
  * On reimport the metadata is parsed back from ExtendedData.
  */
 export async function exportProjectKMZ(project) {
-  const layers = project.layers || [];
+   const layers = project.layers || [];
 
-  // Embed the full project metadata as a JSON blob in the KML description
-  const projectMeta = {
-    format: FORMAT_TAG,
-    version: FORMAT_VERSION,
-    projectName: project.name,
-    turbineTypes: project.turbineTypes || [],
-    cableTypes: project.cableTypes || [],
-    windParams: project.windParams || { k: 2.0, lambda: 7.0 },
-    globalRadii: project.globalRadii || null,
-  };
+   // Embed the full project metadata as a JSON blob in the KML description
+   const projectMeta = {
+     format: FORMAT_TAG,
+     version: FORMAT_VERSION,
+     projectName: project.name,
+     turbineTypes: project.turbineTypes || [],
+     cableTypes: project.cableTypes || [],
+     windParams: project.windParams || { k: 2.0, lambda: 7.0 },
+     globalRadii: project.globalRadii || null,
+   };
 
-  let kml = `<?xml version="1.0" encoding="UTF-8"?>
+   // Build a lookup of turbine/substation names → feature IDs so cables can reference by position
+   const turbineLayer = layers.find(l => l.type === 'turbine');
+   const substationLayer = layers.find(l => l.type === 'substation');
+   const turbineMap = {};
+   const substationMap = {};
+
+   if (turbineLayer) {
+     turbineLayer.features.forEach(f => {
+       turbineMap[f.properties?.name] = f.id;
+     });
+   }
+   if (substationLayer) {
+     substationLayer.features.forEach(f => {
+       substationMap[f.properties?.name] = f.id;
+     });
+   }
+
+   let kml = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
-  <Document>
-    <name>${escapeXml(project.name)}</name>
-    <description><![CDATA[${JSON.stringify(projectMeta)}]]></description>
-`;
+   <Document>
+     <name>${escapeXml(project.name)}</name>
+     <description><![CDATA[${JSON.stringify(projectMeta)}]]></description>
+ `;
 
-  for (const layer of layers) {
-    const meta = layerMeta(layer);
-    kml += `    <Folder>
-      <name>${escapeXml(layer.name)}</name>
-`;
+   for (const layer of layers) {
+     const meta = layerMeta(layer);
+     kml += `    <Folder>
+       <name>${escapeXml(layer.name)}</name>
+ `;
 
-    for (const feature of layer.features || []) {
-      const props = { ...feature.properties, ...meta };
-      const geom = feature.geometry;
+     for (const feature of layer.features || []) {
+       let props = { ...feature.properties, ...meta };
 
-      // Build ExtendedData block with all properties (including layer metadata)
-      let extData = '        <ExtendedData>\n';
-      for (const [k, v] of Object.entries(props)) {
-        // Serialize objects/arrays to JSON so they survive KML round-trips
-        const serialized = (v !== null && typeof v === 'object') ? JSON.stringify(v) : String(v ?? '');
-        // Ensure start_node and end_node are always JSON strings for proper deserialization
-        const finalVal = (k === 'start_node' || k === 'end_node') && v !== null && typeof v === 'object' ? JSON.stringify(v) : serialized;
-        extData += `          <Data name="${escapeXml(k)}"><value>${escapeXml(finalVal)}</value></Data>\n`;
-      }
-      extData += '        </ExtendedData>\n';
+       // For cables: resolve start_node and end_node by matching names to actual turbine/substation IDs
+       if (layer.type === 'cable' && props.start_node && props.end_node) {
+         const start = props.start_node;
+         const end = props.end_node;
+         if (start.type === 'turbine' && turbineMap[start.name]) {
+           props.start_node = { ...start, id: turbineMap[start.name] };
+         }
+         if (end.type === 'turbine' && turbineMap[end.name]) {
+           props.end_node = { ...end, id: turbineMap[end.name] };
+         }
+         if (start.type === 'substation' && substationMap[start.name]) {
+           props.start_node = { ...start, id: substationMap[start.name] };
+         }
+         if (end.type === 'substation' && substationMap[end.name]) {
+           props.end_node = { ...end, id: substationMap[end.name] };
+         }
+       }
+
+       const geom = feature.geometry;
+
+       // Build ExtendedData block with all properties (including layer metadata)
+       let extData = '        <ExtendedData>\n';
+       for (const [k, v] of Object.entries(props)) {
+         // Serialize objects/arrays to JSON so they survive KML round-trips
+         const serialized = (v !== null && typeof v === 'object') ? JSON.stringify(v) : String(v ?? '');
+         // Ensure start_node and end_node are always JSON strings for proper deserialization
+         const finalVal = (k === 'start_node' || k === 'end_node') && v !== null && typeof v === 'object' ? JSON.stringify(v) : serialized;
+         extData += `          <Data name="${escapeXml(k)}"><value>${escapeXml(finalVal)}</value></Data>\n`;
+       }
+       extData += '        </ExtendedData>\n';
 
       kml += `      <Placemark>
          <name>${escapeXml(props.name || feature.id || 'Feature')}</name>

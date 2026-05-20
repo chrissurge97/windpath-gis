@@ -67,17 +67,20 @@ export function resolveKMLCableNetwork(cableLayer, turbineLayer, substationLayer
     cableNodeMap.set(cable.id, { startNode, endNode });
   }
 
-  // Step 2: Always update cables with freshly snapped nodes (KML import gives us broken node IDs)
+  // Step 2: Update cables with snapped nodes, but preserve existing explicit nodes
   const updatedFeatures = cables.map(cable => {
     const nodes = cableNodeMap.get(cable.id);
     if (!nodes) return cable;
+
+    const startNode = cable.properties.start_node || nodes.startNode;
+    const endNode = cable.properties.end_node || nodes.endNode;
 
     return {
       ...cable,
       properties: {
         ...cable.properties,
-        start_node: nodes.startNode,
-        end_node: nodes.endNode,
+        start_node: startNode,
+        end_node: endNode,
       }
     };
   });
