@@ -213,13 +213,15 @@ export async function exportProjectKMZ(project) {
       for (const [k, v] of Object.entries(props)) {
         // Serialize objects/arrays to JSON so they survive KML round-trips
         const serialized = (v !== null && typeof v === 'object') ? JSON.stringify(v) : String(v ?? '');
-        extData += `          <Data name="${escapeXml(k)}"><value>${escapeXml(serialized)}</value></Data>\n`;
+        // Ensure start_node and end_node are always JSON strings for proper deserialization
+        const finalVal = (k === 'start_node' || k === 'end_node') && v !== null && typeof v === 'object' ? JSON.stringify(v) : serialized;
+        extData += `          <Data name="${escapeXml(k)}"><value>${escapeXml(finalVal)}</value></Data>\n`;
       }
       extData += '        </ExtendedData>\n';
 
       kml += `      <Placemark>
-        <name>${escapeXml(props.name || feature.id || 'Feature')}</name>
-${extData}`;
+         <name>${escapeXml(props.name || feature.id || 'Feature')}</name>
+      ${extData}`;
 
       if (geom?.type === 'Point') {
         const [lng, lat] = geom.coordinates;
