@@ -675,9 +675,39 @@ function parseShapefileSet(shpBuf, dbfBuf, prjText, layerName) {
   const crs = detectCRS(prjText);
   const geomFeatures = parseSHP(shpBuf);
   const dbfRecords = dbfBuf ? parseDBF(dbfBuf) : [];
-  const features = geomFeatures
+  
+  let features = geomFeatures
     .map((f, i) => f ? reprojectFeature({ ...f, properties: dbfRecords[i] || {} }, crs) : null)
     .filter(Boolean);
+  
+  // CRITICAL: If we have more DBF records than features, shapefile grouped multiple parts into one.
+  // Unfold MultiLineStrings back to individual features per DBF record.
+  if (dbfRecords.length > features.length) {
+    const expanded = [];
+    let dbfIdx = 0;
+    for (const feature of features) {
+      const geom = feature.geometry;
+      if (geom?.type === 'MultiLineString' && dbfIdx < dbfRecords.length) {
+        // One feature with multiple parts → split into separate features
+        for (const coords of geom.coordinates) {
+          if (dbfIdx < dbfRecords.length) {
+            expanded.push({
+              type: 'Feature',
+              geometry: { type: 'LineString', coordinates: coords },
+              properties: dbfRecords[dbfIdx]
+            });
+            dbfIdx++;
+          }
+        }
+      } else {
+        // Single-part feature → use as-is
+        expanded.push(feature);
+        dbfIdx++;
+      }
+    }
+    features = expanded;
+  }
+  
   const geojson = { type: 'FeatureCollection', features };
   if (layerName) geojson._layerName = layerName;
   return geojson;
