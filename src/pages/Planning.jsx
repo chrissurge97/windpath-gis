@@ -292,6 +292,7 @@ export default function Planning() {
   const [selectedFeatureId, setSelectedFeatureId] = useState(null);
   const [rightTab, setRightTab] = useState('turbines');
   const [loadingWind, setLoadingWind] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
   const [windFetched, setWindFetched] = useState(false);
   const [projectName, setProjectName] = useState(() => initProj.name || 'Wind Farm Project');
 
@@ -782,7 +783,7 @@ export default function Planning() {
 
   const handleImport = () => {
     openImportFilePicker({
-      onLoading: (loading) => setLoadingWind(loading),
+      onLoading: (loading) => setImportLoading(loading),
       defaultTurbineType: selectedTurbineType,
       defaultCableTypeId: selectedCableTypeId,
       onProject: (project) => {
@@ -1014,7 +1015,12 @@ export default function Planning() {
 
         {loadingWind &&
         <span className="flex items-center gap-1 text-[11px] text-amber-400 shrink-0">
-            <RefreshCw className="w-3 h-3 animate-spin" /> Fetching…
+            <RefreshCw className="w-3 h-3 animate-spin" /> Fetching wind data…
+          </span>
+        }
+        {importLoading &&
+        <span className="flex items-center gap-1 text-[11px] text-cyan-400 shrink-0">
+            <RefreshCw className="w-3 h-3 animate-spin" /> Importing…
           </span>
         }
 
