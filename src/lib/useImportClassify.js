@@ -231,34 +231,48 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
 
     // ── Phase 4: Merge into existing typed layers ────────────────────────────
     setLayers(prev => {
-      const turbineLayer = prev.find(l => l.type === 'turbine');
-      const cableLayer = prev.find(l => l.type === 'cable');
-      const substationLayer = prev.find(l => l.type === 'substation');
+      let turbineLayer = prev.find(l => l.type === 'turbine');
+      let cableLayer = prev.find(l => l.type === 'cable');
+      let substationLayer = prev.find(l => l.type === 'substation');
+
+      // Create missing typed layers if they don't exist
+      if (turbineFeaturesToAdd.length > 0 && !turbineLayer) {
+        turbineLayer = { id: crypto.randomUUID(), name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8, features: [] };
+      }
+      if (resolvedCables.length > 0 && !cableLayer) {
+        cableLayer = { id: crypto.randomUUID(), name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8, features: [] };
+      }
+      if (substationFeaturesToAdd.length > 0 && !substationLayer) {
+        substationLayer = { id: crypto.randomUUID(), name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1, features: [] };
+      }
 
       let next = [...prev];
 
       if (turbineFeaturesToAdd.length > 0 && turbineLayer) {
-        next = next.map(l => 
-          l.id === turbineLayer.id 
-            ? { ...l, features: [...(l.features || []), ...turbineFeaturesToAdd] } 
-            : l
-        );
+        const existing = next.find(l => l.id === turbineLayer.id);
+        if (existing) {
+          next = next.map(l => l.id === turbineLayer.id ? { ...l, features: [...(l.features || []), ...turbineFeaturesToAdd] } : l);
+        } else {
+          next.push({ ...turbineLayer, features: turbineFeaturesToAdd });
+        }
       }
 
       if (resolvedCables.length > 0 && cableLayer) {
-        next = next.map(l => 
-          l.id === cableLayer.id 
-            ? { ...l, features: [...(l.features || []), ...resolvedCables] } 
-            : l
-        );
+        const existing = next.find(l => l.id === cableLayer.id);
+        if (existing) {
+          next = next.map(l => l.id === cableLayer.id ? { ...l, features: [...(l.features || []), ...resolvedCables] } : l);
+        } else {
+          next.push({ ...cableLayer, features: resolvedCables });
+        }
       }
 
       if (substationFeaturesToAdd.length > 0 && substationLayer) {
-        next = next.map(l => 
-          l.id === substationLayer.id 
-            ? { ...l, features: [...(l.features || []), ...substationFeaturesToAdd] } 
-            : l
-        );
+        const existing = next.find(l => l.id === substationLayer.id);
+        if (existing) {
+          next = next.map(l => l.id === substationLayer.id ? { ...l, features: [...(l.features || []), ...substationFeaturesToAdd] } : l);
+        } else {
+          next.push({ ...substationLayer, features: substationFeaturesToAdd });
+        }
       }
 
       return [...next, ...layersToAdd];
