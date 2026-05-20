@@ -160,31 +160,41 @@ function autoClassifyGeojson(geojson, baseName, defaultTurbineType, defaultCable
   const ctId = defaultCableTypeId;
 
   let turbineFeatures = [];
+  let substationFeatures = [];
   let cableLayer = null;
 
   if (points.length) {
-    turbineFeatures = points.map((f, i) => {
+    points.forEach((f, i) => {
       const baseProps = Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name', 'Name', 'turbine_type_id'].includes(k)));
-      // Preserve any capacity fields from shapefile (transformer_mva, capacity_generation_mw, etc.)
+      // Check if this point has substation capacity fields
       const isSubstationType = baseProps.transformer_mva != null || baseProps.capacity_generation_mw != null || baseProps.capacity_demand_mw != null;
       
       if (isSubstationType) {
-        // This is actually a substation point—skip it from turbines
-        return null;
+        substationFeatures.push({
+          ...f,
+          properties: {
+            name: f.properties?.Name || f.properties?.name || `Substation ${substationFeatures.length + 1}`,
+            transformer_mva: baseProps.transformer_mva || 60,
+            capacity_generation_mw: baseProps.capacity_generation_mw || 30,
+            capacity_demand_mw: baseProps.capacity_demand_mw || 30,
+            notes: baseProps.notes || '',
+            ...Object.fromEntries(Object.entries(baseProps).filter(([k]) => !['transformer_mva', 'capacity_generation_mw', 'capacity_demand_mw', 'notes'].includes(k)))
+          }
+        });
+      } else {
+        turbineFeatures.push({
+          ...f,
+          properties: {
+            name: f.properties?.Name || f.properties?.name || `T${i + 1}`,
+            turbine_type_id: tt?.id,
+            hub_height: tt?.hub_height_m || 100,
+            rotor_diameter: tt?.rotor_diameter_m || 120,
+            rated_power_mw: tt?.rated_power_mw || 3.5,
+            ...baseProps,
+          },
+        });
       }
-      
-      return {
-        ...f,
-        properties: {
-          name: f.properties?.Name || f.properties?.name || `T${i + 1}`,
-          turbine_type_id: tt?.id,
-          hub_height: tt?.hub_height_m || 100,
-          rotor_diameter: tt?.rotor_diameter_m || 120,
-          rated_power_mw: tt?.rated_power_mw || 3.5,
-          ...baseProps,
-        },
-      };
-    }).filter(Boolean);
+    });
     
     if (turbineFeatures.length > 0) {
       layers.push({
@@ -194,20 +204,33 @@ function autoClassifyGeojson(geojson, baseName, defaultTurbineType, defaultCable
         no_turbines: false, features: turbineFeatures,
       });
     }
+    
+    if (substationFeatures.length > 0) {
+      layers.push({
+        id: layerId(), name: `${baseName} (Substations)`,
+        type: 'substation', visible: true,
+        color: '#facc15', fillOpacity: 1, strokeWeight: 2, strokeOpacity: 0.9,
+        no_turbines: false, features: substationFeatures,
+      });
+    }
   }
 
   if (lines.length) {
-    const cableFeatures = lines.map((f, i) => ({
-      ...f,
-      properties: {
-        name: f.properties?.Name || f.properties?.name || `Cable ${i + 1}`,
-        cable_type_id: ctId,
-        length_m: calcLineLength(f.geometry.coordinates),
-        start_node: null,
-        end_node: null,
-        ...Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name', 'Name', 'cable_type_id', 'length_m'].includes(k))),
-      },
-    }));
+    const cableFeatures = lines.map((f, i) => {
+      // Preserve cable_type_id from import if present, otherwise use default
+      const importedCableTypeId = f.properties?.cable_type_id || ctId;
+      return {
+        ...f,
+        properties: {
+          name: f.properties?.Name || f.properties?.name || `Cable ${i + 1}`,
+          cable_type_id: importedCableTypeId,
+          length_m: calcLineLength(f.geometry.coordinates),
+          start_node: f.properties?.start_node || null,
+          end_node: f.properties?.end_node || null,
+          ...Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name', 'Name', 'cable_type_id', 'length_m', 'start_node', 'end_node'].includes(k))),
+        },
+      };
+    });
     cableLayer = {
       id: layerId(), name: `${baseName} (Cables)`,
       type: 'cable', visible: true,
