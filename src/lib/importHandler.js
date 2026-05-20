@@ -310,12 +310,43 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
               const evNoturb  = sample.ev_noturb  === 'true';
 
               // Strip ev_* meta and deserialize any JSON-stringified object props (e.g. start_node/end_node)
-              const cleanFeatures = geojson.features.map(f => {
+              let cleanFeatures = geojson.features.map(f => {
                 const stripped = Object.fromEntries(
                   Object.entries(f.properties || {}).filter(([k]) => !k.startsWith('ev_'))
                 );
-                return { ...f, properties: deserializeProps(stripped) };
+                const deserialized = deserializeProps(stripped);
+                // Ensure start_node/end_node are preserved as objects, not strings
+                if (typeof deserialized.start_node === 'string') {
+                  try { deserialized.start_node = JSON.parse(deserialized.start_node); } catch {}
+                }
+                if (typeof deserialized.end_node === 'string') {
+                  try { deserialized.end_node = JSON.parse(deserialized.end_node); } catch {}
+                }
+                return { ...f, properties: deserialized };
               });
+
+              // For cable layers: expand MultiLineStrings to individual LineString features
+              // (common when shapefile parser combines geometry)
+              if (evType === 'cable') {
+                const expanded = [];
+                for (const f of cleanFeatures) {
+                  if (f.geometry?.type === 'MultiLineString') {
+                    // Create a separate feature for each line segment
+                    for (let i = 0; i < f.geometry.coordinates.length; i++) {
+                      const coords = f.geometry.coordinates[i];
+                      expanded.push({
+                        ...f,
+                        id: `${f.id}_seg${i}`,
+                        geometry: { type: 'LineString', coordinates: coords },
+                        properties: { ...f.properties } // Preserve all properties on each segment
+                      });
+                    }
+                  } else {
+                    expanded.push(f);
+                  }
+                }
+                cleanFeatures = expanded;
+              }
 
               const hasEvMeta = !!sample.ev_type; // true = came from EagleView export
               const layerId = `lyr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -422,9 +453,16 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
               return;
             }
             // Auto-import path
-            log(`Auto-importing ${rawLayers.length} layer(s) with restored styles`, 'success');
-            rawLayers.forEach(l => allImported.push(l));
-          }
+             log(`Auto-importing ${rawLayers.length} layer(s) with restored styles`, 'success');
+
+             // For cable layers with ev_* metadata, preserve existing start/end nodes (don't re-snap)
+             for (const layer of rawLayers) {
+               if (layer.type === 'cable' && layer._hadEvMeta) {
+                 log(`Preserving cable node assignments for ${layer.features?.length || 0} cables`, 'info');
+               }
+               allImported.push(layer);
+             }
+            }
 
         } else if (fname.endsWith('.json') || fname.endsWith('.geojson')) {
           log(`Parsing GeoJSON: ${file.name}`);
