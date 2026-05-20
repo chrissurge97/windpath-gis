@@ -134,6 +134,7 @@ function autoClassify(layer) {
 // ── Auto-classify shapefile GeoJSON into typed project layers ─────────────────
 // Points → turbine layer, Lines → cable layer, Polygons → polygon layer
 // Applies proper properties so features work correctly in the planning tool.
+// Returns { layers, turbines, cableLayer } for post-processing
 function autoClassifyGeojson(geojson, baseName, defaultTurbineType, defaultCableTypeId) {
   const points = [], lines = [], polygons = [];
   let idx = 0;
@@ -158,8 +159,11 @@ function autoClassifyGeojson(geojson, baseName, defaultTurbineType, defaultCable
   const tt = defaultTurbineType || DEFAULT_TURBINE_TYPES[0];
   const ctId = defaultCableTypeId;
 
+  let turbineFeatures = [];
+  let cableLayer = null;
+
   if (points.length) {
-    const turbineFeatures = points.map((f, i) => ({
+    turbineFeatures = points.map((f, i) => ({
       ...f,
       properties: {
         name: f.properties?.Name || f.properties?.name || `T${i + 1}`,
@@ -190,12 +194,13 @@ function autoClassifyGeojson(geojson, baseName, defaultTurbineType, defaultCable
         ...Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name', 'Name', 'cable_type_id', 'length_m'].includes(k))),
       },
     }));
-    layers.push({
+    cableLayer = {
       id: layerId(), name: `${baseName} (Cables)`,
       type: 'cable', visible: true,
       color: '#f97316', fillOpacity: 0.8, strokeWeight: 2, strokeOpacity: 0.9,
       no_turbines: false, features: cableFeatures,
-    });
+    };
+    layers.push(cableLayer);
   }
 
   if (polygons.length) {
@@ -214,7 +219,7 @@ function autoClassifyGeojson(geojson, baseName, defaultTurbineType, defaultCable
     });
   }
 
-  return layers;
+  return { layers, turbineFeatures, cableLayer };
 }
 
 // ── Partition typed vs plain layers ─────────────────────────────────────────
@@ -345,6 +350,62 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
             }
             // If no onClassifyMode handler, proceed with auto-classification path
             log(`Auto-importing with geometry-based classification`, 'info');
+
+            // Auto-snap cable endpoints to turbines/substations from same import batch
+            const turbineLayer = rawLayers.find(l => l.type === 'turbine');
+            const substationLayer = rawLayers.find(l => l.type === 'substation');
+            const cableLayer = rawLayers.find(l => l.type === 'cable');
+
+            if (cableLayer && (turbineLayer || substationLayer)) {
+              const nodes = [
+                ...(turbineLayer?.features || []).map(f => ({
+                  id: f.id,
+                  type: 'turbine',
+                  coords: f.geometry.coordinates
+                })),
+                ...(substationLayer?.features || []).map(f => ({
+                  id: f.id,
+                  type: 'substation',
+                  coords: f.geometry.coordinates
+                }))
+              ];
+
+              const SNAP_THRESHOLD = 0.0005;
+              cableLayer.features = cableLayer.features.map(cable => {
+                if (!cable.geometry.coordinates?.length) return cable;
+                const coords = cable.geometry.coordinates;
+                const startCoord = coords[0];
+                const endCoord = coords[coords.length - 1];
+
+                const findNearestNode = (coord) => {
+                  let nearest = null;
+                  let minDist = SNAP_THRESHOLD;
+                  for (const node of nodes) {
+                    const [nx, ny] = node.coords;
+                    const [cx, cy] = coord;
+                    const dist = Math.hypot(nx - cx, ny - cy);
+                    if (dist < minDist) {
+                      minDist = dist;
+                      nearest = node;
+                    }
+                  }
+                  return nearest;
+                };
+
+                const startNode = findNearestNode(startCoord);
+                const endNode = findNearestNode(endCoord);
+
+                return {
+                  ...cable,
+                  properties: {
+                    ...cable.properties,
+                    start_node: startNode ? { type: startNode.type, id: startNode.id } : null,
+                    end_node: endNode ? { type: endNode.type, id: endNode.id } : null
+                  }
+                };
+              });
+            }
+
             allImported.push(...rawLayers);
           }
 
