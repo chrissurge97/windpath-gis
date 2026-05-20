@@ -37,6 +37,7 @@ import { buildDemoProject } from '@/lib/demoProject';
 import ExerciseGuide from '@/components/planning/ExerciseGuide';
 import LessonGuide from '@/components/planning/LessonGuide.jsx';
 import DataTablesPanel from '@/components/planning/DataTablesPanel.jsx';
+import CableTopologyModal from '@/components/planning/CableTopologyModal';
 import TextAnnotationMenu from '@/components/planning/TextAnnotationMenu';
 import TextOverlay from '@/components/planning/TextOverlay';
 import SubstationMarker from '@/components/planning/SubstationMarker';
@@ -334,6 +335,7 @@ export default function Planning() {
   const [importLoading, setImportLoading] = useState(false);
   const [importLogs, setImportLogs] = useState([]); // { msg, level, ts }
   const [showImportConsole, setShowImportConsole] = useState(false);
+  const [pendingCableTopology, setPendingCableTopology] = useState(null); // { cables, turbines, substations, project }
   const [windFetched, setWindFetched] = useState(false);
   const [projectName, setProjectName] = useState(() => initProj.name || 'Wind Farm Project');
 
@@ -831,6 +833,9 @@ export default function Planning() {
     setImportLoading, addImportLog, setImportClassifyLayers,
     handleSwitchProject, setTurbineTypes, setCableTypes,
     setLayers, setShowImportConsole, setImportLogs,
+    onCableTopology: (cables, turbines, substations, project) => {
+      setPendingCableTopology({ cables, turbines, substations, project });
+    },
   });
 
   // ── Computed stats ─────────────────────────────────────────────────────────

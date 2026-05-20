@@ -38,6 +38,7 @@ export function useHandleImport({
   setLayers,
   setShowImportConsole,
   setImportLogs,
+  onCableTopology,
 }) {
   return function handleImport() {
     setImportLogs([]);
@@ -59,6 +60,7 @@ export function useHandleImport({
         if (tt?.length) setTurbineTypes(tt);
         if (ct?.length) setCableTypes(ct);
       },
+      onCableTopology,
       onLayers: (importedLayers) => {
         startTransition(() => {
           setLayers(prev => mergeIntoLayers(prev, importedLayers));

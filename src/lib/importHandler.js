@@ -227,7 +227,7 @@ export function partitionImportedLayers(importedLayers) {
 }
 
 // ── Main import entry point ──────────────────────────────────────────────────
-export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoading, onLog, onClassify, onClassifyMode, defaultTurbineType, defaultCableTypeId }) {
+export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoading, onLog, onClassify, onClassifyMode, onCableTopology, defaultTurbineType, defaultCableTypeId }) {
   const log = (msg, level = 'info') => { console.log('[import]', msg); if (onLog) onLog(msg, level); };
   const input = document.createElement('input');
   input.type = 'file';
@@ -253,8 +253,22 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           if (!project.cableTypes?.length) project.cableTypes = DEFAULT_CABLE_TYPES;
           if (onTypesUpdate) onTypesUpdate({ turbineTypes: project.turbineTypes, cableTypes: project.cableTypes });
           log(`KML parsed — ${project.layers?.length || 0} layers`, 'success');
+          
+          // Check if there are cables that need topology assignment
+          const cableLayer = project.layers?.find(l => l.type === 'cable');
+          const turbineLayer = project.layers?.find(l => l.type === 'turbine');
+          const substationLayer = project.layers?.find(l => l.type === 'substation');
+          
           if (onLoading) onLoading(false);
-          if (onProject) { onProject(project); return; }
+          if (onProject) { 
+            // Show topology modal if KML has cables
+            if (cableLayer && cableLayer.features?.length && onCableTopology) {
+              onCableTopology(cableLayer.features, turbineLayer?.features || [], substationLayer?.features || [], project);
+            } else {
+              onProject(project);
+            }
+            return; 
+          }
           if (project.layers?.length) allImported.push(...project.layers);
 
         } else if (fname.endsWith('.shp') || fname.endsWith('.zip')) {
