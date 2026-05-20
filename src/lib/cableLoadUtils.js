@@ -89,11 +89,13 @@ export function calcCableLoad(cableId, cables, turbines, fromNodeId = null, from
     if (!c.geometry?.coordinates?.length) return false;
 
     // Check node-based: does cable feed INTO upstream node?
-    if (upstreamNode && (c.properties.end_node?.id === upstreamNode.id || c.properties.start_node?.id === upstreamNode.id)) {
+    // A cable feeds in if its END NODE is the upstream node (direction matters)
+    if (upstreamNode && c.properties.end_node?.id === upstreamNode.id) {
       return true;
     }
 
-    // Check coordinate-based: does cable's end reach upstream coord?
+    // Check coordinate-based: does cable's END (downstream) reach upstream coord?
+    // This handles implicit strings where nodes aren't fully mapped
     if (upstreamCoord) {
       const cEnd = c.geometry.coordinates[c.geometry.coordinates.length - 1];
       return match(cEnd, upstreamCoord);
