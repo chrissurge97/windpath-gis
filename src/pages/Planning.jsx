@@ -138,54 +138,74 @@ function calcCableLoad(cableId, cables, turbines, fromNodeId = null, visited = n
 
   const start = cable.properties.start_node;
   const end = cable.properties.end_node;
+  const coords = cable.geometry.coordinates;
 
-  // Short-circuit: if neither node is connected, no load can flow
-  if (!start && !end) return 0;
-
-  // Determine upstream node (the end we're collecting power FROM)
+  // Determine upstream node and coordinate
   let upstreamNode = null;
+  let upstreamCoord = null;
+
   if (fromNodeId !== null) {
-    // We know which end is downstream (fromNodeId) — upstream is the other end
-    if (start?.id === fromNodeId) upstreamNode = end;else
-    if (end?.id === fromNodeId) upstreamNode = start;else
-    return 0; // cable not actually connected to fromNodeId
+    // Direction is explicit: fromNodeId is downstream
+    if (start?.id === fromNodeId) {
+      upstreamNode = end;
+      if (!upstreamNode && coords?.length) upstreamCoord = coords[0];
+    } else if (end?.id === fromNodeId) {
+      upstreamNode = start;
+      if (!upstreamNode && coords?.length) upstreamCoord = coords[coords.length - 1];
+    } else {
+      return 0;
+    }
   } else {
-    // No direction hint: pick the non-substation end as upstream
-    // (substation is always the sink/downstream)
-    // If both ends are substations, pick 'start' as upstream (flow goes start → end)
+    // No direction hint: detect based on node types
     if (end?.type === 'substation' && start?.type !== 'substation') {
       upstreamNode = start;
+      if (!upstreamNode && coords?.length) upstreamCoord = coords[0];
     } else if (start?.type === 'substation' && end?.type !== 'substation') {
       upstreamNode = end;
+      if (!upstreamNode && coords?.length) upstreamCoord = coords[coords.length - 1];
     } else if (start?.type === 'substation' && end?.type === 'substation') {
-      // Both are substations — pick start as upstream (conventional flow direction)
       upstreamNode = start;
+      if (!upstreamNode && coords?.length) upstreamCoord = coords[0];
     } else {
-      // Neither is a substation — pick start as upstream by default
       upstreamNode = start;
+      if (!upstreamNode && coords?.length) upstreamCoord = coords[0];
     }
   }
 
-  if (!upstreamNode) return 0;
+  if (!upstreamNode && !upstreamCoord) return 0;
 
   let total = 0;
 
-  // Add power of the turbine at the upstream node (if it's a turbine)
-  if (upstreamNode.type === 'turbine') {
+  // Add power of turbine at upstream node
+  if (upstreamNode?.type === 'turbine') {
     total += turbineMW(upstreamNode.id, turbines);
   }
 
-  // Add loads of all OTHER cables that deliver power INTO the upstream node
-  // (i.e. cables connected to upstreamNode where upstreamNode is their downstream end)
-  const feedingCables = cables.filter((c) =>
-  c.id !== cableId && (
-  c.properties.start_node?.id === upstreamNode.id ||
-  c.properties.end_node?.id === upstreamNode.id)
+  // Find feeding cables: match by explicit node references OR by coordinate proximity
+  const feedingCables = cables.filter((c) => {
+    if (c.id === cableId) return false;
 
-  );
+    // Check node-based connections
+    if (upstreamNode && (c.properties.start_node?.id === upstreamNode.id || c.properties.end_node?.id === upstreamNode.id)) {
+      return true;
+    }
+
+    // Check coordinate-based connections (for cable strings with implicit nodes)
+    if (upstreamCoord && c.geometry.coordinates?.length > 0) {
+      const cCoords = c.geometry.coordinates;
+      const cEnd = cCoords[cCoords.length - 1];
+      const cStart = cCoords[0];
+      const epsilon = 0.00001;
+      const matches = (a, b) => Math.abs(a[0] - b[0]) < epsilon && Math.abs(a[1] - b[1]) < epsilon;
+      return matches(cEnd, upstreamCoord) || matches(cStart, upstreamCoord);
+    }
+
+    return false;
+  });
+
+  // Recurse through feeding cables
   for (const fc of feedingCables) {
-    // For each feeding cable, upstreamNode is their DOWNSTREAM end (they flow INTO it)
-    const load = calcCableLoad(fc.id, cables, turbines, upstreamNode.id, new Set(visited));
+    const load = calcCableLoad(fc.id, cables, turbines, upstreamNode?.id || null, new Set(visited));
     total += (typeof load === 'number' ? load : 0);
   }
 
