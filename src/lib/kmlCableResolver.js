@@ -67,39 +67,42 @@ export function resolveKMLCableNetwork(cableLayer, turbineLayer, substationLayer
     cableNodeMap.set(cable.id, { startNode, endNode });
   }
 
-  // Step 2: Update cables with snapped nodes, but preserve existing named nodes (resolve names to IDs)
-  const updatedFeatures = cables.map(cable => {
-    const nodes = cableNodeMap.get(cable.id);
-    if (!nodes) return cable;
+  // Step 2: Update cables with spatial-snapped nodes (ignore stored IDs which are stale)
+   const updatedFeatures = cables.map(cable => {
+     const nodes = cableNodeMap.get(cable.id);
+     if (!nodes) return cable;
 
-    let startNode = cable.properties.start_node || nodes.startNode;
-    let endNode = cable.properties.end_node || nodes.endNode;
+     // Always use spatial snapping — stored node IDs from export are no longer valid after import
+     let startNode = nodes.startNode;
+     let endNode = nodes.endNode;
 
-    // If start/end nodes are strings (turbine/substation names), resolve to actual IDs
-    if (typeof startNode === 'string') {
-      const match = turbines.find(t => t.properties?.name === startNode) || substations.find(s => s.properties?.name === startNode);
-      if (match) {
-        const isSubstation = match.geometry?.type === 'Point' && !turbines.find(t => t.id === match.id);
-        startNode = { type: isSubstation ? 'substation' : 'turbine', id: match.id, name: startNode };
-      }
-    }
-    if (typeof endNode === 'string') {
-      const match = turbines.find(t => t.properties?.name === endNode) || substations.find(s => s.properties?.name === endNode);
-      if (match) {
-        const isSubstation = match.geometry?.type === 'Point' && !turbines.find(t => t.id === match.id);
-        endNode = { type: isSubstation ? 'substation' : 'turbine', id: match.id, name: endNode };
-      }
-    }
+     // Only try name matching if nodes are still null after snapping
+     if (!startNode && typeof cable.properties.start_node === 'string') {
+       const match = turbines.find(t => t.properties?.name === cable.properties.start_node) || 
+                     substations.find(s => s.properties?.name === cable.properties.start_node);
+       if (match) {
+         const isSub = substations.some(s => s.id === match.id);
+         startNode = { type: isSub ? 'substation' : 'turbine', id: match.id, name: cable.properties.start_node };
+       }
+     }
+     if (!endNode && typeof cable.properties.end_node === 'string') {
+       const match = turbines.find(t => t.properties?.name === cable.properties.end_node) || 
+                     substations.find(s => s.properties?.name === cable.properties.end_node);
+       if (match) {
+         const isSub = substations.some(s => s.id === match.id);
+         endNode = { type: isSub ? 'substation' : 'turbine', id: match.id, name: cable.properties.end_node };
+       }
+     }
 
-    return {
-      ...cable,
-      properties: {
-        ...cable.properties,
-        start_node: startNode,
-        end_node: endNode,
-      }
-    };
-  });
+     return {
+       ...cable,
+       properties: {
+         ...cable.properties,
+         start_node: startNode,
+         end_node: endNode,
+       }
+     };
+   });
 
   return {
     ...cableLayer,
