@@ -238,18 +238,23 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           const result = await importShapefileMainThread(buf, file.name, onLog);
           const toProcess = (Array.isArray(result) ? result : [result]).filter(Boolean);
           log(`Parsed ${toProcess.length} shapefile layer(s) — opening classify menu`, 'success');
-          // Build raw layers for classify modal — one per shapefile layer
+
+          // Build raw layers for classify modal.
+          // Each .shp in the ZIP becomes its own layer, preserving the shapefile's
+          // layer name from _layerName. This mirrors the GeoJSON import behaviour.
           const rawLayers = [];
           for (const geojson of toProcess) {
             if (!geojson || !Array.isArray(geojson.features)) {
               log(`Skipping layer with no features array`, 'warn');
               continue;
             }
+            // If layer-metadata was embedded (e.g. a project re-export), reconstruct layers
             const hasLayerMeta = geojson.features?.some(f => f.properties?._layerId);
             if (hasLayerMeta) {
-              const lys = geoJSONToLayers(geojson);
-              lys.forEach(l => rawLayers.push(l));
+              geoJSONToLayers(geojson).forEach(l => rawLayers.push(l));
             } else {
+              // One shapefile = one layer, keeping its original name.
+              // Do NOT split by geometry type here — the classify modal handles that.
               const layerId = `lyr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
               rawLayers.push({
                 id: layerId,

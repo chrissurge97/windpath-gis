@@ -120,21 +120,29 @@ export default function ImportClassifyModal({ layers, onConfirm, onClose }) {
     const layerId = () => `lyr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const decisions = [];
 
-    // Group point features by their classification
+    // Group point features by (source layer name + classification) so each
+    // source shapefile / layer keeps its own identity even after classification.
     const pointGroups = {};
     pointItems.forEach((x, i) => {
       const key = fKey(x) || String(i);
       const cls = pointClass[key] || 'turbine';
-      if (!pointGroups[cls]) pointGroups[cls] = [];
-      pointGroups[cls].push(x.feature);
+      const groupKey = `${x.layerId}::${cls}`;
+      if (!pointGroups[groupKey]) pointGroups[groupKey] = { cls, srcLayer: x.layer, features: [] };
+      pointGroups[groupKey].features.push(x.feature);
     });
-    for (const [cls, features] of Object.entries(pointGroups)) {
+    for (const { cls, srcLayer, features } of Object.values(pointGroups)) {
+      const name = cls === 'turbine'
+        ? `${srcLayer.name} (Turbines)`
+        : cls === 'substation'
+          ? `${srcLayer.name} (Substations)`
+          : srcLayer.name;
       decisions.push({
         layer: {
           id: layerId(),
-          name: cls === 'turbine' ? 'Imported Turbines' : cls === 'substation' ? 'Imported Substations' : 'Imported Points',
+          name,
           type: cls === 'turbine' ? 'turbine' : cls === 'substation' ? 'substation' : 'polygon',
-          visible: true, color: cls === 'turbine' ? '#10b981' : cls === 'substation' ? '#facc15' : '#8b5cf6',
+          visible: true,
+          color: cls === 'turbine' ? '#10b981' : cls === 'substation' ? '#facc15' : '#8b5cf6',
           fillOpacity: 0.8, strokeWeight: 2, strokeOpacity: 0.9, no_turbines: false,
           features,
         },
@@ -142,21 +150,24 @@ export default function ImportClassifyModal({ layers, onConfirm, onClose }) {
       });
     }
 
-    // Group line features by classification
+    // Group line features by (source layer + classification)
     const lineGroups = {};
     lineItems.forEach((x, i) => {
       const key = fKey(x) || String(i);
       const cls = lineClass[key] || 'cable';
-      if (!lineGroups[cls]) lineGroups[cls] = [];
-      lineGroups[cls].push(x.feature);
+      const groupKey = `${x.layerId}::${cls}`;
+      if (!lineGroups[groupKey]) lineGroups[groupKey] = { cls, srcLayer: x.layer, features: [] };
+      lineGroups[groupKey].features.push(x.feature);
     });
-    for (const [cls, features] of Object.entries(lineGroups)) {
+    for (const { cls, srcLayer, features } of Object.values(lineGroups)) {
+      const name = cls === 'cable' ? `${srcLayer.name} (Cables)` : srcLayer.name;
       decisions.push({
         layer: {
           id: layerId(),
-          name: cls === 'cable' ? 'Imported Cables' : 'Imported Lines',
+          name,
           type: cls === 'cable' ? 'cable' : 'polygon',
-          visible: true, color: cls === 'cable' ? '#f97316' : '#8b5cf6',
+          visible: true,
+          color: cls === 'cable' ? '#f97316' : '#8b5cf6',
           fillOpacity: 0.8, strokeWeight: 2, strokeOpacity: 0.9, no_turbines: false,
           features,
         },
@@ -164,11 +175,14 @@ export default function ImportClassifyModal({ layers, onConfirm, onClose }) {
       });
     }
 
-    // Polygon layers — passed through as-is
+    // Polygon layers — each source layer becomes its own separate layer (not merged)
     for (const layer of layers) {
       const polyFeatures = (layer.features || []).filter(isPoly);
       if (polyFeatures.length > 0) {
-        decisions.push({ layer: { ...layer, features: polyFeatures }, classification: 'keep' });
+        decisions.push({
+          layer: { ...layer, id: layerId(), features: polyFeatures },
+          classification: 'keep',
+        });
       }
     }
 
