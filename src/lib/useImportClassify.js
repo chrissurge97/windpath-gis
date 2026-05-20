@@ -79,16 +79,21 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
           idMap.set(originalId, newId);
 
           const restoredProps = deserializeProps(f.properties || {});
+          const tt = selectedTurbineType;
           return {
             ...f,
             id: newId,
             properties: {
               name: restoredProps.name || `T${i + 1}`,
-              turbine_type_id: restoredProps.turbine_type_id || selectedTurbineType?.id,
-              hub_height: restoredProps.hub_height || selectedTurbineType?.hub_height_m || 100,
-              rotor_diameter: restoredProps.rotor_diameter || selectedTurbineType?.rotor_diameter_m || 120,
-              rated_power_mw: restoredProps.rated_power_mw || selectedTurbineType?.rated_power_mw || 3.5,
-              ...restoredProps,
+              turbine_type_id: restoredProps.turbine_type_id || tt?.id,
+              hub_height: restoredProps.hub_height || tt?.hub_height_m || 100,
+              rotor_diameter: restoredProps.rotor_diameter || tt?.rotor_diameter_m || 120,
+              rated_power_mw: restoredProps.rated_power_mw || tt?.rated_power_mw || 3.5,
+              elevation_m: restoredProps.elevation_m || null,
+              wind_speed_ms: restoredProps.wind_speed_ms || null,
+              hub_wind_speed: restoredProps.hub_wind_speed || null,
+              aep_mwh: restoredProps.aep_mwh || null,
+              ...Object.fromEntries(Object.entries(restoredProps).filter(([k]) => !['name', 'turbine_type_id', 'hub_height', 'rotor_diameter', 'rated_power_mw', 'elevation_m', 'wind_speed_ms', 'hub_wind_speed', 'aep_mwh'].includes(k))),
             },
           };
         });
@@ -168,7 +173,7 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
               length_m: calcLineLength(coords),
               start_node: newStartNode,
               end_node: newEndNode,
-              ...restoredProps,
+              ...Object.fromEntries(Object.entries(restoredProps).filter(([k]) => !['name', 'cable_type_id', 'length_m', 'start_node', 'end_node', '_layerId', '_layerName', '_layerType', '_layerColor', '_layerFillOpacity', '_layerStrokeWeight', '_layerStrokeOpacity', '_layerNoTurbines', '_layerVisible'].includes(k))),
             },
           });
         });
@@ -183,7 +188,7 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
             length_m: restoredProps.length_m || calcLineLength(coords),
             start_node: newStartNode,
             end_node: newEndNode,
-            ...restoredProps,
+            ...Object.fromEntries(Object.entries(restoredProps).filter(([k]) => !['name', 'cable_type_id', 'length_m', 'start_node', 'end_node', '_layerId', '_layerName', '_layerType', '_layerColor', '_layerFillOpacity', '_layerStrokeWeight', '_layerStrokeOpacity', '_layerNoTurbines', '_layerVisible'].includes(k))),
           },
         });
       }
