@@ -13,13 +13,24 @@ export function PlanningProvider({ children }) {
   const [currentProject, setCurrentProject] = useState(null);
   const saveTimer = useRef(null);
 
-  // Debounced server persist
+  // Debounced server persist — handles temp IDs by creating and promoting to real ID
   const persistProject = useCallback((id, data) => {
     if (!id || id === '__demo__') return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      saveProject(id, data).catch(err => console.warn('Auto-save failed:', err));
-    }, 1500); // slightly longer debounce for network calls
+    saveTimer.current = setTimeout(async () => {
+      try {
+        // For temp IDs (imported projects not yet saved), always create new
+        const isTemp = typeof id === 'string' && id.startsWith('__imported_');
+        const savedId = await saveProject(isTemp ? null : id, data);
+        // If a new record was created (temp or first save), promote to the real ID
+        if (savedId && savedId !== id) {
+          setCurrentProjectId(savedId);
+          setCurrentProject(prev => prev ? { ...prev, id: savedId } : prev);
+        }
+      } catch (err) {
+        console.warn('Auto-save failed:', err);
+      }
+    }, 1500);
   }, []);
 
   const switchProject = useCallback((id, projectData) => {

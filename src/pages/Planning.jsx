@@ -782,10 +782,10 @@ export default function Planning() {
 
   const handleImport = () => {
     openImportFilePicker({
-      onProject: async (project) => {
-        // Save to server and get a real ID before switching
-        const id = await saveProject(null, project);
-        handleSwitchProject(id, { ...project, id });
+      onProject: (project) => {
+        // Switch project locally — auto-save will persist it
+        const tempId = '__imported_' + Date.now() + '__';
+        handleSwitchProject(tempId, { ...project, id: tempId });
       },
       onTypesUpdate: ({ turbineTypes: tt, cableTypes: ct }) => {
         if (tt?.length) setTurbineTypes(tt);
@@ -793,9 +793,9 @@ export default function Planning() {
       },
       onLayers: (importedLayers) => {
         const { typed, plain } = partitionImportedLayers(importedLayers);
-        // Merge typed layers (turbine/cable/substation) into existing layers of same type
         setLayers(prev => {
           let next = [...prev];
+          // Merge typed layers into matching existing layer
           for (const imp of typed) {
             const existing = next.find(l => l.type === imp.type);
             if (existing) {
@@ -805,16 +805,10 @@ export default function Planning() {
               next = [...next, imp];
             }
           }
-          // Add plain layers immediately if no classify modal needed
-          const needsClassify = plain.some(l =>
-            l.features?.some(f => ['Point','LineString','MultiLineString'].includes(f.geometry?.type)));
-          if (!needsClassify || !features.importClassifier) next = [...next, ...plain];
+          // Add plain layers directly (no classify modal — splitByGeometryType already typed them)
+          next = [...next, ...plain];
           return next;
         });
-        // Show classify modal for ambiguous plain layers
-        const needsClassify = plain.some(l =>
-          l.features?.some(f => ['Point','LineString','MultiLineString'].includes(f.geometry?.type)));
-        if (needsClassify && features.importClassifier) setImportClassifyLayers(plain);
       },
     });
   };
