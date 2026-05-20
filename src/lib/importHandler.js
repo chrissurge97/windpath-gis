@@ -438,8 +438,66 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
 
     if (allImported.length > 0 && onLayers) {
       // Strip internal flags before handing off, defer to let UI repaint
-      // Merge typed layers (turbine, cable, substation) into existing layers — preserve IDs for topology
+      // Auto-map cable endpoints to turbines/substations using spatial coordinate matching
       const cleanLayers = allImported.map(({ _hadEvMeta, ...l }) => l);
+      
+      // Build spatial index of turbines and substations
+      const turbineLayer = cleanLayers.find(l => l.type === 'turbine');
+      const substationLayer = cleanLayers.find(l => l.type === 'substation');
+      const cableLayer = cleanLayers.find(l => l.type === 'cable');
+      
+      if (cableLayer && (turbineLayer || substationLayer)) {
+        const nodes = [
+          ...(turbineLayer?.features || []).map(f => ({
+            id: f.id,
+            type: 'turbine',
+            coords: f.geometry.coordinates
+          })),
+          ...(substationLayer?.features || []).map(f => ({
+            id: f.id,
+            type: 'substation',
+            coords: f.geometry.coordinates
+          }))
+        ];
+        
+        // Match cable endpoints to nearest nodes (within 50m tolerance)
+        const SNAP_THRESHOLD = 0.0005; // ~50m in degrees
+        cableLayer.features = cableLayer.features.map(cable => {
+          if (!cable.geometry.coordinates?.length) return cable;
+          
+          const coords = cable.geometry.coordinates;
+          const startCoord = coords[0];
+          const endCoord = coords[coords.length - 1];
+          
+          const findNearestNode = (coord) => {
+            let nearest = null;
+            let minDist = SNAP_THRESHOLD;
+            for (const node of nodes) {
+              const [nx, ny] = node.coords;
+              const [cx, cy] = coord;
+              const dist = Math.hypot(nx - cx, ny - cy);
+              if (dist < minDist) {
+                minDist = dist;
+                nearest = node;
+              }
+            }
+            return nearest;
+          };
+          
+          const startNode = findNearestNode(startCoord);
+          const endNode = findNearestNode(endCoord);
+          
+          return {
+            ...cable,
+            properties: {
+              ...cable.properties,
+              start_node: startNode ? { type: startNode.type, id: startNode.id } : null,
+              end_node: endNode ? { type: endNode.type, id: endNode.id } : null
+            }
+          };
+        });
+      }
+      
       setTimeout(() => onLayers(cleanLayers), 0);
     }
   };
