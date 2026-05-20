@@ -724,7 +724,16 @@ export default function Planning() {
     selectedTurbineType, selectedCableTypeId,
     setImportLoading, addImportLog, setImportClassifyLayers,
     handleSwitchProject, setTurbineTypes, setCableTypes,
-    setLayers, setShowImportConsole, setImportLogs,
+    setLayers: (importedLayers) => {
+      // Force cable load recalc by creating fresh layer references (triggers React re-render)
+      const refreshed = importedLayers.map(layer => 
+        layer.type === 'cable' 
+          ? { ...layer, features: [...layer.features] } 
+          : layer
+      );
+      setLayers(refreshed);
+    },
+    setShowImportConsole, setImportLogs,
     onCableTopology: (cables, turbines, substations, project) => {
       setPendingCableTopology({ cables, turbines, substations, project });
     },

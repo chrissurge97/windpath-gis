@@ -20,8 +20,8 @@ function escapeXml(str) {
  * Build the set of per-feature layer metadata properties that get
  * embedded in every exported feature so they survive round-trips.
  */
-function layerMeta(layer) {
-  return {
+function layerMeta(layer, feature) {
+  const meta = {
     _layerId: layer.id,
     _layerName: layer.name,
     _layerType: layer.type,
@@ -32,15 +32,32 @@ function layerMeta(layer) {
     _layerNoTurbines: layer.no_turbines || false,
     _layerVisible: layer.visible !== false,
   };
+  // Preserve critical feature data for cables and substations
+  if (layer.type === 'cable' && feature?.properties?.cable_type_id) {
+    meta._featureCableTypeId = feature.properties.cable_type_id;
+  }
+  if (layer.type === 'substation') {
+    if (feature?.properties?.transformer_mva != null) meta._featureTransformerMva = feature.properties.transformer_mva;
+    if (feature?.properties?.capacity_generation_mw != null) meta._featureCapacityGenerationMw = feature.properties.capacity_generation_mw;
+    if (feature?.properties?.capacity_demand_mw != null) meta._featureCapacityDemandMw = feature.properties.capacity_demand_mw;
+  }
+  return meta;
 }
 
 const META_KEYS = new Set(['_layerId','_layerName','_layerType','_layerColor','_layerFillOpacity',
-  '_layerStrokeWeight','_layerStrokeOpacity','_layerNoTurbines','_layerVisible']);
+  '_layerStrokeWeight','_layerStrokeOpacity','_layerNoTurbines','_layerVisible','_featureCableTypeId','_featureTransformerMva','_featureCapacityGenerationMw','_featureCapacityDemandMw']);
 
 function stripLayerMeta(props) {
   const out = {};
   for (const [k, v] of Object.entries(props)) {
-    if (META_KEYS.has(k)) continue;
+    if (META_KEYS.has(k)) {
+      // Restore preserved feature data with correct property names
+      if (k === '_featureCableTypeId') { out.cable_type_id = v; continue; }
+      if (k === '_featureTransformerMva') { out.transformer_mva = v; continue; }
+      if (k === '_featureCapacityGenerationMw') { out.capacity_generation_mw = v; continue; }
+      if (k === '_featureCapacityDemandMw') { out.capacity_demand_mw = v; continue; }
+      continue;
+    }
     // Deserialize JSON-stringified objects (start_node, end_node, custom_fields, etc.)
     if (typeof v === 'string' && (v.startsWith('{') || v.startsWith('['))) {
       try { out[k] = JSON.parse(v); continue; } catch {}
@@ -81,7 +98,7 @@ export function exportProjectGeoJSON(project) {
           type: 'Feature',
           properties: {
             ...feature.properties,
-            ...layerMeta(layer),
+            ...layerMeta(layer, feature),
           },
         });
       }
@@ -164,7 +181,7 @@ export function exportLayersGeoJSON(layers) {
         geometry: f.geometry,
         properties: {
           ...f.properties,
-          ...layerMeta(layer),
+          ...layerMeta(layer, f),
         },
       }))
     ),
