@@ -373,7 +373,15 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
             lys.forEach(l => allImported.push(l));
           } else {
             log(`Plain GeoJSON: ${data.features?.length || 0} features → 1 layer`, 'success');
-            allImported.push(geoJSONToLayer(data, baseName));
+            const rawLayer = geoJSONToLayer(data, baseName);
+            if (onLoading) onLoading(false);
+            // Trigger manual classification if handler provided
+            if (onClassifyMode) {
+              log(`Asking for classification mode`, 'info');
+              onClassifyMode([rawLayer]);
+              return;
+            }
+            allImported.push(rawLayer);
           }
 
         } else if (fname.endsWith('.csv')) {
