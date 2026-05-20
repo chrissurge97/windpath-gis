@@ -1,5 +1,7 @@
 // Comprehensive project export with full data preservation
 
+import { resolveKMLCableNetwork } from '@/lib/kmlCableResolver';
+
 const FORMAT_TAG = 'eagleview-wind-farm-project';
 const FORMAT_VERSION = '2.0';
 
@@ -337,54 +339,22 @@ export function importKML(kmlText) {
 
   const layers = Object.values(layerMap);
 
-  // ── Fix cable node references after import ────────────────────────────────
-  // Cables have old turbine/substation IDs from export, but we just created new ones.
-  // Snap cables to nearest assets by geographic proximity at cable endpoints.
+  // ── Resolve cable network topology for proper load calculations ────────────
+  // Use dedicated KML resolver to establish node-based connections
   const turbineLayer = layers.find(l => l.type === 'turbine');
   const cableLayer = layers.find(l => l.type === 'cable');
   const substationLayer = layers.find(l => l.type === 'substation');
 
   if (cableLayer && (turbineLayer || substationLayer)) {
-    const turbines = turbineLayer?.features || [];
-    const substations = substationLayer?.features || [];
-    const allAssets = [
-      ...turbines.map(t => ({ ...t, assetType: 'turbine' })),
-      ...substations.map(s => ({ ...s, assetType: 'substation' })),
-    ];
-
-    cableLayer.features = cableLayer.features.map(cable => {
-      if (!cable.geometry?.coordinates || cable.geometry.coordinates.length < 2) {
-        return cable;
+    try {
+      const resolved = resolveKMLCableNetwork(cableLayer, turbineLayer, substationLayer);
+      const cableLayerIdx = layers.findIndex(l => l.id === cableLayer.id);
+      if (cableLayerIdx >= 0) {
+        layers[cableLayerIdx] = resolved;
       }
-
-      const [startLng, startLat] = cable.geometry.coordinates[0];
-      const [endLng, endLat] = cable.geometry.coordinates[cable.geometry.coordinates.length - 1];
-
-      const findNearestAsset = (lng, lat) => {
-        let best = null, bestDist = Infinity;
-        for (const asset of allAssets) {
-          const [assetLng, assetLat] = asset.geometry.coordinates;
-          const d = Math.hypot(lng - assetLng, lat - assetLat);
-          if (d < bestDist) {
-            bestDist = d;
-            best = { type: asset.assetType, id: asset.id };
-          }
-        }
-        return bestDist < 0.01 ? best : null; // ~1km tolerance
-      };
-
-      const newStartNode = findNearestAsset(startLng, startLat);
-      const newEndNode = findNearestAsset(endLng, endLat);
-
-      return {
-        ...cable,
-        properties: {
-          ...cable.properties,
-          start_node: newStartNode || cable.properties.start_node,
-          end_node: newEndNode || cable.properties.end_node,
-        },
-      };
-    });
+    } catch (err) {
+      console.warn('KML cable resolver failed:', err);
+    }
   }
 
   return {
