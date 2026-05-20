@@ -682,7 +682,6 @@ function parseShapefileSet(shpBuf, dbfBuf, prjText, layerName) {
   
   // CRITICAL: If we have more DBF records than features, shapefile grouped multiple parts into one.
   // Unfold MultiLineStrings back to individual features per DBF record.
-  // Preserve node mappings from DBF (start_node, end_node) during unfold.
   if (dbfRecords.length > features.length) {
     const expanded = [];
     let dbfIdx = 0;
@@ -693,17 +692,11 @@ function parseShapefileSet(shpBuf, dbfBuf, prjText, layerName) {
         // One feature with multiple parts → split into separate features with UNIQUE IDs
         for (let partIdx = 0; partIdx < geom.coordinates.length; partIdx++) {
           if (dbfIdx < dbfRecords.length) {
-            const dbfProps = dbfRecords[dbfIdx];
             expanded.push({
               id: `shp_${fIdx}_${partIdx}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
               type: 'Feature',
               geometry: { type: 'LineString', coordinates: geom.coordinates[partIdx] },
-              properties: {
-                ...dbfProps,
-                // Preserve deserialized node objects from DBF
-                start_node: dbfProps.start_node || null,
-                end_node: dbfProps.end_node || null
-              }
+              properties: dbfRecords[dbfIdx]
             });
             dbfIdx++;
           }
@@ -712,12 +705,7 @@ function parseShapefileSet(shpBuf, dbfBuf, prjText, layerName) {
         // Single-part feature → use as-is with unique ID
         expanded.push({
           id: `shp_${fIdx}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          ...feature,
-          properties: {
-            ...feature.properties,
-            start_node: feature.properties?.start_node || null,
-            end_node: feature.properties?.end_node || null
-          }
+          ...feature
         });
         dbfIdx++;
       }
