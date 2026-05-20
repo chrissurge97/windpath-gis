@@ -798,6 +798,10 @@ export default function Planning() {
       onLog: addImportLog,
       defaultTurbineType: selectedTurbineType,
       defaultCableTypeId: selectedCableTypeId,
+      onClassify: (rawLayers) => {
+        setImportLoading(false);
+        setImportClassifyLayers(rawLayers);
+      },
       onProject: (project) => {
         // Switch project locally — auto-save will persist it
         const tempId = '__imported_' + Date.now() + '__';

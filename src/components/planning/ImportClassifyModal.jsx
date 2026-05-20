@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Wind, Zap, Layers, ChevronRight, AlertTriangle } from 'lucide-react';
+import { X, Wind, Zap, Layers, ChevronRight, AlertTriangle, Target } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 
@@ -14,11 +14,9 @@ import { cn } from '@/lib/utils';
  *   onClose()
  */
 export default function ImportClassifyModal({ layers, onConfirm, onClose }) {
-  // Only show layers that have point or line features
-  const classifiable = layers.filter(l =>
-    l.features?.some(f => f.geometry?.type === 'Point' || f.geometry?.type === 'LineString' || f.geometry?.type === 'MultiLineString')
-  );
-  const nonClassifiable = layers.filter(l => !classifiable.includes(l));
+  // All layers are classifiable — user can pick how each one is imported
+  const classifiable = layers;
+  const nonClassifiable = [];
 
   const [decisions, setDecisions] = useState(() =>
     Object.fromEntries(classifiable.map(l => [l.id, 'keep']))
@@ -66,9 +64,10 @@ export default function ImportClassifyModal({ layers, onConfirm, onClose }) {
   };
 
   const OPTS = [
-    { id: 'turbine', label: 'Turbines', icon: Wind, color: 'text-emerald-400', bg: 'bg-emerald-500/15 border-emerald-500/40', hint: 'Points → turbine markers' },
-    { id: 'cable',   label: 'Cables',   icon: Zap,  color: 'text-orange-400', bg: 'bg-orange-500/15 border-orange-500/40', hint: 'Lines → cable routes' },
-    { id: 'keep',    label: 'Keep as Layer', icon: Layers, color: 'text-cyan-400', bg: 'bg-cyan-500/15 border-cyan-500/40', hint: 'Add as a standard map layer' },
+    { id: 'turbine',    label: 'Turbines',    icon: Wind,   color: 'text-emerald-400', bg: 'bg-emerald-500/15 border-emerald-500/40', hint: 'Points → turbine markers' },
+    { id: 'cable',      label: 'Cables',      icon: Zap,    color: 'text-orange-400', bg: 'bg-orange-500/15 border-orange-500/40', hint: 'Lines → cable routes' },
+    { id: 'substation', label: 'Substations', icon: Target, color: 'text-yellow-400', bg: 'bg-yellow-500/15 border-yellow-500/40', hint: 'Points → substation markers' },
+    { id: 'keep',       label: 'Polygon Layer', icon: Layers, color: 'text-cyan-400', bg: 'bg-cyan-500/15 border-cyan-500/40', hint: 'Add as a standard map layer' },
   ];
 
   return (
@@ -118,7 +117,7 @@ export default function ImportClassifyModal({ layers, onConfirm, onClose }) {
                     </div>
                   </div>
                 )}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   {OPTS.map(opt => {
                     const Icon = opt.icon;
                     const active = current === opt.id;

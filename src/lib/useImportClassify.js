@@ -44,9 +44,11 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
   return useCallback((decisions) => {
     const turbineLayer = layers.find(l => l.type === 'turbine');
     const cableLayer = layers.find(l => l.type === 'cable');
+    const substationLayer = layers.find(l => l.type === 'substation');
 
     let turbineFeaturesToAdd = [];
     let cableFeaturesToAdd = [];
+    let substationFeaturesToAdd = [];
     const layersToAdd = [];
 
     const warnings = [];
@@ -145,6 +147,28 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
         const rest = layer.features?.filter(f => !isLine(f)) || [];
         if (rest.length > 0) layersToAdd.push({ ...layer, features: rest });
 
+      } else if (classification === 'substation' && substationLayer) {
+        const pts = layer.features?.filter(isPoint) || [];
+        const validPts = pts.filter(featureCoordsValid);
+        const invalidCount = pts.length - validPts.length;
+        if (invalidCount > 0) {
+          warnings.push(`"${layer.name}": ${invalidCount} point feature(s) skipped — coordinates appear to be in a projected CRS.`);
+        }
+        const startIdx = (substationLayer.features?.length || 0) + substationFeaturesToAdd.length;
+        const newSubs = validPts.map((f, i) => ({
+          ...f,
+          id: crypto.randomUUID(),
+          properties: {
+            name: f.properties?.name || `Substation ${startIdx + i + 1}`,
+            transformer_mva: 60,
+            capacity_demand_mw: 30,
+            capacity_generation_mw: 30,
+            notes: '',
+            ...Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name'].includes(k))),
+          },
+        }));
+        substationFeaturesToAdd = [...substationFeaturesToAdd, ...newSubs];
+
       } else {
         layersToAdd.push(layer);
       }
@@ -157,6 +181,9 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
       }
       if (cableFeaturesToAdd.length > 0) {
         next = next.map(l => l.type === 'cable' ? { ...l, features: [...(l.features || []), ...cableFeaturesToAdd] } : l);
+      }
+      if (substationFeaturesToAdd.length > 0) {
+        next = next.map(l => l.type === 'substation' ? { ...l, features: [...(l.features || []), ...substationFeaturesToAdd] } : l);
       }
       return [...next, ...layersToAdd];
     });

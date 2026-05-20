@@ -201,7 +201,7 @@ export function partitionImportedLayers(importedLayers) {
 }
 
 // ── Main import entry point ──────────────────────────────────────────────────
-export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoading, onLog, defaultTurbineType, defaultCableTypeId }) {
+export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoading, onLog, onClassify, defaultTurbineType, defaultCableTypeId }) {
   const log = (msg, level = 'info') => { console.log('[import]', msg); if (onLog) onLog(msg, level); };
   const input = document.createElement('input');
   input.type = 'file';
@@ -234,26 +234,40 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
         } else if (fname.endsWith('.shp') || fname.endsWith('.zip')) {
           log(`Reading file buffer — ${(file.size / 1024).toFixed(1)} KB`);
           const buf = await file.arrayBuffer();
-          log(`Buffer ready — sending to worker…`);
-          const result = await importShapefileOffThread(buf, file.name, onLog);
+          log(`Parsing shapefile…`);
+          const result = await importShapefileMainThread(buf, file.name, onLog);
           const toProcess = (Array.isArray(result) ? result : [result]).filter(Boolean);
-          log(`Processing ${toProcess.length} shapefile layer(s)…`);
+          log(`Parsed ${toProcess.length} shapefile layer(s) — opening classify menu`, 'success');
+          // Build raw layers for classify modal — one per shapefile layer
+          const rawLayers = [];
           for (const geojson of toProcess) {
             if (!geojson || !Array.isArray(geojson.features)) {
-              log(`Skipping layer with no features array (type: ${geojson?.type})`, 'warn');
+              log(`Skipping layer with no features array`, 'warn');
               continue;
             }
             const hasLayerMeta = geojson.features?.some(f => f.properties?._layerId);
             if (hasLayerMeta) {
               const lys = geoJSONToLayers(geojson);
-              log(`Layer-meta mode: ${lys.length} layers extracted`);
-              lys.forEach(l => allImported.push(l));
+              lys.forEach(l => rawLayers.push(l));
             } else {
-              const lys = autoClassifyGeojson(geojson, geojson._layerName || baseName, defaultTurbineType, defaultCableTypeId);
-              log(`Auto-classify: ${lys.length} typed layers from ${geojson.features?.length || 0} features`, 'success');
-              lys.forEach(l => allImported.push(l));
+              const layerId = `lyr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+              rawLayers.push({
+                id: layerId,
+                name: geojson._layerName || baseName,
+                type: 'polygon',
+                visible: true,
+                color: '#06b6d4',
+                fillOpacity: 0.15,
+                strokeWeight: 2,
+                strokeOpacity: 0.9,
+                no_turbines: false,
+                features: geojson.features,
+              });
             }
           }
+          if (rawLayers.length > 0 && onLoading) onLoading(false);
+          if (rawLayers.length > 0 && onClassify) { onClassify(rawLayers); return; }
+          rawLayers.forEach(l => allImported.push(l));
 
         } else if (fname.endsWith('.json') || fname.endsWith('.geojson')) {
           log(`Parsing GeoJSON: ${file.name}`);
