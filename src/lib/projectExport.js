@@ -335,9 +335,61 @@ export function importKML(kmlText) {
     });
   }
 
+  const layers = Object.values(layerMap);
+
+  // ── Fix cable node references after import ────────────────────────────────
+  // Cables have old turbine/substation IDs from export, but we just created new ones.
+  // Snap cables to nearest assets by geographic proximity at cable endpoints.
+  const turbineLayer = layers.find(l => l.type === 'turbine');
+  const cableLayer = layers.find(l => l.type === 'cable');
+  const substationLayer = layers.find(l => l.type === 'substation');
+
+  if (cableLayer && (turbineLayer || substationLayer)) {
+    const turbines = turbineLayer?.features || [];
+    const substations = substationLayer?.features || [];
+    const allAssets = [
+      ...turbines.map(t => ({ ...t, assetType: 'turbine' })),
+      ...substations.map(s => ({ ...s, assetType: 'substation' })),
+    ];
+
+    cableLayer.features = cableLayer.features.map(cable => {
+      if (!cable.geometry?.coordinates || cable.geometry.coordinates.length < 2) {
+        return cable;
+      }
+
+      const [startLng, startLat] = cable.geometry.coordinates[0];
+      const [endLng, endLat] = cable.geometry.coordinates[cable.geometry.coordinates.length - 1];
+
+      const findNearestAsset = (lng, lat) => {
+        let best = null, bestDist = Infinity;
+        for (const asset of allAssets) {
+          const [assetLng, assetLat] = asset.geometry.coordinates;
+          const d = Math.hypot(lng - assetLng, lat - assetLat);
+          if (d < bestDist) {
+            bestDist = d;
+            best = { type: asset.assetType, id: asset.id };
+          }
+        }
+        return bestDist < 0.01 ? best : null; // ~1km tolerance
+      };
+
+      const newStartNode = findNearestAsset(startLng, startLat);
+      const newEndNode = findNearestAsset(endLng, endLat);
+
+      return {
+        ...cable,
+        properties: {
+          ...cable.properties,
+          start_node: newStartNode || cable.properties.start_node,
+          end_node: newEndNode || cable.properties.end_node,
+        },
+      };
+    });
+  }
+
   return {
     name: projectMeta?.projectName || doc.querySelector('Document > name')?.textContent || 'KML Import',
-    layers: Object.values(layerMap),
+    layers,
     turbineTypes: projectMeta?.turbineTypes || [],
     cableTypes: projectMeta?.cableTypes || [],
     windParams: projectMeta?.windParams || { k: 2.0, lambda: 7.0 },
