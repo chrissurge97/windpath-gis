@@ -189,7 +189,42 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
       }
     });
 
-    // ── Phase 3: Merge into existing typed layers ────────────────────────────
+    // ── Phase 3: Rebuild cable node references via proximity matching ────────
+    // Since exported cable node IDs don't match imported turbine/substation IDs,
+    // snap cables to assets by proximity (first/last point of cable to nearest asset)
+    const allAssets = [...turbineFeaturesToAdd, ...substationFeaturesToAdd];
+    const resolvedCables = cableFeaturesToAdd.map(cable => {
+      if (!cable.geometry?.coordinates || cable.geometry.coordinates.length < 2) {
+        return cable; // No valid geometry, skip snapping
+      }
+      
+      const [startLng, startLat] = cable.geometry.coordinates[0];
+      const [endLng, endLat] = cable.geometry.coordinates[cable.geometry.coordinates.length - 1];
+      
+      // Find nearest asset to each end, within 100m tolerance
+      const findNearestAsset = (lng, lat) => {
+        let best = null, bestDist = Infinity;
+        for (const asset of allAssets) {
+          const [assetLng, assetLat] = asset.geometry.coordinates;
+          const d = Math.hypot(lng - assetLng, lat - assetLat);
+          if (d < bestDist && d < 0.01) { // ~1km tolerance in degrees
+            bestDist = d;
+            best = { type: asset.properties?.turbine_type_id ? 'turbine' : 'substation', id: asset.id };
+          }
+        }
+        return best;
+      };
+      
+      const newStartNode = findNearestAsset(startLng, startLat) || cable.properties.start_node;
+      const newEndNode = findNearestAsset(endLng, endLat) || cable.properties.end_node;
+      
+      return {
+        ...cable,
+        properties: { ...cable.properties, start_node: newStartNode, end_node: newEndNode }
+      };
+    });
+
+    // ── Phase 4: Merge into existing typed layers ────────────────────────────
     setLayers(prev => {
       const turbineLayer = prev.find(l => l.type === 'turbine');
       const cableLayer = prev.find(l => l.type === 'cable');
@@ -205,10 +240,10 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
         );
       }
 
-      if (cableFeaturesToAdd.length > 0 && cableLayer) {
+      if (resolvedCables.length > 0 && cableLayer) {
         next = next.map(l => 
           l.id === cableLayer.id 
-            ? { ...l, features: [...(l.features || []), ...cableFeaturesToAdd] } 
+            ? { ...l, features: [...(l.features || []), ...resolvedCables] } 
             : l
         );
       }
