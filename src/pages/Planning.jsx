@@ -13,7 +13,7 @@ import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
   Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target, FolderOpen,
   Layers, Settings, X, Satellite, Navigation, Type, Table,
-  ChevronDown, ChevronRight, ArrowUp, ArrowDown, PlusCircle, Save } from
+  ChevronDown, ChevronRight, ArrowUp, ArrowDown, PlusCircle, Save, Calculator } from
 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { createLayer, createFeature, downloadJSON, layersToGeoJSON, DEFAULT_POWER_CURVE, windAtHubHeight, calcTurbineAEP, calcWeibullAEP } from '@/lib/gisUtils';
@@ -223,6 +223,7 @@ export default function Planning() {
   const [selectedFeatureId, setSelectedFeatureId] = useState(null);
   const [rightTab, setRightTab] = useState('turbines');
   const [loadingWind, setLoadingWind] = useState(false);
+  const [batchFetchingWind, setBatchFetchingWind] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importLogs, setImportLogs] = useState([]); // { msg, level, ts }
   const [showImportConsole, setShowImportConsole] = useState(false);
@@ -729,6 +730,39 @@ export default function Planning() {
     },
   });
 
+  const handleBatchFetchWind = async () => {
+    if (!turbineLayer || turbines.length === 0) return;
+    setBatchFetchingWind(true);
+    try {
+      const updated = await Promise.all(turbines.map(async (t) => {
+        const [lng, lat] = t.geometry.coordinates;
+        let elevation = t.properties.elevation_m;
+        let wind_speed_ms = t.properties.wind_speed_ms;
+        try { elevation = elevation || await fetchElevation(lat, lng); } catch {}
+        try {
+          const wd = await fetchWindData(lat, lng);
+          wind_speed_ms = wind_speed_ms || wd?.mean_speed;
+        } catch {}
+        const hubHeight = t.properties.hub_height || 90;
+        const hubSpeed = wind_speed_ms ? windAtHubHeight(wind_speed_ms, 10, hubHeight) : null;
+        const aep = hubSpeed ? calcTurbineAEP(hubSpeed, DEFAULT_POWER_CURVE) : null;
+        return {
+          ...t,
+          properties: {
+            ...t.properties,
+            elevation_m: elevation,
+            wind_speed_ms,
+            hub_wind_speed: hubSpeed,
+            ...(aep && { aep_mwh: aep.aep_mwh })
+          }
+        };
+      }));
+      updateLayer(turbineLayer.id, { features: updated });
+    } finally {
+      setBatchFetchingWind(false);
+    }
+  };
+
   // ── Computed stats ─────────────────────────────────────────────────────────
   const totalCapacity_mw = turbines.reduce((s, t) => s + (t.properties.rated_power_mw || selectedTurbineType?.rated_power_mw || 3.5), 0);
   // Live Weibull-integrated AEP (used in Analysis tab — responds to k/λ sliders)
@@ -948,6 +982,14 @@ export default function Planning() {
           </button>
           <button data-lesson-id="btn-import" onClick={handleImport} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-white shrink-0">
             <Upload className="w-3 h-3" /> Import
+          </button>
+          <button
+            onClick={handleBatchFetchWind}
+            disabled={batchFetchingWind || !turbineLayer || turbines.length === 0}
+            title="Batch fetch wind & elevation for all turbines"
+            className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-amber-400 hover:border-amber-500/40 disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
+            {batchFetchingWind ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Calculator className="w-3 h-3" />}
+            {batchFetchingWind ? 'Fetching...' : 'Recalc'}
           </button>
           <div data-lesson-id="btn-export">
             <ExportMenu
