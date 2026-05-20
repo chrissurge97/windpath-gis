@@ -254,19 +254,36 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
               geoJSONToLayers(geojson).forEach(l => rawLayers.push(l));
             } else {
               // One shapefile = one layer, keeping its original name.
-              // Do NOT split by geometry type here — the classify modal handles that.
+              // Read back ev_* metadata fields written by exportShapefile (if present).
+              const sample = geojson.features?.[0]?.properties || {};
+              const evType    = sample.ev_type    || 'polygon';
+              const evColor   = sample.ev_color   || '#06b6d4';
+              const evOpacity = sample.ev_opacity != null ? parseFloat(sample.ev_opacity) : 0.15;
+              const evStroke  = sample.ev_stroke  != null ? parseFloat(sample.ev_stroke)  : 2;
+              const evSopac   = sample.ev_sopac   != null ? parseFloat(sample.ev_sopac)   : 0.9;
+              const evVisible = sample.ev_visible !== 'false';
+              const evNoturb  = sample.ev_noturb  === 'true';
+
+              // Strip ev_* meta from each feature's properties
+              const cleanFeatures = geojson.features.map(f => ({
+                ...f,
+                properties: Object.fromEntries(
+                  Object.entries(f.properties || {}).filter(([k]) => !k.startsWith('ev_'))
+                ),
+              }));
+
               const layerId = `lyr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
               rawLayers.push({
                 id: layerId,
                 name: geojson._layerName || baseName,
-                type: 'polygon',
-                visible: true,
-                color: '#06b6d4',
-                fillOpacity: 0.15,
-                strokeWeight: 2,
-                strokeOpacity: 0.9,
-                no_turbines: false,
-                features: geojson.features,
+                type: evType,
+                visible: evVisible,
+                color: evColor,
+                fillOpacity: evOpacity,
+                strokeWeight: evStroke,
+                strokeOpacity: evSopac,
+                no_turbines: evNoturb,
+                features: cleanFeatures,
               });
             }
           }

@@ -331,7 +331,7 @@ function buildDBF(features) {
   const enc = new TextEncoder();
   const FIELD_LEN = 80; // safe max for broad compatibility
 
-  // Collect unique field names (max 10 chars for DBF), skip internal _ fields
+  // Collect unique field names (max 10 chars for DBF), skip any residual _ fields
   const fieldSet = new Set();
   for (const f of features) {
     for (const k of Object.keys(f.properties || {})) {
@@ -425,12 +425,27 @@ export function exportShapefile(geojson, baseName = 'export') {
   const zipEntries = []; // { name, data }
 
   for (const [layerName, features] of layerGroups) {
-    // Strip internal _layer* fields from DBF (they're preserved by filename now)
+    // Pull layer metadata from the first feature (all features in this group share the same layer)
+    const firstProps = features[0]?.properties || {};
+    const layerMeta = {
+      ev_type:    firstProps._layerType    || 'polygon',
+      ev_color:   firstProps._layerColor   || '#06b6d4',
+      ev_opacity: String(firstProps._layerFillOpacity ?? 0.15),
+      ev_stroke:  String(firstProps._layerStrokeWeight ?? 2),
+      ev_sopac:   String(firstProps._layerStrokeOpacity ?? 0.9),
+      ev_visible: firstProps._layerVisible === false ? 'false' : 'true',
+      ev_noturb:  firstProps._layerNoTurbines ? 'true' : 'false',
+    };
+
+    // Strip internal _layer* fields and inject short ev_* metadata into each feature
     const cleanFeatures = features.map(f => ({
       ...f,
-      properties: Object.fromEntries(
-        Object.entries(f.properties || {}).filter(([k]) => !k.startsWith('_'))
-      ),
+      properties: {
+        ...Object.fromEntries(
+          Object.entries(f.properties || {}).filter(([k]) => !k.startsWith('_'))
+        ),
+        ...layerMeta,
+      },
     }));
 
     const { shp, shx } = buildSHP(cleanFeatures);

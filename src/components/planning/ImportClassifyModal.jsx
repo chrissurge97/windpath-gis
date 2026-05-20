@@ -89,12 +89,19 @@ export default function ImportClassifyModal({ layers, onConfirm, onClose }) {
   const lineItems  = useMemo(() => allFeatures.filter(x => isLine(x.feature)),  [allFeatures]);
   const polyItems  = useMemo(() => allFeatures.filter(x => isPoly(x.feature)),  [allFeatures]);
 
-  // Per-feature classification state
+  // Per-feature classification state — default from restored ev_type if available
   const [pointClass, setPointClass] = useState(() =>
-    Object.fromEntries(pointItems.map(x => [x.feature.id || x.feature.properties?.id || Math.random(), 'turbine']))
+    Object.fromEntries(pointItems.map(x => {
+      const t = x.layer.type;
+      const def = (t === 'substation') ? 'substation' : (t === 'turbine') ? 'turbine' : 'turbine';
+      return [x.feature.id || x.feature.properties?.id || Math.random(), def];
+    }))
   );
   const [lineClass, setLineClass] = useState(() =>
-    Object.fromEntries(lineItems.map(x => [x.feature.id || Math.random(), 'cable']))
+    Object.fromEntries(lineItems.map(x => {
+      const def = x.layer.type === 'cable' ? 'cable' : 'keep';
+      return [x.feature.id || Math.random(), def];
+    }))
   );
   // Polygon layers — kept as-is but shown for review; user can rename or remove
   const polyLayerIds = useMemo(() => [...new Set(polyItems.map(x => x.layerId))], [polyItems]);
@@ -175,12 +182,24 @@ export default function ImportClassifyModal({ layers, onConfirm, onClose }) {
       });
     }
 
-    // Polygon layers — each source layer becomes its own separate layer (not merged)
+    // Polygon layers — each source layer becomes its own separate layer (not merged),
+    // preserving the restored color/opacity/visibility/no_turbines from ev_* fields.
     for (const layer of layers) {
       const polyFeatures = (layer.features || []).filter(isPoly);
       if (polyFeatures.length > 0) {
         decisions.push({
-          layer: { ...layer, id: layerId(), features: polyFeatures },
+          layer: {
+            id: layerId(),
+            name: layer.name,
+            type: layer.type || 'polygon',
+            visible: layer.visible !== false,
+            color: layer.color || '#06b6d4',
+            fillOpacity: layer.fillOpacity ?? 0.15,
+            strokeWeight: layer.strokeWeight ?? 2,
+            strokeOpacity: layer.strokeOpacity ?? 0.9,
+            no_turbines: layer.no_turbines || false,
+            features: polyFeatures,
+          },
           classification: 'keep',
         });
       }
