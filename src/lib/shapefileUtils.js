@@ -437,12 +437,19 @@ export function exportShapefile(geojson, baseName = 'export') {
       ev_noturb:  firstProps._layerNoTurbines ? 'true' : 'false',
     };
 
-    // Strip internal _layer* fields and inject short ev_* metadata into each feature
+    // Strip internal _layer* fields, serialize object-valued props (e.g. start_node/end_node),
+    // and inject short ev_* metadata into each feature
     const cleanFeatures = features.map(f => ({
       ...f,
       properties: {
         ...Object.fromEntries(
-          Object.entries(f.properties || {}).filter(([k]) => !k.startsWith('_'))
+          Object.entries(f.properties || {})
+            .filter(([k]) => !k.startsWith('_'))
+            .map(([k, v]) => {
+              // Serialize objects/arrays to JSON strings so DBF can store them
+              if (v !== null && typeof v === 'object') return [k, JSON.stringify(v)];
+              return [k, v];
+            })
         ),
         ...layerMeta,
       },

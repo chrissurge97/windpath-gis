@@ -264,13 +264,21 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
               const evVisible = sample.ev_visible !== 'false';
               const evNoturb  = sample.ev_noturb  === 'true';
 
-              // Strip ev_* meta from each feature's properties
-              const cleanFeatures = geojson.features.map(f => ({
-                ...f,
-                properties: Object.fromEntries(
+              // Strip ev_* meta and deserialize any JSON-stringified object props (e.g. start_node/end_node)
+              const cleanFeatures = geojson.features.map(f => {
+                const stripped = Object.fromEntries(
                   Object.entries(f.properties || {}).filter(([k]) => !k.startsWith('ev_'))
-                ),
-              }));
+                );
+                // Restore JSON-stringified objects
+                const deserialized = {};
+                for (const [k, v] of Object.entries(stripped)) {
+                  if (typeof v === 'string' && (v.startsWith('{') || v.startsWith('['))) {
+                    try { deserialized[k] = JSON.parse(v); continue; } catch {}
+                  }
+                  deserialized[k] = v;
+                }
+                return { ...f, properties: deserialized };
+              });
 
               const hasEvMeta = !!sample.ev_type; // true = came from EagleView export
               const layerId = `lyr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

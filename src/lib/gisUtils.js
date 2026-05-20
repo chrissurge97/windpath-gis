@@ -115,12 +115,18 @@ export function layersToGeoJSON(layers) {
   };
   for (const layer of layers) {
     for (const f of layer.features) {
+      // Serialize object-valued props (e.g. start_node, end_node, custom_fields)
+      // so they survive round-trips through formats that only support string values (DBF, CSV).
+      const serializedProps = {};
+      for (const [k, v] of Object.entries(f.properties || {})) {
+        serializedProps[k] = (v !== null && typeof v === 'object') ? JSON.stringify(v) : v;
+      }
       featureCollection.features.push({
         type: 'Feature',
         id: f.id,
         geometry: f.geometry,
         properties: {
-          ...f.properties,
+          ...serializedProps,
           _layerId: layer.id,
           _layerName: layer.name,
           _layerType: layer.type,
@@ -160,9 +166,17 @@ export function geoJSONToLayers(geojson) {
         features: [],
       };
     }
-    const cleanProps = { ...fp };
-    ['_layerId','_layerName','_layerType','_layerColor','_layerFillOpacity',
-     '_layerStrokeWeight','_layerStrokeOpacity','_layerNoTurbines','_layerVisible'].forEach(k => delete cleanProps[k]);
+    const cleanProps = {};
+    const META_KEYS = new Set(['_layerId','_layerName','_layerType','_layerColor','_layerFillOpacity',
+     '_layerStrokeWeight','_layerStrokeOpacity','_layerNoTurbines','_layerVisible']);
+    for (const [k, v] of Object.entries(fp)) {
+      if (META_KEYS.has(k)) continue;
+      // Deserialize JSON-stringified objects (start_node, end_node, custom_fields, etc.)
+      if (typeof v === 'string' && (v.startsWith('{') || v.startsWith('['))) {
+        try { cleanProps[k] = JSON.parse(v); continue; } catch {}
+      }
+      cleanProps[k] = v;
+    }
     layerMap[layerId].features.push({ id: f.id || crypto.randomUUID(), layerId, geometry: f.geometry, properties: cleanProps });
   }
   return Object.values(layerMap);

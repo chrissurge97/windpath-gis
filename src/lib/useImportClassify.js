@@ -12,6 +12,18 @@ function haversineM(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Deserialize JSON-stringified object props written by shapefile exporter
+function deserializeProps(props) {
+  const out = {};
+  for (const [k, v] of Object.entries(props)) {
+    if (typeof v === 'string' && (v.startsWith('{') || v.startsWith('['))) {
+      try { out[k] = JSON.parse(v); continue; } catch {}
+    }
+    out[k] = v;
+  }
+  return out;
+}
+
 function calcLineLength(coords) {
   let len = 0;
   for (let i = 0; i < coords.length - 1; i++) {
@@ -73,18 +85,23 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
         }
 
         const startIdx = (turbineLayer.features?.length || 0) + turbineFeaturesToAdd.length;
-        const newTurbines = validPts.map((f, i) => ({
-          ...f,
-          id: crypto.randomUUID(),
-          properties: {
-            name: f.properties?.name || `T${startIdx + i + 1}`,
-            turbine_type_id: selectedTurbineType?.id,
-            hub_height: selectedTurbineType?.hub_height_m || 100,
-            rotor_diameter: selectedTurbineType?.rotor_diameter_m || 120,
-            rated_power_mw: selectedTurbineType?.rated_power_mw || 3.5,
-            ...Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name', 'turbine_type_id'].includes(k))),
-          },
-        }));
+        const newTurbines = validPts.map((f, i) => {
+          // Deserialize any JSON-stringified object props (from shapefile round-trip)
+          const restoredProps = deserializeProps(f.properties || {});
+          return {
+            ...f,
+            id: crypto.randomUUID(),
+            properties: {
+              // Defaults first, then restored props override them (preserves all asset variables)
+              name: restoredProps.name || `T${startIdx + i + 1}`,
+              turbine_type_id: restoredProps.turbine_type_id || selectedTurbineType?.id,
+              hub_height: restoredProps.hub_height || selectedTurbineType?.hub_height_m || 100,
+              rotor_diameter: restoredProps.rotor_diameter || selectedTurbineType?.rotor_diameter_m || 120,
+              rated_power_mw: restoredProps.rated_power_mw || selectedTurbineType?.rated_power_mw || 3.5,
+              ...restoredProps,
+            },
+          };
+        });
         turbineFeaturesToAdd = [...turbineFeaturesToAdd, ...newTurbines];
 
         const rest = layer.features?.filter(f => !isPoint(f)) || [];
@@ -108,6 +125,7 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
         const startIdx = (cableLayer.features?.length || 0) + cableFeaturesToAdd.length;
         const flattened = validLines.flatMap((f, fi) => {
           if (f.geometry?.type === 'MultiLineString') {
+            const restoredProps = deserializeProps(f.properties || {});
             // Only keep rings that pass WGS84 check
             const validRings = f.geometry.coordinates.filter(ring => coordsAreWGS84(ring));
             return validRings.map((coords, idx) => ({
@@ -115,29 +133,30 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
               id: crypto.randomUUID(),
               geometry: { type: 'LineString', coordinates: coords },
               properties: {
-                name: f.properties?.name
-                  ? `${f.properties.name}_${idx + 1}`
+                name: restoredProps.name
+                  ? `${restoredProps.name}_${idx + 1}`
                   : `Cable ${startIdx + fi + idx + 1}`,
-                cable_type_id: selectedCableTypeId,
+                cable_type_id: restoredProps.cable_type_id || selectedCableTypeId,
                 length_m: calcLineLength(coords),
-                start_node: null,
-                end_node: null,
-                ...Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name', 'cable_type_id', 'length_m', 'start_node', 'end_node'].includes(k))),
+                start_node: restoredProps.start_node || null,
+                end_node: restoredProps.end_node || null,
+                ...restoredProps,
               },
             }));
           }
           const coords = f.geometry.coordinates;
           const len = calcLineLength(coords);
+          const restoredProps = deserializeProps(f.properties || {});
           return [{
             ...f,
             id: crypto.randomUUID(),
             properties: {
-              name: f.properties?.name || `Cable ${startIdx + fi + 1}`,
-              cable_type_id: selectedCableTypeId,
-              length_m: len,
-              start_node: null,
-              end_node: null,
-              ...Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name', 'cable_type_id', 'length_m', 'start_node', 'end_node'].includes(k))),
+              name: restoredProps.name || `Cable ${startIdx + fi + 1}`,
+              cable_type_id: restoredProps.cable_type_id || selectedCableTypeId,
+              length_m: restoredProps.length_m || len,
+              start_node: restoredProps.start_node || null,
+              end_node: restoredProps.end_node || null,
+              ...restoredProps,
             },
           }];
         });
