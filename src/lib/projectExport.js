@@ -224,21 +224,13 @@ export async function exportProjectKMZ(project) {
      for (const feature of layer.features || []) {
        let props = { ...feature.properties, ...meta };
 
-       // For cables: resolve start_node and end_node by matching names to actual turbine/substation IDs
-       if (layer.type === 'cable' && props.start_node && props.end_node) {
-         const start = props.start_node;
-         const end = props.end_node;
-         if (start.type === 'turbine' && turbineMap[start.name]) {
-           props.start_node = { ...start, id: turbineMap[start.name] };
+       // For cables: simplify start_node and end_node to just be the name string
+       if (layer.type === 'cable') {
+         if (props.start_node && props.start_node.name) {
+           props.start_node = props.start_node.name;
          }
-         if (end.type === 'turbine' && turbineMap[end.name]) {
-           props.end_node = { ...end, id: turbineMap[end.name] };
-         }
-         if (start.type === 'substation' && substationMap[start.name]) {
-           props.start_node = { ...start, id: substationMap[start.name] };
-         }
-         if (end.type === 'substation' && substationMap[end.name]) {
-           props.end_node = { ...end, id: substationMap[end.name] };
+         if (props.end_node && props.end_node.name) {
+           props.end_node = props.end_node.name;
          }
        }
 

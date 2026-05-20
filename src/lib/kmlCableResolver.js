@@ -67,13 +67,29 @@ export function resolveKMLCableNetwork(cableLayer, turbineLayer, substationLayer
     cableNodeMap.set(cable.id, { startNode, endNode });
   }
 
-  // Step 2: Update cables with snapped nodes, but preserve existing explicit nodes
+  // Step 2: Update cables with snapped nodes, but preserve existing named nodes (resolve names to IDs)
   const updatedFeatures = cables.map(cable => {
     const nodes = cableNodeMap.get(cable.id);
     if (!nodes) return cable;
 
-    const startNode = cable.properties.start_node || nodes.startNode;
-    const endNode = cable.properties.end_node || nodes.endNode;
+    let startNode = cable.properties.start_node || nodes.startNode;
+    let endNode = cable.properties.end_node || nodes.endNode;
+
+    // If start/end nodes are strings (turbine/substation names), resolve to actual IDs
+    if (typeof startNode === 'string') {
+      const match = turbines.find(t => t.properties?.name === startNode) || substations.find(s => s.properties?.name === startNode);
+      if (match) {
+        const isSubstation = match.geometry?.type === 'Point' && !turbines.find(t => t.id === match.id);
+        startNode = { type: isSubstation ? 'substation' : 'turbine', id: match.id, name: startNode };
+      }
+    }
+    if (typeof endNode === 'string') {
+      const match = turbines.find(t => t.properties?.name === endNode) || substations.find(s => s.properties?.name === endNode);
+      if (match) {
+        const isSubstation = match.geometry?.type === 'Point' && !turbines.find(t => t.id === match.id);
+        endNode = { type: isSubstation ? 'substation' : 'turbine', id: match.id, name: endNode };
+      }
+    }
 
     return {
       ...cable,
