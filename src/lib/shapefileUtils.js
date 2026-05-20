@@ -394,25 +394,62 @@ function buildDBF(features) {
 }
 
 // ── Public export API ────────────────────────────────────────────────────────
+
 /**
  * Export a GeoJSON FeatureCollection as a Shapefile ZIP.
- * All features must be the same geometry type (Point, LineString, or Polygon).
+ * If the GeoJSON has _layers metadata (from layersToGeoJSON), each layer is
+ * written as a separate .shp inside the ZIP, preserving layer names.
+ * Otherwise all features go into a single .shp.
  * Returns a Uint8Array of the ZIP file.
  */
 export function exportShapefile(geojson, baseName = 'export') {
-  const features = (geojson.features || []).filter(f => f.geometry);
-  const crsName   = geojson._crsName || 'WGS84';
-
-  const { shp, shx } = buildSHP(features);
-  const dbf = buildDBF(features);
+  const allFeatures = (geojson.features || []).filter(f => f.geometry);
+  const crsName = geojson._crsName || 'WGS84';
   const prj = new TextEncoder().encode(getPRJ(crsName));
 
-  return zipFiles([
-    { name: `${baseName}.shp`, data: shp },
-    { name: `${baseName}.shx`, data: shx },
-    { name: `${baseName}.dbf`, data: dbf },
-    { name: `${baseName}.prj`, data: prj },
-  ]);
+  // Group features by their embedded _layerName (set by layersToGeoJSON).
+  // Fall back to a single group when no layer metadata is present.
+  const layerGroups = new Map();
+  for (const f of allFeatures) {
+    const layerName = f.properties?._layerName || baseName;
+    if (!layerGroups.has(layerName)) layerGroups.set(layerName, []);
+    layerGroups.get(layerName).push(f);
+  }
+
+  // Sanitise a layer name to a safe filename (no special chars, max 60 chars)
+  const toFilename = (name) =>
+    name.replace(/[^a-zA-Z0-9_\-. ]/g, '_').replace(/\s+/g, '_').slice(0, 60);
+
+  // Deduplicate filenames in case two layers have the same sanitised name
+  const usedNames = new Map();
+  const zipEntries = []; // { name, data }
+
+  for (const [layerName, features] of layerGroups) {
+    // Strip internal _layer* fields from DBF (they're preserved by filename now)
+    const cleanFeatures = features.map(f => ({
+      ...f,
+      properties: Object.fromEntries(
+        Object.entries(f.properties || {}).filter(([k]) => !k.startsWith('_'))
+      ),
+    }));
+
+    const { shp, shx } = buildSHP(cleanFeatures);
+    const dbf = buildDBF(cleanFeatures);
+
+    let fname = toFilename(layerName);
+    const count = (usedNames.get(fname) || 0) + 1;
+    usedNames.set(fname, count);
+    if (count > 1) fname = `${fname}_${count}`;
+
+    zipEntries.push(
+      { name: `${fname}.shp`, data: shp },
+      { name: `${fname}.shx`, data: shx },
+      { name: `${fname}.dbf`, data: dbf },
+      { name: `${fname}.prj`, data: prj },
+    );
+  }
+
+  return zipFiles(zipEntries);
 }
 
 // ── Shapefile → GeoJSON (import) ─────────────────────────────────────────────
