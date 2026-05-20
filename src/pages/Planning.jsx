@@ -1939,27 +1939,25 @@ export default function Planning() {
       </div>
       <ConfigMenuWrapper isOpen={showConfigMenu} onClose={() => setShowConfigMenu(false)} features={features} onFeatureToggle={handleFeatureToggle} onTurbineAdded={(t) => setTurbineTypes((prev) => [...prev, t])} onCableAdded={(c) => setCableTypes((prev) => [...prev, c])} />
 
-      {importClassifyLayers &&
-      <ImportClassifyModal
-        layers={importClassifyLayers}
-        onConfirm={handleClassifyConfirm}
-        onClose={() => setImportClassifyLayers(null)} />
-
-      }
-
-      {showNewZoneDialog &&
-      <NewZoneDialog
-        onClose={() => setShowNewZoneDialog(false)}
-        onCreate={({ name, color }) => {
-          const l = createLayer({ name, type: 'polygon', color });
-          setLayers((prev) => [...prev, l]);
-        }} />
-
-      }
-
-      {showDataTables &&
-      <DataTablesPanel onClose={() => setShowDataTables(false)} />
-      }
+      {/* Modals - Cable Topology, Classifications, Zones, Data Tables */}
+      {pendingCableTopology &&
+      <CableTopologyModal
+        cables={pendingCableTopology.cables}
+        turbines={pendingCableTopology.turbines}
+        substations={pendingCableTopology.substations}
+        onConfirm={(updatedCables) => {
+          const project = { ...pendingCableTopology.project };
+          const cableLayer = project.layers.find(l => l.type === 'cable');
+          if (cableLayer) cableLayer.features = updatedCables;
+          const tempId = '__imported_' + Date.now() + '__';
+          handleSwitchProject(tempId, { ...project, id: tempId });
+          setPendingCableTopology(null);
+        }}
+        onCancel={() => setPendingCableTopology(null)}
+      />}
+      {importClassifyLayers && <ImportClassifyModal layers={importClassifyLayers} onConfirm={handleClassifyConfirm} onClose={() => setImportClassifyLayers(null)} />}
+      {showNewZoneDialog && <NewZoneDialog onClose={() => setShowNewZoneDialog(false)} onCreate={({ name, color }) => { const l = createLayer({ name, type: 'polygon', color }); setLayers((prev) => [...prev, l]); }} />}
+      {showDataTables && <DataTablesPanel onClose={() => setShowDataTables(false)} />}
 
       {/* Import Debug Console */}
       {showImportConsole &&
