@@ -16,7 +16,7 @@ import {
   ChevronDown, ChevronRight, ArrowUp, ArrowDown, PlusCircle, Save } from
 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
-import { createLayer, createFeature, geoJSONToLayer, downloadJSON, layersToGeoJSON, DEFAULT_POWER_CURVE, windAtHubHeight, calcTurbineAEP, calcWeibullAEP } from '@/lib/gisUtils';
+import { createLayer, createFeature, downloadJSON, layersToGeoJSON, DEFAULT_POWER_CURVE, windAtHubHeight, calcTurbineAEP, calcWeibullAEP } from '@/lib/gisUtils';
 import RightPanelTabs from '@/components/planning/RightPanelTabs';
 import { checkExclusionZones } from '@/lib/geoUtils';
 import { fetchElevation, fetchWindData } from '@/lib/planningUtils';
@@ -30,7 +30,7 @@ import { exportKML } from '@/lib/exportKMZ';
 import { exportProjectPDF } from '@/lib/exportPDF';
 import { exportProjectGeoJSON, exportProjectKMZ, downloadFile } from '@/lib/projectExport';
 import { reprojectGeoJSON } from '@/lib/crsUtils';
-import { exportShapefile, importShapefile } from '@/lib/shapefileUtils';
+import { exportShapefile } from '@/lib/shapefileUtils';
 import TurbineRadiiOverlay, { DEFAULT_TURBINE_RADII, checkTurbineRadii } from '@/components/planning/TurbineRadiiOverlay';
 import RightPanel from '@/components/planning/PlanningRightPanel';
 import { buildDemoProject } from '@/lib/demoProject';
@@ -48,6 +48,7 @@ import LayerImportExport from '@/components/planning/LayerImportExport';
 import LayerList from '@/components/planning/LayerList';
 import NewZoneDialog from '@/components/planning/NewZoneDialog';
 import ProjectFileButtons, { saveProject, loadProject, OpenProjectModal, setupProjectImport } from '@/components/planning/ProjectManager';
+import { openImportFilePicker, partitionImportedLayers } from '@/lib/importHandler';
 import ConfigMenuWrapper from '@/components/planning/ConfigMenuWrapper';
 import { loadCustomTurbines } from '@/components/planning/TurbineWizard';
 import { loadCustomCables } from '@/components/planning/CableWizard';
@@ -780,68 +781,42 @@ export default function Planning() {
   }, []);
 
   const handleImport = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,.geojson,.shp,.zip,.csv';
-    input.multiple = true;
-    input.onchange = async (e) => {
-      const files = Array.from(e.target.files || []);
-      if (!files.length) return;
-      const newLayers = [];
-      for (const file of files) {
-        const fname = file.name.toLowerCase();
-        const baseName = file.name.replace(/\.[^.]+$/, '');
-        try {
-          if (fname.endsWith('.shp') || fname.endsWith('.zip')) {
-            const buf = await file.arrayBuffer();
-            // importShapefile now returns an array of layers for multi-layer ZIPs
-            const result = await importShapefile(buf, file.name);
-            if (Array.isArray(result)) {
-              result.forEach((geojson) => {
-                const l = geoJSONToLayer(geojson, geojson._layerName || baseName);
-                newLayers.push(l);
-              });
+    openImportFilePicker({
+      onProject: async (project) => {
+        // Save to server and get a real ID before switching
+        const id = await saveProject(null, project);
+        handleSwitchProject(id, { ...project, id });
+      },
+      onTypesUpdate: ({ turbineTypes: tt, cableTypes: ct }) => {
+        if (tt?.length) setTurbineTypes(tt);
+        if (ct?.length) setCableTypes(ct);
+      },
+      onLayers: (importedLayers) => {
+        const { typed, plain } = partitionImportedLayers(importedLayers);
+        // Merge typed layers (turbine/cable/substation) into existing layers of same type
+        setLayers(prev => {
+          let next = [...prev];
+          for (const imp of typed) {
+            const existing = next.find(l => l.type === imp.type);
+            if (existing) {
+              next = next.map(l => l.id === existing.id
+                ? { ...l, features: [...l.features, ...imp.features] } : l);
             } else {
-              newLayers.push(geoJSONToLayer(result, baseName));
-            }
-          } else if (fname.endsWith('.json') || fname.endsWith('.geojson')) {
-            const text = await file.text();
-            const data = JSON.parse(text);
-            newLayers.push(geoJSONToLayer(data, baseName));
-          } else if (fname.endsWith('.csv')) {
-            const text = await file.text();
-            const lines = text.split('\n').filter(Boolean);
-            const headers = lines[0].split(',').map((h) => h.replace(/^"|"$/g, '').trim());
-            const features = [];
-            for (let i = 1; i < lines.length; i++) {
-              const vals = lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g)?.map((v) => v.replace(/^"|"$/g, '').replace(/""/g, '"')) || [];
-              const row = Object.fromEntries(headers.map((h, j) => [h, vals[j] || '']));
-              if (!row.lat || !row.lng) continue;
-              const lat = parseFloat(row.lat),lng = parseFloat(row.lng);
-              if (isNaN(lat) || isNaN(lng)) continue;
-              features.push({ id: crypto.randomUUID(), layerId: baseName, geometry: { type: 'Point', coordinates: [lng, lat] }, properties: { name: row.name || `Feature ${i}`, notes: row.notes || '' } });
-            }
-            if (features.length > 0) {
-              newLayers.push({ id: crypto.randomUUID(), name: baseName, type: 'polygon', visible: true, color: '#8b5cf6', fillOpacity: 0.2, strokeOpacity: 0.8, strokeWeight: 2, no_turbines: false, features });
+              next = [...next, imp];
             }
           }
-        } catch (err) {
-          console.error('Import error for', file.name, err);
-          alert(`Could not import ${file.name}: ${err.message}`);
-        }
-      }
-      if (newLayers.length > 0) {
-        const hasClassifiable = newLayers.some((l) =>
-        l.features?.some((f) => f.geometry?.type === 'Point' || f.geometry?.type === 'LineString' || f.geometry?.type === 'MultiLineString')
-        );
-        if (hasClassifiable && features.importClassifier) {
-          setImportClassifyLayers(newLayers);
-        } else {
-          setLayers((prev) => [...prev, ...newLayers]);
-        }
-      }
-    };
-    input.click();
+          // Add plain layers immediately if no classify modal needed
+          const needsClassify = plain.some(l =>
+            l.features?.some(f => ['Point','LineString','MultiLineString'].includes(f.geometry?.type)));
+          if (!needsClassify || !features.importClassifier) next = [...next, ...plain];
+          return next;
+        });
+        // Show classify modal for ambiguous plain layers
+        const needsClassify = plain.some(l =>
+          l.features?.some(f => ['Point','LineString','MultiLineString'].includes(f.geometry?.type)));
+        if (needsClassify && features.importClassifier) setImportClassifyLayers(plain);
+      },
+    });
   };
 
   // ── Computed stats ─────────────────────────────────────────────────────────

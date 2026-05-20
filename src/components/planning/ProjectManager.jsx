@@ -237,42 +237,73 @@ export function OpenProjectModal({ onOpen, onClose }) {
   );
 }
 
-// ── Import project from file (GeoJSON / KML) ─────────────────────────────────
+// ── Import project from file (GeoJSON / KML / Shapefile) ─────────────────────
 
 export function setupProjectImport(onProjectLoaded) {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.geojson,.json,.kml,.kmz';
+  input.accept = '.geojson,.json,.kml,.kmz,.shp,.zip';
 
   input.onchange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const text = await file.text();
     const fname = file.name.toLowerCase();
 
     try {
       if (fname.endsWith('.kml') || fname.endsWith('.kmz')) {
+        const text = await file.text();
         const project = importKML(text);
-        // Fill in missing defaults
         if (!project.turbineTypes?.length) project.turbineTypes = DEFAULT_TURBINE_TYPES;
         if (!project.cableTypes?.length) project.cableTypes = DEFAULT_CABLE_TYPES;
         onProjectLoaded(project);
         return;
       }
 
-      // JSON / GeoJSON
-      const data = JSON.parse(text);
-      const isProject = data.properties?.format === 'eagleview-wind-farm-project' ||
-                        data.properties?.format === 'base44-wind-farm-project';
-      if (isProject) {
-        const project = importProjectGeoJSON(data);
-        if (!project.turbineTypes?.length) project.turbineTypes = DEFAULT_TURBINE_TYPES;
-        if (!project.cableTypes?.length) project.cableTypes = DEFAULT_CABLE_TYPES;
-        onProjectLoaded(project);
+      if (fname.endsWith('.json') || fname.endsWith('.geojson')) {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        const isProject = data.properties?.format === 'eagleview-wind-farm-project' ||
+                          data.properties?.format === 'base44-wind-farm-project';
+        if (isProject) {
+          const project = importProjectGeoJSON(data);
+          if (!project.turbineTypes?.length) project.turbineTypes = DEFAULT_TURBINE_TYPES;
+          if (!project.cableTypes?.length) project.cableTypes = DEFAULT_CABLE_TYPES;
+          onProjectLoaded(project);
+          return;
+        }
+        // Plain GeoJSON with embedded layer metadata — reconstruct as project
+        const { geoJSONToLayers } = await import('@/lib/gisUtils');
+        const hasLayerMeta = data.features?.some(f => f.properties?._layerId);
+        if (hasLayerMeta) {
+          const layers = geoJSONToLayers(data);
+          onProjectLoaded({ name: file.name.replace(/\.[^.]+$/, ''), layers, turbineTypes: DEFAULT_TURBINE_TYPES, cableTypes: DEFAULT_CABLE_TYPES, windParams: { k: 2.0, lambda: 7.0 } });
+          return;
+        }
+        alert('This file does not appear to be an EagleView project export.\nUse the "Project (GeoJSON)" export option to create a portable project file.');
         return;
       }
 
-      alert('This file does not appear to be an EagleView project export.\nUse the "Project (GeoJSON)" export option to create a portable project file.');
+      if (fname.endsWith('.shp') || fname.endsWith('.zip')) {
+        const { importShapefile } = await import('@/lib/shapefileUtils');
+        const { geoJSONToLayers, geoJSONToLayer } = await import('@/lib/gisUtils');
+        const buf = await file.arrayBuffer();
+        const result = await importShapefile(buf, file.name);
+        const toProcess = Array.isArray(result) ? result : [result];
+        const layers = [];
+        for (const geojson of toProcess) {
+          const hasLayerMeta = geojson.features?.some(f => f.properties?._layerId);
+          if (hasLayerMeta) {
+            geoJSONToLayers(geojson).forEach(l => layers.push(l));
+          } else {
+            layers.push(geoJSONToLayer(geojson, geojson._layerName || file.name.replace(/\.[^.]+$/, '')));
+          }
+        }
+        const baseName = file.name.replace(/\.[^.]+$/, '');
+        onProjectLoaded({ name: baseName, layers, turbineTypes: DEFAULT_TURBINE_TYPES, cableTypes: DEFAULT_CABLE_TYPES, windParams: { k: 2.0, lambda: 7.0 } });
+        return;
+      }
+
+      alert('Unsupported file type. Supported formats: GeoJSON, KML, Shapefile (.shp/.zip)');
     } catch (err) {
       console.error('Import error:', err);
       alert('Failed to import file: ' + err.message);
