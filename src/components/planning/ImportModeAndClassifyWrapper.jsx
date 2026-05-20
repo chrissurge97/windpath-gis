@@ -3,18 +3,19 @@ import ImportClassificationModeModal from './ImportClassificationModeModal';
 import ImportClassifyModal from './ImportClassifyModal';
 
 /**
- * Wrapper that handles the two-step import flow:
- * 1. Show mode choice (auto vs manual)
- * 2. Show classification modal (if manual mode chosen)
+ * Wrapper that handles the classification flow:
+ * - If onAuto is provided, show mode choice first
+ * - Otherwise, go straight to manual classification
  */
 export default function ImportModeAndClassifyWrapper({
   layers,
   onConfirm,
   onClose,
+  showModeChoice = true,
 }) {
-  const [step, setStep] = useState('mode'); // 'mode' | 'classify'
+  const [step, setStep] = useState(showModeChoice ? 'mode' : 'classify'); // 'mode' | 'classify'
 
-  if (step === 'mode') {
+  if (step === 'mode' && showModeChoice) {
     return (
       <ImportClassificationModeModal
         onAuto={() => {
@@ -35,19 +36,20 @@ export default function ImportModeAndClassifyWrapper({
     );
   }
 
-  if (step === 'classify') {
-    return (
-      <ImportClassifyModal
-        layers={layers}
-        onConfirm={onConfirm}
-        onClose={() => {
+  // Always show classification modal when explicitly triggered
+  return (
+    <ImportClassifyModal
+      layers={layers}
+      onConfirm={onConfirm}
+      onClose={() => {
+        if (showModeChoice) {
           setStep('mode'); // Go back to mode selection
-        }}
-      />
-    );
-  }
-
-  return null;
+        } else {
+          onClose();
+        }
+      }}
+    />
+  );
 }
 
 /**

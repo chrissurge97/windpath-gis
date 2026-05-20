@@ -117,6 +117,20 @@ function importShapefileOffThread(arrayBuffer, filename, onLog) {
   });
 }
 
+// ── Auto-classify a single layer based on geometry ──────────────────────────
+function autoClassify(layer) {
+  if (layer.type === 'turbine' || layer.type === 'cable' || layer.type === 'substation') {
+    return layer.type;
+  }
+  const features = layer.features || [];
+  if (features.length === 0) return 'keep';
+  const firstType = features[0].geometry?.type;
+  if (firstType === 'Point') return 'turbine';
+  if (firstType === 'LineString' || firstType === 'MultiLineString') return 'cable';
+  if (firstType === 'Polygon' || firstType === 'MultiPolygon') return 'polygon';
+  return 'keep';
+}
+
 // ── Auto-classify shapefile GeoJSON into typed project layers ─────────────────
 // Points → turbine layer, Lines → cable layer, Polygons → polygon layer
 // Applies proper properties so features work correctly in the planning tool.
@@ -312,9 +326,12 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           if (rawLayers.length > 0 && !allHaveEvMeta) {
             if (onClassifyMode) {
               log(`Asking for classification mode`, 'info');
-              onClassifyMode(rawLayers); 
+              onClassifyMode(rawLayers);
+              return;
             }
-            return;
+            // If no onClassifyMode handler, proceed with auto-classification path
+            log(`Auto-importing with geometry-based classification`, 'info');
+            allImported.push(...rawLayers);
           }
 
           // All layers have ev_* metadata — ask user: auto-import or manual classify?
