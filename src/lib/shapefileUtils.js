@@ -685,27 +685,38 @@ function parseShapefileSet(shpBuf, dbfBuf, prjText, layerName) {
   if (dbfRecords.length > features.length) {
     const expanded = [];
     let dbfIdx = 0;
-    for (const feature of features) {
+    for (let fIdx = 0; fIdx < features.length; fIdx++) {
+      const feature = features[fIdx];
       const geom = feature.geometry;
       if (geom?.type === 'MultiLineString' && dbfIdx < dbfRecords.length) {
-        // One feature with multiple parts → split into separate features
-        for (const coords of geom.coordinates) {
+        // One feature with multiple parts → split into separate features with UNIQUE IDs
+        for (let partIdx = 0; partIdx < geom.coordinates.length; partIdx++) {
           if (dbfIdx < dbfRecords.length) {
             expanded.push({
+              id: `shp_${fIdx}_${partIdx}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
               type: 'Feature',
-              geometry: { type: 'LineString', coordinates: coords },
+              geometry: { type: 'LineString', coordinates: geom.coordinates[partIdx] },
               properties: dbfRecords[dbfIdx]
             });
             dbfIdx++;
           }
         }
       } else {
-        // Single-part feature → use as-is
-        expanded.push(feature);
+        // Single-part feature → use as-is with unique ID
+        expanded.push({
+          id: `shp_${fIdx}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          ...feature
+        });
         dbfIdx++;
       }
     }
     features = expanded;
+  } else {
+    // Assign unique IDs to all features even if not expanded
+    features = features.map((f, i) => ({
+      id: `shp_${i}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      ...f
+    }));
   }
   
   const geojson = { type: 'FeatureCollection', features };
