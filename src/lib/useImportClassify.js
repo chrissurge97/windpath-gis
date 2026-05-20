@@ -1,6 +1,6 @@
 /**
  * Hook that handles the "classify imported features" flow.
- * Processes point→turbine, line→cable, and polygon-only layers
+ * Now with proper ID mapping to preserve cable-to-turbine/substation references.
  */
 import { useCallback } from 'react';
 
@@ -12,7 +12,6 @@ function haversineM(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Deserialize JSON-stringified object props written by shapefile exporter
 function deserializeProps(props) {
   const out = {};
   for (const [k, v] of Object.entries(props)) {
@@ -32,12 +31,7 @@ function calcLineLength(coords) {
   return +len.toFixed(0);
 }
 
-/**
- * Validates that coordinates are in WGS84 (lon: -180..180, lat: -90..90).
- * Returns true if ALL coords in the feature look like WGS84.
- */
 function coordsAreWGS84(coords) {
-  // coords can be [lng, lat] or [[lng,lat], ...] or [[[lng,lat],...],...]
   const flat = coords.flat(Infinity);
   for (let i = 0; i < flat.length - 1; i += 2) {
     const lng = flat[i], lat = flat[i + 1];
@@ -52,48 +46,44 @@ function featureCoordsValid(f) {
   return coordsAreWGS84(f.geometry.coordinates);
 }
 
+function getOriginalFeatureId(feature) {
+  return feature.id || feature.properties?.id || feature.properties?.ID || crypto.randomUUID();
+}
+
 export function useImportClassify(layers, selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers) {
   return useCallback((decisions) => {
-    const turbineLayer = layers.find(l => l.type === 'turbine');
-    const cableLayer = layers.find(l => l.type === 'cable');
-    const substationLayer = layers.find(l => l.type === 'substation');
-
-    let turbineFeaturesToAdd = [];
-    let cableFeaturesToAdd = [];
-    let substationFeaturesToAdd = [];
-    const layersToAdd = [];
-
+    const idMap = new Map(); // Map of originalId -> newId
     const warnings = [];
 
     const isPoint = (f) => f.geometry?.type === 'Point';
     const isLine = (f) => f.geometry?.type === 'LineString' || f.geometry?.type === 'MultiLineString';
+    const isPoly = (f) => f.geometry?.type === 'Polygon' || f.geometry?.type === 'MultiPolygon';
 
+    let turbineFeaturesToAdd = [];
+    let cableFeaturesToProcess = [];
+    let substationFeaturesToAdd = [];
+    const layersToAdd = [];
+
+    // ── Phase 1: Process turbines and substations, build ID map ───────────────
     for (const { layer, classification } of decisions) {
-      if (classification === 'keep') {
-        layersToAdd.push(layer);
-        continue;
-      }
-
-      if (classification === 'turbine' && turbineLayer) {
+      if (classification === 'turbine') {
         const pts = layer.features?.filter(isPoint) || [];
-
-        // Separate valid vs invalid coords
         const validPts = pts.filter(featureCoordsValid);
-        const invalidCount = pts.length - validPts.length;
-        if (invalidCount > 0) {
-          warnings.push(`"${layer.name}": ${invalidCount} point feature(s) skipped — coordinates appear to be in a projected CRS (not WGS84/GPS). Re-export as WGS84 to include them.`);
+        if (pts.length > validPts.length) {
+          warnings.push(`"${layer.name}": ${pts.length - validPts.length} point feature(s) skipped — coordinates not WGS84.`);
         }
 
-        const startIdx = (turbineLayer.features?.length || 0) + turbineFeaturesToAdd.length;
         const newTurbines = validPts.map((f, i) => {
-          // Deserialize any JSON-stringified object props (from shapefile round-trip)
+          const originalId = getOriginalFeatureId(f);
+          const newId = crypto.randomUUID();
+          idMap.set(originalId, newId);
+
           const restoredProps = deserializeProps(f.properties || {});
           return {
             ...f,
-            id: crypto.randomUUID(),
+            id: newId,
             properties: {
-              // Defaults first, then restored props override them (preserves all asset variables)
-              name: restoredProps.name || `T${startIdx + i + 1}`,
+              name: restoredProps.name || `T${i + 1}`,
               turbine_type_id: restoredProps.turbine_type_id || selectedTurbineType?.id,
               hub_height: restoredProps.hub_height || selectedTurbineType?.hub_height_m || 100,
               rotor_diameter: restoredProps.rotor_diameter || selectedTurbineType?.rotor_diameter_m || 120,
@@ -103,112 +93,138 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
           };
         });
         turbineFeaturesToAdd = [...turbineFeaturesToAdd, ...newTurbines];
-
         const rest = layer.features?.filter(f => !isPoint(f)) || [];
         if (rest.length > 0) layersToAdd.push({ ...layer, features: rest });
 
-      } else if (classification === 'cable' && cableLayer) {
-        const lines = layer.features?.filter(isLine) || [];
-
-        const validLines = lines.filter(f => {
-          // For MultiLineString, check each ring
-          if (f.geometry?.type === 'MultiLineString') {
-            return f.geometry.coordinates.some(ring => coordsAreWGS84(ring));
-          }
-          return featureCoordsValid(f);
-        });
-        const invalidCount = lines.length - validLines.length;
-        if (invalidCount > 0) {
-          warnings.push(`"${layer.name}": ${invalidCount} line feature(s) skipped — coordinates appear to be in a projected CRS (not WGS84/GPS). Re-export as WGS84 to include them.`);
+      } else if (classification === 'substation') {
+        const pts = layer.features?.filter(isPoint) || [];
+        const validPts = pts.filter(featureCoordsValid);
+        if (pts.length > validPts.length) {
+          warnings.push(`"${layer.name}": ${pts.length - validPts.length} point feature(s) skipped — coordinates not WGS84.`);
         }
 
-        const startIdx = (cableLayer.features?.length || 0) + cableFeaturesToAdd.length;
-        const flattened = validLines.flatMap((f, fi) => {
-          if (f.geometry?.type === 'MultiLineString') {
-            const restoredProps = deserializeProps(f.properties || {});
-            // Only keep rings that pass WGS84 check
-            const validRings = f.geometry.coordinates.filter(ring => coordsAreWGS84(ring));
-            return validRings.map((coords, idx) => ({
-              ...f,
-              id: crypto.randomUUID(),
-              geometry: { type: 'LineString', coordinates: coords },
-              properties: {
-                name: restoredProps.name
-                  ? `${restoredProps.name}_${idx + 1}`
-                  : `Cable ${startIdx + fi + idx + 1}`,
-                cable_type_id: restoredProps.cable_type_id || selectedCableTypeId,
-                length_m: calcLineLength(coords),
-                start_node: restoredProps.start_node || null,
-                end_node: restoredProps.end_node || null,
-                ...restoredProps,
-              },
-            }));
-          }
-          const coords = f.geometry.coordinates;
-          const len = calcLineLength(coords);
+        const newSubs = validPts.map((f, i) => {
+          const originalId = getOriginalFeatureId(f);
+          const newId = crypto.randomUUID();
+          idMap.set(originalId, newId);
+
           const restoredProps = deserializeProps(f.properties || {});
-          return [{
+          return {
             ...f,
-            id: crypto.randomUUID(),
+            id: newId,
             properties: {
-              name: restoredProps.name || `Cable ${startIdx + fi + 1}`,
-              cable_type_id: restoredProps.cable_type_id || selectedCableTypeId,
-              length_m: restoredProps.length_m || len,
-              start_node: restoredProps.start_node || null,
-              end_node: restoredProps.end_node || null,
-              ...restoredProps,
+              name: restoredProps.name || `Substation ${i + 1}`,
+              transformer_mva: 60,
+              capacity_demand_mw: 30,
+              capacity_generation_mw: 30,
+              notes: '',
+              ...Object.fromEntries(Object.entries(restoredProps).filter(([k]) => !['name', 'transformer_mva', 'capacity_demand_mw', 'capacity_generation_mw', 'notes'].includes(k))),
             },
-          }];
+          };
         });
+        substationFeaturesToAdd = [...substationFeaturesToAdd, ...newSubs];
 
-        cableFeaturesToAdd = [...cableFeaturesToAdd, ...flattened];
-
+      } else if (classification === 'cable') {
+        cableFeaturesToProcess = [...cableFeaturesToProcess, ...(layer.features?.filter(isLine) || [])];
         const rest = layer.features?.filter(f => !isLine(f)) || [];
         if (rest.length > 0) layersToAdd.push({ ...layer, features: rest });
 
-      } else if (classification === 'substation' && substationLayer) {
-        const pts = layer.features?.filter(isPoint) || [];
-        const validPts = pts.filter(featureCoordsValid);
-        const invalidCount = pts.length - validPts.length;
-        if (invalidCount > 0) {
-          warnings.push(`"${layer.name}": ${invalidCount} point feature(s) skipped — coordinates appear to be in a projected CRS.`);
-        }
-        const startIdx = (substationLayer.features?.length || 0) + substationFeaturesToAdd.length;
-        const newSubs = validPts.map((f, i) => ({
-          ...f,
-          id: crypto.randomUUID(),
-          properties: {
-            name: f.properties?.name || `Substation ${startIdx + i + 1}`,
-            transformer_mva: 60,
-            capacity_demand_mw: 30,
-            capacity_generation_mw: 30,
-            notes: '',
-            ...Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name'].includes(k))),
-          },
-        }));
-        substationFeaturesToAdd = [...substationFeaturesToAdd, ...newSubs];
-
-      } else {
+      } else if (classification === 'keep') {
         layersToAdd.push(layer);
       }
     }
 
+    // ── Phase 2: Process cables with updated node references ──────────────────
+    const validLines = cableFeaturesToProcess.filter(f => {
+      if (f.geometry?.type === 'MultiLineString') {
+        return f.geometry.coordinates.some(ring => coordsAreWGS84(ring));
+      }
+      return featureCoordsValid(f);
+    });
+    if (cableFeaturesToProcess.length > validLines.length) {
+      warnings.push(`${cableFeaturesToProcess.length - validLines.length} cable feature(s) skipped — coordinates not WGS84.`);
+    }
+
+    let cableFeaturesToAdd = [];
+    validLines.forEach((f, fi) => {
+      const restoredProps = deserializeProps(f.properties || {});
+      const originalStartId = restoredProps.start_node?.id;
+      const originalEndId = restoredProps.end_node?.id;
+
+      // Map old IDs to new IDs using idMap
+      const newStartNode = originalStartId ? { ...restoredProps.start_node, id: idMap.get(originalStartId) || originalStartId } : (restoredProps.start_node || null);
+      const newEndNode = originalEndId ? { ...restoredProps.end_node, id: idMap.get(originalEndId) || originalEndId } : (restoredProps.end_node || null);
+
+      if (f.geometry?.type === 'MultiLineString') {
+        const validRings = f.geometry.coordinates.filter(ring => coordsAreWGS84(ring));
+        validRings.forEach((coords, idx) => {
+          cableFeaturesToAdd.push({
+            ...f,
+            id: crypto.randomUUID(),
+            geometry: { type: 'LineString', coordinates: coords },
+            properties: {
+              name: restoredProps.name ? `${restoredProps.name}_${idx + 1}` : `Cable ${fi + idx + 1}`,
+              cable_type_id: restoredProps.cable_type_id || selectedCableTypeId,
+              length_m: calcLineLength(coords),
+              start_node: newStartNode,
+              end_node: newEndNode,
+              ...restoredProps,
+            },
+          });
+        });
+      } else {
+        const coords = f.geometry.coordinates;
+        cableFeaturesToAdd.push({
+          ...f,
+          id: crypto.randomUUID(),
+          properties: {
+            name: restoredProps.name || `Cable ${fi + 1}`,
+            cable_type_id: restoredProps.cable_type_id || selectedCableTypeId,
+            length_m: restoredProps.length_m || calcLineLength(coords),
+            start_node: newStartNode,
+            end_node: newEndNode,
+            ...restoredProps,
+          },
+        });
+      }
+    });
+
+    // ── Phase 3: Merge into existing typed layers ────────────────────────────
     setLayers(prev => {
+      const turbineLayer = prev.find(l => l.type === 'turbine');
+      const cableLayer = prev.find(l => l.type === 'cable');
+      const substationLayer = prev.find(l => l.type === 'substation');
+
       let next = [...prev];
-      if (turbineFeaturesToAdd.length > 0) {
-        next = next.map(l => l.type === 'turbine' ? { ...l, features: [...(l.features || []), ...turbineFeaturesToAdd] } : l);
+
+      if (turbineFeaturesToAdd.length > 0 && turbineLayer) {
+        next = next.map(l => 
+          l.id === turbineLayer.id 
+            ? { ...l, features: [...(l.features || []), ...turbineFeaturesToAdd] } 
+            : l
+        );
       }
-      if (cableFeaturesToAdd.length > 0) {
-        next = next.map(l => l.type === 'cable' ? { ...l, features: [...(l.features || []), ...cableFeaturesToAdd] } : l);
+
+      if (cableFeaturesToAdd.length > 0 && cableLayer) {
+        next = next.map(l => 
+          l.id === cableLayer.id 
+            ? { ...l, features: [...(l.features || []), ...cableFeaturesToAdd] } 
+            : l
+        );
       }
-      if (substationFeaturesToAdd.length > 0) {
-        next = next.map(l => l.type === 'substation' ? { ...l, features: [...(l.features || []), ...substationFeaturesToAdd] } : l);
+
+      if (substationFeaturesToAdd.length > 0 && substationLayer) {
+        next = next.map(l => 
+          l.id === substationLayer.id 
+            ? { ...l, features: [...(l.features || []), ...substationFeaturesToAdd] } 
+            : l
+        );
       }
+
       return [...next, ...layersToAdd];
     });
 
     if (warnings.length > 0) {
-      // Show after state update so modal is gone first
       setTimeout(() => {
         alert(`Import completed with warnings:\n\n${warnings.join('\n\n')}`);
       }, 100);
