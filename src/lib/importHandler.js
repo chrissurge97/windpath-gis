@@ -385,18 +385,22 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
                 cleanFeatures = expanded;
               }
 
-              const hasEvMeta = !!sample.ev_type; // true = came from EagleView export
+              // Prefer restored _layer* metadata from deserialized features, fall back to ev_*
+              const hasEvMeta = !!sample.ev_type;
+              const restoredVisible = sample._layerVisible != null ? sample._layerVisible !== 'false' : evVisible;
+              const restoredNoTurbines = sample._layerNoTurbines != null ? sample._layerNoTurbines === 'true' : evNoturb;
+              
               const layerId = `lyr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
               rawLayers.push({
                 id: layerId,
                 name: geojson._layerName || baseName,
-                type: evType,
-                visible: evVisible,
-                color: evColor,
-                fillOpacity: evOpacity,
-                strokeWeight: evStroke,
-                strokeOpacity: evSopac,
-                no_turbines: evNoturb,
+                type: sample._layerType || evType,
+                visible: restoredVisible,
+                color: sample._layerColor || evColor,
+                fillOpacity: sample._layerFillOpacity != null ? parseFloat(sample._layerFillOpacity) : evOpacity,
+                strokeWeight: sample._layerStrokeWeight != null ? parseFloat(sample._layerStrokeWeight) : evStroke,
+                strokeOpacity: sample._layerStrokeOpacity != null ? parseFloat(sample._layerStrokeOpacity) : evSopac,
+                no_turbines: restoredNoTurbines,
                 features: cleanFeatures,
                 _hadEvMeta: hasEvMeta,
               });
