@@ -415,12 +415,7 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           );
 
           if (rawLayers.length > 0 && !allHaveEvMeta) {
-            if (onClassifyMode) {
-              log(`Asking for classification mode`, 'info');
-              onClassifyMode(rawLayers);
-              return;
-            }
-            // If no onClassifyMode handler, proceed with auto-classification path
+            // Always auto-import shapefiles — never show the classify modal
             log(`Auto-importing with geometry-based classification`, 'info');
 
             // Auto-snap cable endpoints to turbines/substations from same import batch
@@ -483,18 +478,8 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
 
           // All layers have ev_* metadata — ask user: auto-import or manual classify?
           if (rawLayers.length > 0 && allHaveEvMeta) {
-            const choice = window.confirm(
-              `Shapefile contains ${rawLayers.length} layer(s) with restored metadata.\n\n` +
-              `Auto-import with saved styles, or manually reclassify?` +
-              `\n\nOK = Auto-import  |  Cancel = Manual Classify`
-            );
-            if (!choice && onClassify) {
-              log(`Opening classify wizard for manual reclassification`, 'info');
-              onClassify(rawLayers);
-              return;
-            }
-            // Auto-import path
-             log(`Auto-importing ${rawLayers.length} layer(s) with restored styles`, 'success');
+            // Always auto-import with restored metadata — no prompt
+            log(`Auto-importing ${rawLayers.length} layer(s) with restored styles`, 'success');
 
              // For cable layers with ev_* metadata, preserve existing start/end nodes (don't re-snap)
              for (const layer of rawLayers) {
