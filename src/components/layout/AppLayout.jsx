@@ -4,13 +4,14 @@ import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import {
-  BookOpen, Map,
+  BookOpen, Map, FolderOpen,
   Menu, X, ChevronRight, PanelLeftClose, PanelLeftOpen } from
 'lucide-react';
 
 const NAV_ITEMS = [
 { path: '/', label: 'Learn', icon: BookOpen },
 { path: '/planning', label: 'Planning Tool', icon: Map },
+{ path: '/files', label: 'File Explorer', icon: FolderOpen },
 ];
 
 

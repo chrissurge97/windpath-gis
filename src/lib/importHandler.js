@@ -415,12 +415,7 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           );
 
           if (rawLayers.length > 0 && !allHaveEvMeta) {
-            if (onClassifyMode) {
-              log(`Asking for classification mode`, 'info');
-              onClassifyMode(rawLayers);
-              return;
-            }
-            // If no onClassifyMode handler, proceed with auto-classification path
+            // Always auto-import shapefiles — skip classification modal
             log(`Auto-importing with geometry-based classification`, 'info');
 
             // Auto-snap cable endpoints to turbines/substations from same import batch

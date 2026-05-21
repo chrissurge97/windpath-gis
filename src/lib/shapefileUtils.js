@@ -331,11 +331,12 @@ function buildDBF(features) {
   const enc = new TextEncoder();
   const FIELD_LEN = 80; // safe max for broad compatibility
 
-  // Collect unique field names (max 10 chars for DBF), skip any residual _ fields
+  // Collect unique field names (max 10 chars for DBF)
+  // Include all fields - abbreviated _* fields are already mapped to short names
   const fieldSet = new Set();
   for (const f of features) {
     for (const k of Object.keys(f.properties || {})) {
-      if (k && !k.startsWith('_')) fieldSet.add(k.slice(0, 10));
+      if (k) fieldSet.add(k.slice(0, 10));
     }
   }
   const fields = [...fieldSet].slice(0, 128);
@@ -427,14 +428,16 @@ export function exportShapefile(geojson, baseName = 'export') {
   for (const [layerName, features] of layerGroups) {
     // Pull layer metadata from the first feature (all features in this group share the same layer)
     const firstProps = features[0]?.properties || {};
+    // Read layer-level values directly from the layer group (passed via _layer* props on features)
+    // Note: after abbreviation, keys are lyrVisible, lyrNoTurb etc. Read them from firstProps directly.
     const layerMeta = {
-      ev_type:    firstProps._layerType    || 'polygon',
-      ev_color:   firstProps._layerColor   || '#06b6d4',
-      ev_opacity: String(firstProps._layerFillOpacity ?? 0.15),
-      ev_stroke:  String(firstProps._layerStrokeWeight ?? 2),
-      ev_sopac:   String(firstProps._layerStrokeOpacity ?? 0.9),
-      ev_visible: firstProps._layerVisible === false ? 'false' : 'true',
-      ev_noturb:  firstProps._layerNoTurbines ? 'true' : 'false',
+      ev_type:    firstProps._layerType    || firstProps.lyrType    || 'polygon',
+      ev_color:   firstProps._layerColor   || firstProps.lyrColor   || '#06b6d4',
+      ev_opacity: String(firstProps._layerFillOpacity ?? firstProps.lyrFillOp ?? 0.15),
+      ev_stroke:  String(firstProps._layerStrokeWeight ?? firstProps.lyrStrkWt ?? 2),
+      ev_sopac:   String(firstProps._layerStrokeOpacity ?? firstProps.lyrStrkOp ?? 0.9),
+      ev_visible: (firstProps._layerVisible === false || firstProps._layerVisible === 'false' || firstProps.lyrVisible === 'false') ? 'false' : 'true',
+      ev_noturb:  (firstProps._layerNoTurbines === true || firstProps._layerNoTurbines === 'true' || firstProps.lyrNoTurb === 'true') ? 'true' : 'false',
     };
 
     // Preserve ALL metadata with abbreviated names that fit DBF's 10-char field limit

@@ -9,8 +9,8 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import AppLayout from '@/components/layout/AppLayout';
 import Learn from '@/pages/Learn';
 import Planning from '@/pages/Planning';
-
 import DataTables from '@/pages/DataTables';
+import FileExplorer from '@/pages/FileExplorer';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -44,6 +44,7 @@ const AuthenticatedApp = () => {
         <Route path="/planning" element={<Planning />} />
 
         <Route path="/data" element={<DataTables />} />
+        <Route path="/files" element={<FileExplorer />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
