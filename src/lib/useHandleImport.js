@@ -30,22 +30,17 @@ export function useHandleImport({
   selectedTurbineType,
   selectedCableTypeId,
   setImportLoading,
-  addImportLog,
   setImportClassifyLayers,
   handleSwitchProject,
   setTurbineTypes,
   setCableTypes,
   setLayers,
-  setShowImportConsole,
-  setImportLogs,
   onCableTopology,
+  onImportComplete,
 }) {
   return function handleImport() {
-    setImportLogs([]);
-    setShowImportConsole(true);
     openImportFilePicker({
       onLoading: (loading) => setImportLoading(loading),
-      onLog: addImportLog,
       defaultTurbineType: selectedTurbineType,
       defaultCableTypeId: selectedCableTypeId,
       onClassifyMode: (rawLayers) => {
@@ -55,6 +50,7 @@ export function useHandleImport({
       onProject: (project) => {
         const tempId = '__imported_' + Date.now() + '__';
         handleSwitchProject(tempId, { ...project, id: tempId });
+        if (onImportComplete) onImportComplete();
       },
       onTypesUpdate: ({ turbineTypes: tt, cableTypes: ct }) => {
         if (tt?.length) setTurbineTypes(tt);
@@ -64,6 +60,7 @@ export function useHandleImport({
       onLayers: (importedLayers) => {
         startTransition(() => {
           setLayers(prev => mergeIntoLayers(prev, importedLayers));
+          if (onImportComplete) onImportComplete();
         });
       },
     });
