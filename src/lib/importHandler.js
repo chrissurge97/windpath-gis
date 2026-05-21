@@ -415,18 +415,13 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           );
 
           if (rawLayers.length > 0 && !allHaveEvMeta) {
-            // Always auto-import shapefiles — skip classification modal
-            log(`Auto-importing with geometry-based classification`, 'info');
-
-            // Clear any stale node IDs embedded in DBF — new feature IDs differ, spatial snap will re-assign
-            for (const layer of rawLayers) {
-              if (layer.type === 'cable') {
-                layer.features = layer.features.map(f => ({
-                  ...f,
-                  properties: { ...f.properties, start_node: null, end_node: null }
-                }));
-              }
+            if (onClassifyMode) {
+              log(`Asking for classification mode`, 'info');
+              onClassifyMode(rawLayers);
+              return;
             }
+            // If no onClassifyMode handler, proceed with auto-classification path
+            log(`Auto-importing with geometry-based classification`, 'info');
 
             // Auto-snap cable endpoints to turbines/substations from same import batch
             const turbineLayer = rawLayers.find(l => l.type === 'turbine');
@@ -486,21 +481,29 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
             allImported.push(...rawLayers);
           }
 
-          // All layers have ev_* metadata — auto-import with restored styles
+          // All layers have ev_* metadata — ask user: auto-import or manual classify?
           if (rawLayers.length > 0 && allHaveEvMeta) {
-            log(`Auto-importing ${rawLayers.length} layer(s) with restored styles`, 'success');
-            // Clear stale start/end node IDs from cables — the shapefile parser assigns new IDs
-            // to all features, so stored IDs are stale. Spatial snapping below will re-establish them.
-            for (const layer of rawLayers) {
-              if (layer.type === 'cable') {
-                layer.features = layer.features.map(f => ({
-                  ...f,
-                  properties: { ...f.properties, start_node: null, end_node: null }
-                }));
-              }
-              allImported.push(layer);
+            const choice = window.confirm(
+              `Shapefile contains ${rawLayers.length} layer(s) with restored metadata.\n\n` +
+              `Auto-import with saved styles, or manually reclassify?` +
+              `\n\nOK = Auto-import  |  Cancel = Manual Classify`
+            );
+            if (!choice && onClassify) {
+              log(`Opening classify wizard for manual reclassification`, 'info');
+              onClassify(rawLayers);
+              return;
             }
-          }
+            // Auto-import path
+             log(`Auto-importing ${rawLayers.length} layer(s) with restored styles`, 'success');
+
+             // For cable layers with ev_* metadata, preserve existing start/end nodes (don't re-snap)
+             for (const layer of rawLayers) {
+               if (layer.type === 'cable' && layer._hadEvMeta) {
+                 log(`Preserving cable node assignments for ${layer.features?.length || 0} cables`, 'info');
+               }
+               allImported.push(layer);
+             }
+            }
 
         } else if (fname.endsWith('.json') || fname.endsWith('.geojson')) {
           log(`Parsing GeoJSON: ${file.name}`);
