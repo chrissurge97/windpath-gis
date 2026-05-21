@@ -415,7 +415,15 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           );
 
           if (rawLayers.length > 0 && !allHaveEvMeta) {
-            // Always auto-import shapefiles — never show the classify modal
+            // Show classify modal for manual classification
+            if (onClassify) {
+              log(`Opening classify wizard`, 'info');
+              if (onLoading) onLoading(false);
+              onClassify(rawLayers);
+              return;
+            }
+
+            // Fallback: auto-import if no classify handler provided
             log(`Auto-importing with geometry-based classification`, 'info');
 
             // Auto-snap cable endpoints to turbines/substations from same import batch

@@ -48,6 +48,13 @@ function FileExplorerModal({ mode, currentProjectId, currentProjectName, current
     });
   }, []);
 
+  useEffect(() => {
+    if (mode !== 'open') return;
+    const handler = (e) => { if (e.key === 'Enter' && selected) handleOpen(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [mode, selected]);
+
   const handleOpen = async () => {
     if (selected === DEMO_ID) {
       const demo = buildDemoProject();

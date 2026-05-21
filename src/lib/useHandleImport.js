@@ -149,6 +149,10 @@ export function useHandleImport({
       onLoading: (loading) => setImportLoading(loading),
       defaultTurbineType: selectedTurbineType,
       defaultCableTypeId: selectedCableTypeId,
+      onClassify: (rawLayers) => {
+        setImportLoading(false);
+        setImportClassifyLayers(rawLayers);
+      },
       onClassifyMode: (rawLayers) => {
         setImportLoading(false);
         setImportClassifyLayers(rawLayers);
