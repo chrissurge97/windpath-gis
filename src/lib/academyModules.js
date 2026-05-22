@@ -282,7 +282,9 @@ You're working with data from the planning team — your job is to get it into t
         goal: 'Create three new layers: "Leased Land", "Negotiating Land", and "Hard Exclusions".',
         tasks: [
           { id: 'layers_tab', label: 'Open the Layers tab', watch: 'tab', value: 'layers', required: true },
-          { id: 'layer_count', label: 'Create at least 3 polygon layers', watch: 'polygonLayerCount', minValue: 4, required: true },
+          { id: 'layer_leased', label: 'Create a layer named "Leased Land"', watch: 'layerExists', value: 'Leased Land', required: true },
+          { id: 'layer_negotiating', label: 'Create a layer named "Negotiating Land"', watch: 'layerExists', value: 'Negotiating Land', required: true },
+          { id: 'layer_exclusions', label: 'Create a layer named "Hard Exclusions"', watch: 'layerExists', value: 'Hard Exclusions', required: true },
         ],
         why: 'Professional projects separate data into meaningful layers — it makes the map readable and the data auditable.',
         hint: 'In the Layers tab, click "+ Add Zone" to create new layers. Create at least 3 in addition to the default Site Boundary.',
@@ -294,7 +296,7 @@ You're working with data from the planning team — your job is to get it into t
         story: 'The ecology report came back: there\'s a 500m residential buffer in the southwest and a blanket bog SAC in the northeast. Both are hard no-turbine zones.',
         goal: 'Draw at least one polygon in the "Hard Exclusions" layer and mark it as No-Turbine Zone.',
         tasks: [
-          { id: 'select_hard_layer', label: 'Select the Hard Exclusions layer', watch: 'selectedLayerType', value: 'polygon', required: false },
+          { id: 'select_hard_layer', label: 'Select the Hard Exclusions layer', watch: 'layerSelected', value: 'Hard Exclusions', required: true },
           { id: 'exclusion_drawn', label: 'Draw an exclusion polygon', watch: 'polygonCount', minValue: 2, required: true },
           { id: 'no_turbine_set', label: 'Set at least one polygon as No-Turbine Zone', watch: 'noTurbineZoneCount', minValue: 1, required: true },
         ],

@@ -122,6 +122,16 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
         if (task.watch === 'event' && evt?.type === task.value) done = true;
         if (task.watch === 'download' && evt?.type === 'download_clicked' && evt?.payload?.fileId === task.value) done = true;
 
+        // Layer name checks (case-insensitive, trimmed)
+        if (task.watch === 'layerExists') {
+          const target = task.value?.trim().toLowerCase();
+          done = (state?.layerNames || []).includes(target);
+        }
+        if (task.watch === 'layerSelected') {
+          const target = task.value?.trim().toLowerCase();
+          done = evt?.type === 'layer_selected' && evt?.payload?.layerName?.trim().toLowerCase() === target;
+        }
+
         if (done) { next[task.id] = true; changed = true; setJustCompleted(task.id); setTimeout(() => setJustCompleted(null), 2000); }
       });
 

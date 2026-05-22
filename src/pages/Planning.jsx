@@ -344,6 +344,7 @@ export default function Planning() {
       totalLayerCount: layers.length,
       noTurbineZoneCount,
       importCount: window.__importCount__ || 0,
+      layerNames: layers.map(l => l.name.trim().toLowerCase()),
       ts: Date.now(),
     };
   }, [mode, rightTab, baseMap, turbines.length, cables.length, substations.length, layers]);

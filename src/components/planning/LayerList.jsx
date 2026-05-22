@@ -80,6 +80,7 @@ export default function LayerList({
             <div
               onClick={() => {
                 setSelectedLayerId(layer.id);
+                window.__trainingEvent__ = { type: 'layer_selected', payload: { layerName: layer.name }, ts: Date.now() };
                 if (mapRef.current && layer.features.length > 0) {
                   const allPts = layer.features.flatMap(f => {
                     const g = f.geometry;
