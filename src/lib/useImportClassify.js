@@ -291,6 +291,9 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
       }, 100);
     }
 
+    window.__importCount__ = (window.__importCount__ || 0) + 1;
+    window.__trainingEvent__ = { type: 'import_completed', payload: {}, ts: Date.now() };
+
     setImportClassifyLayers(null);
   }, [layers, selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers]);
 }
