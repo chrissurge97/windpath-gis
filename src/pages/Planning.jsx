@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import {
   Wind, Zap, Map, MousePointer, Pentagon, Trash2, Download,
   Upload, RefreshCw, Plus, Eye, EyeOff, BarChart2, Target, FolderOpen,
-  Layers, Settings, X, Satellite, Navigation, Type, Table,
+  Layers, Settings, X, Satellite, Navigation, Type, Table, MapPin,
   ChevronDown, ChevronRight, ArrowUp, ArrowDown, PlusCircle, Save } from
 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
@@ -149,7 +149,7 @@ function MapClickHandler({ mode, onAddPoint, onFinishPolygon, onFinishCable }) {
   const mapRef = useRef(null);
   const map = useMapEvents({
     click(e) {
-      if (!['place_turbine', 'draw_polygon', 'draw_cable', 'place_substation', 'place_text'].includes(mode)) return;
+      if (!['place_turbine', 'draw_polygon', 'draw_cable', 'place_substation', 'place_text', 'place_point'].includes(mode)) return;
       const now = Date.now();
       if (now - lastClickTime.current < 350) {
         if (mode === 'draw_polygon') {e.originalEvent.preventDefault();onFinishPolygon();}
@@ -467,6 +467,35 @@ export default function Planning() {
       updateLayer(targetLayer.id, { features: [...targetLayer.features, f] });
       // Immediately open the edit menu for this new annotation
       setTextAnnotationMenu({ feature: f, layerId: targetLayer.id });
+      setMode('select');
+      return;
+    }
+
+    if (mode === 'place_point') {
+      // Place a point into the selected point layer, or create one if none exists
+      const pointLayers = layers.filter(l => l.type === 'point');
+      let targetLayer = pointLayers.find(l => l.id === selectedLayerId) || pointLayers[0];
+      if (!targetLayer) {
+        // Auto-create a point layer
+        const newLayer = createLayer({ name: 'Points', type: 'point', color: '#8b5cf6', fillOpacity: 1 });
+        setLayers(prev => [...prev, newLayer]);
+        const f = createFeature(newLayer.id,
+          { type: 'Point', coordinates: [latlng.lng, latlng.lat] },
+          { name: `Point 1`, notes: '' }
+        );
+        setLayers(prev => prev.map(l => l.id === newLayer.id ? { ...l, features: [...l.features, f] } : l));
+        setPointMenuFeature(f);
+        setPointMenuLayerId(newLayer.id);
+        setMode('select');
+        return;
+      }
+      const f = createFeature(targetLayer.id,
+        { type: 'Point', coordinates: [latlng.lng, latlng.lat] },
+        { name: `Point ${targetLayer.features.length + 1}`, notes: '' }
+      );
+      updateLayer(targetLayer.id, { features: [...targetLayer.features, f] });
+      setPointMenuFeature(f);
+      setPointMenuLayerId(targetLayer.id);
       setMode('select');
       return;
     }
@@ -853,13 +882,14 @@ export default function Planning() {
   }), [windParams]);
 
   const isDraggingPolygon = polygonDragRef.current?.id != null;
-  const cursorStyle = isDraggingPolygon ? 'grabbing' : { select: 'default', pan: 'grab', draw_polygon: 'crosshair', place_turbine: 'cell', draw_cable: 'crosshair', place_text: 'text', place_substation: 'cell' }[mode] || 'default';
+  const cursorStyle = isDraggingPolygon ? 'grabbing' : { select: 'default', pan: 'grab', draw_polygon: 'crosshair', place_turbine: 'cell', draw_cable: 'crosshair', place_text: 'text', place_substation: 'cell', place_point: 'crosshair' }[mode] || 'default';
 
   const DRAW_TOOLS = [
   { id: 'draw_polygon', label: 'Polygon', icon: Pentagon },
   { id: 'place_turbine', label: 'Place Turbine', icon: Wind },
   { id: 'draw_cable', label: 'Draw Cable', icon: Zap },
   { id: 'place_substation', label: 'Substation', icon: Target },
+  { id: 'place_point', label: 'Place Point', icon: MapPin },
   { id: 'place_text', label: 'Place Text', icon: Type }];
 
   const activeDrawTool = DRAW_TOOLS.find((t) => t.id === mode);
@@ -984,6 +1014,10 @@ export default function Planning() {
               setDrawToolsOpen(false);
               if (id === 'draw_polygon' || id === 'place_text') {
                 const first = layers.find((l) => !['turbine', 'cable', 'wind_resource', 'substation'].includes(l.type));
+                if (first) setSelectedLayerId(first.id);
+              }
+              if (id === 'place_point') {
+                const first = layers.find((l) => l.type === 'point');
                 if (first) setSelectedLayerId(first.id);
               }
             }}
@@ -1497,6 +1531,7 @@ export default function Planning() {
               {mode === 'draw_cable' && `Click to add waypoints • Hover near turbine/substation to snap • Double-click to finish (${selectedCableType?.name})`}
               {mode === 'place_substation' && `Click map to place a substation — then click it to edit attributes`}
               {mode === 'place_text' && `Click the map to place a text annotation`}
+              {mode === 'place_point' && `Click the map to place a point — opens edit menu after placement`}
             </div>
           }
 
