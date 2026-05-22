@@ -27,18 +27,45 @@ export function pointInPolygon(lng, lat, polygonGeometry) {
 
 /**
  * Check if a lat/lng point falls inside any exclusion polygon across all layers.
+ * Also checks point features with a setback radius and no_turbines=true.
  * Returns the first matching { layer, feature } or null.
  */
 export function checkExclusionZones(lat, lng, layers) {
   for (const layer of layers) {
-    if (!layer.no_turbines) continue;
     if (!layer.visible) continue;
-    for (const feature of layer.features) {
-      if (feature.geometry.type !== 'Polygon') continue;
-      if (pointInPolygon(lng, lat, feature.geometry)) {
-        return { layer, feature };
+
+    // Polygon-based exclusion zones
+    if (layer.no_turbines) {
+      for (const feature of layer.features) {
+        if (feature.geometry.type !== 'Polygon') continue;
+        if (pointInPolygon(lng, lat, feature.geometry)) {
+          return { layer, feature };
+        }
+      }
+    }
+
+    // Point-based setback exclusion zones (no_turbines on individual feature)
+    if (layer.type === 'point') {
+      for (const feature of layer.features) {
+        if (feature.geometry.type !== 'Point') continue;
+        if (!feature.properties?.no_turbines) continue;
+        const setbackM = parseFloat(feature.properties?.setback_m) || 0;
+        if (setbackM <= 0) continue;
+        const [fLng, fLat] = feature.geometry.coordinates;
+        const dist = haversineM(lat, lng, fLat, fLng);
+        if (dist <= setbackM) {
+          return { layer, feature };
+        }
       }
     }
   }
   return null;
+}
+
+function haversineM(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
