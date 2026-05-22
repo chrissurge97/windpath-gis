@@ -444,15 +444,15 @@ Your brief: "Place 5–7 turbines on the Glenhaven ridge, respecting all exclusi
       {
         id: 'enable_setbacks',
         title: '📏 Enable Setback Radii',
-        story: 'Your planning advisor calls: "Before you share the layout, check the setback zones. Every turbine needs 500m from a dwelling."',
-        goal: 'Enable setback radius overlay in the Turbines tab.',
+        story: 'Your planning advisor calls: "Before you share the layout, check the turbine-to-turbine spacing. Industry guidance recommends a minimum of 5D — five times the rotor diameter — between turbines to limit wake losses."',
+        goal: 'Enable at least one setback radius in the Turbine Setback Config panel.',
         tasks: [
           { id: 'tab_turbines_2', label: 'Open the Turbines tab', watch: 'tab', value: 'turbines', required: true },
-          { id: 'setback_enabled', label: 'Enable setback radii overlay', watch: 'event', value: 'setback_toggled', required: true },
+          { id: 'setback_enabled', label: 'Enable a setback radius (toggle one ON)', watch: 'event', value: 'radii_enabled', required: true },
         ],
-        why: 'Setback radii are critical for planning compliance. 5D (750m for 150m rotor) is a common onshore spacing guide.',
-        hint: 'In the Turbines tab, scroll down to find the "Turbine Setback Radii" section. Toggle on the 5D radius.',
-        coachTip: '🔴 Enable "Block Placement" on a radius to prevent other turbines being placed too close.',
+        why: 'Turbine separation is measured in rotor diameters (D). 5D in the prevailing wind direction and 3D crosswind is a common minimum — for a 150m rotor that\'s 750m and 450m respectively.',
+        hint: 'In the Turbines tab, click "Turbine Setback Config" to expand the editor, then toggle the green switch on the 5D radius to enable it.',
+        coachTip: '🔴 Enable "Block Placement" on a radius to prevent other turbines being placed inside the separation zone.',
       },
       {
         id: 'rename_turbines',

@@ -52,7 +52,11 @@ export default function TurbineRadiiEditor({ radii, onChange }) {
             <div className="flex items-center gap-2">
               {/* On/off toggle */}
               <button
-                onClick={() => update(r.id, { enabled: !r.enabled })}
+                onClick={() => {
+                  const next = !r.enabled;
+                  update(r.id, { enabled: next });
+                  if (next) window.__trainingEvent__ = { type: 'radii_enabled', payload: { id: r.id }, ts: Date.now() };
+                }}
                 className={cn(
                   "w-7 h-3.5 rounded-full transition-colors relative shrink-0",
                   r.enabled ? "bg-emerald-500" : "bg-slate-600"
