@@ -119,13 +119,13 @@ function importShapefileOffThread(arrayBuffer, filename, onLog) {
 
 // ── Auto-classify a single layer based on geometry ──────────────────────────
 function autoClassify(layer) {
-  if (layer.type === 'turbine' || layer.type === 'cable' || layer.type === 'substation') {
+  if (layer.type === 'turbine' || layer.type === 'cable' || layer.type === 'substation' || layer.type === 'point') {
     return layer.type;
   }
   const features = layer.features || [];
   if (features.length === 0) return 'keep';
   const firstType = features[0].geometry?.type;
-  if (firstType === 'Point') return 'turbine';
+  if (firstType === 'Point') return 'point';
   if (firstType === 'LineString' || firstType === 'MultiLineString') return 'cable';
   if (firstType === 'Polygon' || firstType === 'MultiPolygon') return 'polygon';
   return 'keep';
@@ -163,13 +163,27 @@ function autoClassifyGeojson(geojson, baseName, defaultTurbineType, defaultCable
   let substationFeatures = [];
   let cableLayer = null;
 
+  // Check if source GeoJSON is already typed as a 'point' layer (e.g. round-trip from export)
+  const sourceLayerType = geojson.features?.[0]?.properties?._layerType;
+  const isPointLayer = sourceLayerType === 'point';
+
   if (points.length) {
+    let pointLayerFeatures = [];
     points.forEach((f, i) => {
       const baseProps = Object.fromEntries(Object.entries(f.properties || {}).filter(([k]) => !['name', 'Name', 'turbine_type_id'].includes(k)));
       // Check if this point has substation capacity fields
       const isSubstationType = baseProps.transformer_mva != null || baseProps.capacity_generation_mw != null || baseProps.capacity_demand_mw != null;
-      
-      if (isSubstationType) {
+
+      if (isPointLayer) {
+        // Preserve as generic point layer feature
+        pointLayerFeatures.push({
+          ...f,
+          properties: {
+            name: f.properties?.Name || f.properties?.name || `Point ${i + 1}`,
+            ...baseProps,
+          },
+        });
+      } else if (isSubstationType) {
         substationFeatures.push({
           ...f,
           properties: {
@@ -195,7 +209,17 @@ function autoClassifyGeojson(geojson, baseName, defaultTurbineType, defaultCable
         });
       }
     });
-    
+
+    if (pointLayerFeatures.length > 0) {
+      layers.push({
+        id: layerId(), name: baseName,
+        type: 'point', visible: true,
+        color: geojson.features?.[0]?.properties?._layerColor || '#8b5cf6',
+        fillOpacity: 1, strokeWeight: 2, strokeOpacity: 0.9,
+        no_turbines: false, features: pointLayerFeatures,
+      });
+    }
+
     if (turbineFeatures.length > 0) {
       layers.push({
         id: layerId(), name: `${baseName} (Turbines)`,
@@ -204,7 +228,7 @@ function autoClassifyGeojson(geojson, baseName, defaultTurbineType, defaultCable
         no_turbines: false, features: turbineFeatures,
       });
     }
-    
+
     if (substationFeatures.length > 0) {
       layers.push({
         id: layerId(), name: `${baseName} (Substations)`,
@@ -586,9 +610,9 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
             if (csvFeatures.length > 0) {
               log(`CSV → GeoJSON: ${csvFeatures.length} point features`, 'success');
               const rawLayer = {
-                id: `lyr_csv_${Date.now()}`, name: baseName, type: 'polygon',
-                visible: true, color: '#8b5cf6', fillOpacity: 0.2,
-                strokeOpacity: 0.8, strokeWeight: 2, no_turbines: false, features: csvFeatures,
+                id: `lyr_csv_${Date.now()}`, name: baseName, type: 'point',
+                visible: true, color: '#8b5cf6', fillOpacity: 1,
+                strokeOpacity: 0.9, strokeWeight: 2, no_turbines: false, features: csvFeatures,
               };
               if (onLoading) onLoading(false);
               // Always go through classify modal so user can assign type (turbine, etc.)

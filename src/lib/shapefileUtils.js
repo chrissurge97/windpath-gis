@@ -453,6 +453,8 @@ export function exportShapefile(geojson, baseName = 'export') {
       '_featureTransformerMva': 'fTransMva',
       '_featureCapacityGenerationMw': 'fCapGenMw',
       '_featureCapacityDemandMw': 'fCapDmdMw',
+      '_featureSetbackM': 'fSetbackM',
+      '_featureNoTurbines': 'fNoTurbs',
     };
     
     const cleanFeatures = features.map(f => {
@@ -541,6 +543,8 @@ function deserializeProps(props) {
     'fTransMva': '_featureTransformerMva',
     'fCapGenMw': '_featureCapacityGenerationMw',
     'fCapDmdMw': '_featureCapacityDemandMw',
+    'fSetbackM': '_featureSetbackM',
+    'fNoTurbs': '_featureNoTurbines',
   };
 
   const out = {};

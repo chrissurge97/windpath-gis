@@ -35,7 +35,7 @@ function mergeIntoLayers(prev, importedLayers) {
   const next = prev.map(l => ({ ...l }));
   const idMap = new Map(); // original id → new id
 
-  // Separate typed vs non-typed
+  // Separate typed vs non-typed (point layers are added as-is, like polygon layers)
   const TYPED = ['turbine', 'cable', 'substation'];
   const typedLayers = importedLayers.filter(l => TYPED.includes(l.type));
   const plainLayers = importedLayers.filter(l => !TYPED.includes(l.type));

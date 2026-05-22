@@ -32,7 +32,7 @@ function layerMeta(layer, feature) {
     _layerNoTurbines: layer.no_turbines || false,
     _layerVisible: layer.visible !== false,
   };
-  // Preserve critical feature data for cables and substations
+  // Preserve critical feature data for cables, substations, and point layers
   if (layer.type === 'cable' && feature?.properties?.cable_type_id) {
     meta._featureCableTypeId = feature.properties.cable_type_id;
   }
@@ -41,11 +41,17 @@ function layerMeta(layer, feature) {
     if (feature?.properties?.capacity_generation_mw != null) meta._featureCapacityGenerationMw = feature.properties.capacity_generation_mw;
     if (feature?.properties?.capacity_demand_mw != null) meta._featureCapacityDemandMw = feature.properties.capacity_demand_mw;
   }
+  // Point layers: preserve setback and no_turbines so they survive round-trips
+  if (layer.type === 'point') {
+    if (feature?.properties?.setback_m != null) meta._featureSetbackM = feature.properties.setback_m;
+    if (feature?.properties?.no_turbines != null) meta._featureNoTurbines = feature.properties.no_turbines;
+  }
   return meta;
 }
 
 const META_KEYS = new Set(['_layerId','_layerName','_layerType','_layerColor','_layerFillOpacity',
-  '_layerStrokeWeight','_layerStrokeOpacity','_layerNoTurbines','_layerVisible','_featureCableTypeId','_featureTransformerMva','_featureCapacityGenerationMw','_featureCapacityDemandMw']);
+  '_layerStrokeWeight','_layerStrokeOpacity','_layerNoTurbines','_layerVisible','_featureCableTypeId','_featureTransformerMva','_featureCapacityGenerationMw','_featureCapacityDemandMw',
+  '_featureSetbackM','_featureNoTurbines']);
 
 function stripLayerMeta(props) {
   const out = {};
@@ -56,6 +62,8 @@ function stripLayerMeta(props) {
       if (k === '_featureTransformerMva') { out.transformer_mva = v; continue; }
       if (k === '_featureCapacityGenerationMw') { out.capacity_generation_mw = v; continue; }
       if (k === '_featureCapacityDemandMw') { out.capacity_demand_mw = v; continue; }
+      if (k === '_featureSetbackM') { out.setback_m = v; continue; }
+      if (k === '_featureNoTurbines') { out.no_turbines = v; continue; }
       continue;
     }
     // Deserialize JSON-stringified objects (start_node, end_node, custom_fields, etc.)
