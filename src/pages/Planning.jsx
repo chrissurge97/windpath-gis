@@ -233,7 +233,7 @@ export default function Planning() {
 
   const [windParams, setWindParams] = useState({ k: 2.0, lambda: 7.0 });
   const [globalRadii, setGlobalRadii] = useState(() => initProj.globalRadii || DEFAULT_TURBINE_RADII);
-  const [showRadii, setShowRadii] = useState(true);
+  const [showRadii, setShowRadii] = useState(false);
 
   // Map display state
   const [baseMap, setBaseMap] = useState('roads'); // 'dark' | 'satellite' | 'roads'
@@ -1960,7 +1960,7 @@ export default function Planning() {
           setLayers={setLayers} mapRef={mapRef} setShowNewZoneDialog={setShowNewZoneDialog}
           projectName={projectName} setTurbineTypes={setTurbineTypes}
           globalRadii={globalRadii} onRadiiChange={setGlobalRadii}
-          showRadii={showRadii} onToggleRadii={() => { setShowRadii((v) => !v); window.__trainingEvent__ = { type: 'setback_toggled', payload: {}, ts: Date.now() }; }}
+          showRadii={showRadii} onToggleRadii={() => setShowRadii((v) => { if (!v) window.__trainingEvent__ = { type: 'setback_toggled', payload: {}, ts: Date.now() }; return !v; })}
           onDataTables={() => setShowDataTables(true)} />
         
       </div>

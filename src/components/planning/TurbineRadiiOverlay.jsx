@@ -10,8 +10,8 @@ import { cn } from '@/lib/utils';
 // Default radius presets (D multiples)
 export const DEFAULT_TURBINE_RADII = [
   { id: 'r3d',  dMultiple: 3,  label: '3D',  color: '#facc15', enabled: false, blockPlacement: false },
-  { id: 'r5d',  dMultiple: 5,  label: '5D',  color: '#f97316', enabled: true,  blockPlacement: false },
-  { id: 'r7d',  dMultiple: 7,  label: '7D',  color: '#ef4444', enabled: false, blockPlacement: true  },
+  { id: 'r5d',  dMultiple: 5,  label: '5D',  color: '#f97316', enabled: false, blockPlacement: false },
+  { id: 'r7d',  dMultiple: 7,  label: '7D',  color: '#ef4444', enabled: false, blockPlacement: false },
 ];
 
 export function getRadiusMetres(rotorDiameterM, dMultiple) {
