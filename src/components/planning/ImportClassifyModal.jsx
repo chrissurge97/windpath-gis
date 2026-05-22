@@ -93,7 +93,7 @@ export default function ImportClassifyModal({ layers, onConfirm, onClose }) {
   const [pointClass, setPointClass] = useState(() =>
     Object.fromEntries(pointItems.map(x => {
       const t = x.layer.type;
-      const def = (t === 'substation') ? 'substation' : (t === 'turbine') ? 'turbine' : 'turbine';
+      const def = (t === 'substation') ? 'substation' : (t === 'turbine') ? 'turbine' : (t === 'point') ? 'keep' : 'turbine';
       return [x.feature.id || x.feature.properties?.id || Math.random(), def];
     }))
   );
@@ -147,13 +147,13 @@ export default function ImportClassifyModal({ layers, onConfirm, onClose }) {
         layer: {
           id: layerId(),
           name,
-          type: cls === 'turbine' ? 'turbine' : cls === 'substation' ? 'substation' : 'polygon',
+          type: cls === 'turbine' ? 'turbine' : cls === 'substation' ? 'substation' : 'point',
           visible: true,
           color: cls === 'turbine' ? '#10b981' : cls === 'substation' ? '#facc15' : '#8b5cf6',
           fillOpacity: 0.8, strokeWeight: 2, strokeOpacity: 0.9, no_turbines: false,
           features,
         },
-        classification: cls,
+        classification: cls === 'keep' ? 'point' : cls,
       });
     }
 
@@ -360,7 +360,7 @@ export default function ImportClassifyModal({ layers, onConfirm, onClose }) {
 
             if (turbCount > 0)  summary.push({ icon: Wind,   color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/30', label: `${turbCount} turbine${turbCount !== 1 ? 's' : ''}`, sub: '→ Turbines layer' });
             if (subCount > 0)   summary.push({ icon: Target, color: 'text-yellow-400',  bg: 'bg-yellow-500/10 border-yellow-500/30',  label: `${subCount} substation${subCount !== 1 ? 's' : ''}`, sub: '→ Substations layer' });
-            if (ptKeep > 0)     summary.push({ icon: MapPin, color: 'text-cyan-400',    bg: 'bg-cyan-500/10 border-cyan-500/30',      label: `${ptKeep} point feature${ptKeep !== 1 ? 's' : ''}`, sub: '→ New polygon layer' });
+            if (ptKeep > 0)     summary.push({ icon: MapPin, color: 'text-purple-400',  bg: 'bg-purple-500/10 border-purple-500/30',  label: `${ptKeep} point feature${ptKeep !== 1 ? 's' : ''}`, sub: '→ New point layer (📍 visible on map)' });
             if (cableCount > 0) summary.push({ icon: Zap,    color: 'text-orange-400',  bg: 'bg-orange-500/10 border-orange-500/30',  label: `${cableCount} cable${cableCount !== 1 ? 's' : ''}`, sub: '→ Cables layer' });
             if (lineKeep > 0)   summary.push({ icon: Layers, color: 'text-cyan-400',    bg: 'bg-cyan-500/10 border-cyan-500/30',      label: `${lineKeep} line feature${lineKeep !== 1 ? 's' : ''}`, sub: '→ New polygon layer' });
 
