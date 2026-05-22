@@ -136,6 +136,20 @@ export function useImportClassify(layers, selectedTurbineType, selectedCableType
         const rest = layer.features?.filter(f => !isLine(f)) || [];
         if (rest.length > 0) layersToAdd.push({ ...layer, features: rest });
 
+      } else if (classification === 'point') {
+        // Point layer — keep features as-is, push as a standalone point layer
+        const pts = (layer.features || []).filter(f => featureCoordsValid(f));
+        if (pts.length > 0) {
+          layersToAdd.push({
+            ...layer,
+            type: 'point',
+            features: pts.map(f => ({
+              ...f,
+              id: f.id || crypto.randomUUID(),
+              properties: deserializeProps(f.properties || {}),
+            })),
+          });
+        }
       } else if (classification === 'keep') {
         layersToAdd.push(layer);
       }

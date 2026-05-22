@@ -25,6 +25,8 @@ import TurbineDataTable from '@/components/planning/TurbineDataTable';
 import CableDataTable from '@/components/planning/CableDataTable';
 import TurbineTypeEditor from '@/components/planning/TurbineTypeEditor';
 import PolygonMenu from '@/components/planning/PolygonMenu';
+import PointMenu from '@/components/planning/PointMenu';
+import SubstationMenu from '@/components/planning/SubstationMenu';
 import { DEFAULT_TURBINE_TYPES, DEFAULT_CABLE_TYPES } from '@/lib/turbineTypes';
 import { exportKML } from '@/lib/exportKMZ';
 import { exportProjectPDF } from '@/lib/exportPDF';
@@ -258,6 +260,10 @@ export default function Planning() {
   // Polygon menu state
   const [polygonMenuFeature, setPolygonMenuFeature] = useState(null);
   const [polygonMenuLayerId, setPolygonMenuLayerId] = useState(null);
+
+  // Point layer menu state
+  const [pointMenuFeature, setPointMenuFeature] = useState(null);
+  const [pointMenuLayerId, setPointMenuLayerId] = useState(null);
 
   // Vertex edit mode: featureId -> [[lat,lng],...]
   const [editingPolygonId, setEditingPolygonId] = useState(null);
@@ -1328,6 +1334,38 @@ export default function Planning() {
                 // Text annotations are rendered via TextOverlay (fixed pixel size)
                 if (f.geometry.type === 'Point' && f.properties._featureType === 'text') return null;
 
+                // Point layer features — rendered as purple dots
+                if (f.geometry.type === 'Point' && layer.type === 'point') {
+                  const [lng, lat] = f.geometry.coordinates;
+                  const ptIcon = L.divIcon({
+                    html: `<div style="width:10px;height:10px;background:${layer.color || '#8b5cf6'};border:2px solid rgba(255,255,255,0.6);border-radius:50%;box-shadow:0 0 6px ${layer.color || '#8b5cf6'}88"></div>`,
+                    className: '', iconSize: [10, 10], iconAnchor: [5, 5]
+                  });
+                  const setbackM = f.properties?.setback_m;
+                  return (
+                    <React.Fragment key={f.id}>
+                      <Marker position={[lat, lng]} icon={ptIcon}
+                        eventHandlers={{
+                          click: (e) => {
+                            if (mode === 'select' || mode === 'pan') {
+                              L.DomEvent.stopPropagation(e);
+                              setPointMenuFeature(f);
+                              setPointMenuLayerId(layer.id);
+                              setTurbineMenuFeature(null);
+                              setPolygonMenuFeature(null);
+                              setCableMenuFeature(null);
+                              setSubstationMenuFeature(null);
+                            }
+                          }
+                        }} />
+                      {setbackM > 0 && (
+                        <Circle center={[lat, lng]} radius={setbackM}
+                          pathOptions={{ color: layer.color || '#8b5cf6', fillColor: layer.color || '#8b5cf6', fillOpacity: 0.06, weight: 1, dashArray: '4 4', opacity: 0.5 }} />
+                      )}
+                    </React.Fragment>
+                  );
+                }
+
                 return null;
               });
             })}
@@ -1700,77 +1738,53 @@ export default function Planning() {
           })()}
 
           {/* Substation popup menu */}
-          {substationMenuFeature && (() => {
-            const [lng, lat] = substationMenuFeature.geometry.coordinates;
-            const p = substationMenuFeature.properties;
-            const subLayer = layers.find((l) => l.type === 'substation');
-            const connectedMw = calcSubstationLoad(substationMenuFeature.id, cables, turbines);
-            const capMw = p.capacity_generation_mw || 0;
-            const subOver = connectedMw > 0 && connectedMw > capMw + 0.01;
-            const connectedCables = cables.filter((c) =>
-            c.properties.start_node?.id === substationMenuFeature.id ||
-            c.properties.end_node?.id === substationMenuFeature.id
-            );
-            const updateSubProps = (newProps) => {
-              if (!subLayer) return;
-              updateLayer(subLayer.id, {
-                features: subLayer.features.map((f) =>
-                f.id === substationMenuFeature.id ? { ...f, properties: { ...f.properties, ...newProps } } : f
-                )
-              });
-            };
-            return (
-              <div className="absolute top-14 left-4 z-[1200] bg-slate-900 border border-yellow-500/40 rounded-xl shadow-2xl p-4 w-72">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] text-yellow-400 uppercase tracking-wider font-medium">⚡ Substation</span>
-                  <button onClick={() => setSubstationMenuFeature(null)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
-                </div>
-                {/* Live load summary */}
-                {connectedCables.length > 0 &&
-                <div className={cn("rounded-lg px-3 py-2 mb-3 text-[10px]", subOver ? "bg-red-500/10 border border-red-500/30" : "bg-emerald-500/10 border border-emerald-500/20")}>
-                    <p className={cn("font-bold", subOver ? "text-red-400" : "text-emerald-400")}>
-                      {subOver ? '⚠ OVER CAPACITY' : '✓ Within capacity'}
-                    </p>
-                    <p className="text-slate-400">{connectedCables.length} cable{connectedCables.length !== 1 ? 's' : ''} connected · {connectedMw.toFixed(1)} / {capMw} MW</p>
-                  </div>
-                }
-                <div className="space-y-2 mb-3">
-                  {[
-                  { label: 'Name', key: 'name', type: 'text' },
-                  { label: 'Transformer (MVA)', key: 'transformer_mva', type: 'number' },
-                  { label: 'Available Gen Capacity (MW)', key: 'capacity_generation_mw', type: 'number' },
-                  { label: 'Available Demand Capacity (MW)', key: 'capacity_demand_mw', type: 'number' },
-                  { label: 'Notes', key: 'notes', type: 'text' }].
-                  map(({ label, key, type }) =>
-                  <div key={key}>
-                      <label className="text-[10px] text-slate-500 block mb-0.5">{label}</label>
-                      <input
-                      type={type}
-                      defaultValue={p[key] ?? ''}
-                      onBlur={(e) => updateSubProps({ [key]: type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value })}
-                      className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-yellow-500/60" />
-                    
-                    </div>
-                  )}
-                </div>
-                <div className="text-[10px] text-slate-600 mb-3">{lat.toFixed(5)}, {lng.toFixed(5)}</div>
-                <div className="flex gap-2">
-                  <button onClick={() => { setSubstationMenuFeature(null); window.__trainingEvent__ = { type: 'substation_configured', payload: {}, ts: Date.now() }; }}
-                  className="flex-1 py-1.5 bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-300 text-xs font-medium rounded-lg border border-yellow-600/30 transition-colors">
-                    Done
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (subLayer) updateLayer(subLayer.id, { features: subLayer.features.filter((f) => f.id !== substationMenuFeature.id) });
-                      setSubstationMenuFeature(null);
-                    }}
-                    className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs rounded-lg transition-colors">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>);
+          {substationMenuFeature && (
+            <SubstationMenu
+              feature={substationMenuFeature}
+              layers={layers}
+              cables={cables}
+              turbines={turbines}
+              calcSubstationLoad={calcSubstationLoad}
+              updateLayer={updateLayer}
+              onClose={() => setSubstationMenuFeature(null)}
+              onDelete={() => {
+                const subLayer = layers.find(l => l.type === 'substation');
+                if (subLayer) updateLayer(subLayer.id, { features: subLayer.features.filter(f => f.id !== substationMenuFeature.id) });
+                setSubstationMenuFeature(null);
+              }}
+            />
+          )}
 
-          })()}
+          {/* Point layer menu */}
+          {pointMenuFeature && (
+            <PointMenu
+              feature={pointMenuFeature}
+              layer={layers.find(l => l.id === pointMenuLayerId)}
+              layers={layers}
+              onApply={({ name, notes, setback_m, layerId: newLayerId }) => {
+                const oldLayer = layers.find(l => l.id === pointMenuLayerId);
+                const updatedFeature = { ...pointMenuFeature, properties: { ...pointMenuFeature.properties, name, notes, setback_m } };
+                if (newLayerId && newLayerId !== pointMenuLayerId) {
+                  const newLayer = layers.find(l => l.id === newLayerId);
+                  if (oldLayer && newLayer) {
+                    updateLayer(pointMenuLayerId, { features: oldLayer.features.filter(f => f.id !== pointMenuFeature.id) });
+                    updateLayer(newLayerId, { features: [...newLayer.features, updatedFeature] });
+                    setPointMenuLayerId(newLayerId);
+                  }
+                } else if (oldLayer) {
+                  updateLayer(pointMenuLayerId, { features: oldLayer.features.map(f => f.id === pointMenuFeature.id ? updatedFeature : f) });
+                }
+                setPointMenuFeature(null);
+                setPointMenuLayerId(null);
+              }}
+              onDelete={() => {
+                deleteFeature(pointMenuLayerId, pointMenuFeature.id);
+                setPointMenuFeature(null);
+                setPointMenuLayerId(null);
+              }}
+              onClose={() => { setPointMenuFeature(null); setPointMenuLayerId(null); }}
+            />
+          )}
 
           {/* Text Annotation Menu */}
           {textAnnotationMenu &&
