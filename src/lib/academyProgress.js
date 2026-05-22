@@ -77,6 +77,7 @@ export function markStepComplete(moduleId, stepId) {
   const progress = loadProgress();
   if (!progress.modules[moduleId]) progress.modules[moduleId] = { status: 'in_progress', completedSteps: [], startedAt: Date.now() };
   const mp = progress.modules[moduleId];
+  if (!mp.completedSteps) mp.completedSteps = [];
   if (!mp.completedSteps.includes(stepId)) {
     mp.completedSteps = [...(mp.completedSteps || []), stepId];
   }
