@@ -34,7 +34,8 @@ export default function PointMenu({ feature, layer, layers, onApply, onDelete, o
   if (!feature) return null;
 
   const [lng, lat] = feature.geometry?.coordinates || [0, 0];
-  const pointLayers = layers?.filter(l => l.type === 'point') || [];
+  // All layers that can hold points (exclude turbine/cable/substation/wind_resource)
+  const assignableLayers = layers?.filter(l => !['turbine', 'cable', 'substation', 'wind_resource'].includes(l.type)) || [];
 
   const addField = () => setCustomFields(prev => [...prev, { key: `Field ${prev.length + 1}`, value: '' }]);
   const updateFieldKey = (i, key) => setCustomFields(prev => prev.map((f, idx) => idx === i ? { ...f, key } : f));
@@ -117,8 +118,8 @@ export default function PointMenu({ feature, layer, layers, onApply, onDelete, o
         </div>
       )}
 
-      {/* Layer selector */}
-      {pointLayers.length > 1 && (
+      {/* Layer selector — always show so user can reassign */}
+      {assignableLayers.length > 1 && (
         <div className="mb-3">
           <label className="text-[10px] text-slate-400 block mb-0.5">Layer</label>
           <select
@@ -126,7 +127,7 @@ export default function PointMenu({ feature, layer, layers, onApply, onDelete, o
             onChange={e => setTargetLayerId(e.target.value)}
             className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2 py-1.5 outline-none"
           >
-            {pointLayers.map(l => (
+            {assignableLayers.map(l => (
               <option key={l.id} value={l.id}>{l.name}</option>
             ))}
           </select>

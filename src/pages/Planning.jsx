@@ -472,9 +472,9 @@ export default function Planning() {
     }
 
     if (mode === 'place_point') {
-      // Place a point into the selected point layer, or create one if none exists
-      const pointLayers = layers.filter(l => l.type === 'point');
-      let targetLayer = pointLayers.find(l => l.id === selectedLayerId) || pointLayers[0];
+      // Place a point into the selected layer (any non-system layer), or create a point layer if none
+      const assignableLayers = layers.filter(l => !['turbine', 'cable', 'substation', 'wind_resource'].includes(l.type));
+      let targetLayer = assignableLayers.find(l => l.id === selectedLayerId) || assignableLayers[0];
       if (!targetLayer) {
         // Auto-create a point layer
         const newLayer = createLayer({ name: 'Points', type: 'point', color: '#8b5cf6', fillOpacity: 1 });
@@ -1017,7 +1017,7 @@ export default function Planning() {
                 if (first) setSelectedLayerId(first.id);
               }
               if (id === 'place_point') {
-                const first = layers.find((l) => l.type === 'point');
+                const first = layers.find((l) => !['turbine', 'cable', 'substation', 'wind_resource'].includes(l.type));
                 if (first) setSelectedLayerId(first.id);
               }
             }}
@@ -1368,8 +1368,8 @@ export default function Planning() {
                 // Text annotations are rendered via TextOverlay (fixed pixel size)
                 if (f.geometry.type === 'Point' && f.properties._featureType === 'text') return null;
 
-                // Point layer features — rendered as purple dots
-                if (f.geometry.type === 'Point' && layer.type === 'point') {
+                // Point features in any non-turbine layer
+                if (f.geometry.type === 'Point' && layer.type !== 'turbine' && layer.type !== 'substation' && layer.type !== 'wind_resource' && f.properties?._featureType !== 'text') {
                   const [lng, lat] = f.geometry.coordinates;
                   const ptIcon = L.divIcon({
                     html: `<div style="width:10px;height:10px;background:${layer.color || '#8b5cf6'};border:2px solid rgba(255,255,255,0.6);border-radius:50%;box-shadow:0 0 6px ${layer.color || '#8b5cf6'}88"></div>`,
@@ -1379,6 +1379,7 @@ export default function Planning() {
                   return (
                     <React.Fragment key={f.id}>
                       <Marker position={[lat, lng]} icon={ptIcon}
+                        draggable={mode === 'select'}
                         eventHandlers={{
                           click: (e) => {
                             if (mode === 'select' || mode === 'pan') {
@@ -1390,6 +1391,14 @@ export default function Planning() {
                               setCableMenuFeature(null);
                               setSubstationMenuFeature(null);
                             }
+                          },
+                          dragend: (e) => {
+                            const { lat: newLat, lng: newLng } = e.target.getLatLng();
+                            updateLayer(layer.id, {
+                              features: layer.features.map(ft =>
+                                ft.id === f.id ? { ...ft, geometry: { ...ft.geometry, coordinates: [newLng, newLat] } } : ft
+                              )
+                            });
                           }
                         }} />
                       {setbackM > 0 && (
@@ -1804,7 +1813,6 @@ export default function Planning() {
                   if (oldLayer && newLayer) {
                     updateLayer(pointMenuLayerId, { features: oldLayer.features.filter(f => f.id !== pointMenuFeature.id) });
                     updateLayer(newLayerId, { features: [...newLayer.features, updatedFeature] });
-                    setPointMenuLayerId(newLayerId);
                   }
                 } else if (oldLayer) {
                   updateLayer(pointMenuLayerId, { features: oldLayer.features.map(f => f.id === pointMenuFeature.id ? updatedFeature : f) });

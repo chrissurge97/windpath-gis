@@ -44,8 +44,8 @@ export function checkExclusionZones(lat, lng, layers) {
       }
     }
 
-    // Point-based setback exclusion zones (no_turbines on individual feature)
-    if (layer.type === 'point') {
+    // Point-based setback exclusion zones (no_turbines on individual feature, any layer)
+    if (!['turbine', 'cable', 'substation', 'wind_resource'].includes(layer.type)) {
       for (const feature of layer.features) {
         if (feature.geometry.type !== 'Point') continue;
         if (!feature.properties?.no_turbines) continue;
