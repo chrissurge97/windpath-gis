@@ -56,6 +56,16 @@ export async function listProjects() {
 
 export async function loadProject(id) {
   if (!id || id === '__demo__') return null;
+
+  // Check localStorage first (used by academy checkpoints)
+  const localRaw = localStorage.getItem(`planning_project_${id}`);
+  if (localRaw) {
+    try {
+      const local = JSON.parse(localRaw);
+      return { ...local, id };
+    } catch {}
+  }
+
   const records = await ENTITY.filter({ id });
   if (!records || records.length === 0) return null;
   const record = records[0];
