@@ -91,7 +91,7 @@ export default function PlanningRightPanel({
                       <span className="text-cyan-400 font-medium">{windParams[key]}</span>
                     </div>
                     <input type="range" min={min} max={max} step={step} value={windParams[key]}
-                      onChange={e => setWindParams(p => ({ ...p, [key]: parseFloat(e.target.value) }))}
+                     onChange={e => { setWindParams(p => ({ ...p, [key]: parseFloat(e.target.value) })); window.__trainingEvent__ = { type: 'weibull_changed', payload: { key, value: e.target.value }, ts: Date.now() }; }}
                       className="w-full accent-cyan-500 h-1" />
                   </div>
                 ))}

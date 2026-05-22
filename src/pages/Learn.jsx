@@ -1,103 +1,189 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { MODULES } from '@/lib/trainingModules';
-import { saveLessonProject } from '@/lib/lessonProjects';
-import { EXERCISES } from '@/lib/exercises';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot,
-  Award, Star, Trophy, CheckCircle2, ChevronRight, ChevronLeft, BarChart2, ExternalLink
+  Wind, Zap, Map, Layers, BarChart2, Trophy, CheckCircle2, Lock,
+  ChevronRight, Star, Download, Play, RotateCcw, ExternalLink,
+  BookOpen, Target, Clock, Award, Sparkles, ArrowRight
 } from 'lucide-react';
+import { loadProgress, resetProgress, getOverallProgress, ACADEMY_MODULES, ACADEMY_BADGES } from '@/lib/academyProgress';
+import { TRAINING_FILES, downloadTrainingFile } from '@/lib/trainingDownloads';
+import { saveCheckpoint, buildGlenhavenBlank, buildGlenhavenWithConstraints, buildGlenhavenCableChallenge, buildGlenhavenFinalChallenge } from '@/lib/academyModules';
+import AcademyModuleView from '@/components/academy/AcademyModuleView';
 
-const ICON_MAP = { Map, BookOpen, Wind, Zap, Layers, ShieldAlert, CircleDot, Award, Star, Trophy, BarChart2 };
-const COLOR_MAP = {
-  blue:   { bg: 'bg-blue-500/10',    border: 'border-blue-500/30',    text: 'text-blue-400',    badge: 'bg-blue-500'    },
-  cyan:   { bg: 'bg-cyan-500/10',    border: 'border-cyan-500/30',    text: 'text-cyan-400',    badge: 'bg-cyan-500'    },
-  orange: { bg: 'bg-orange-500/10',  border: 'border-orange-500/30',  text: 'text-orange-400',  badge: 'bg-orange-500'  },
-  purple: { bg: 'bg-purple-500/10',  border: 'border-purple-500/30',  text: 'text-purple-400',  badge: 'bg-purple-500'  },
-  green:  { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', badge: 'bg-emerald-500' },
-  yellow: { bg: 'bg-yellow-500/10',  border: 'border-yellow-500/30',  text: 'text-yellow-400',  badge: 'bg-yellow-500'  },
+const MODULE_ICONS = {
+  bootcamp: '🖥️', polygons: '🗺️', importing: '📂',
+  turbines: '🌀', cables: '⚡', analysis: '📊', challenge: '🏆'
 };
 
-function LessonView({ module, onComplete }) {
-  const [lessonIndex, setLessonIndex] = useState(0);
-  const navigate = useNavigate();
-  const colors = COLOR_MAP[module.color] || COLOR_MAP.blue;
-  const lesson = module.lessons[lessonIndex];
-  const isLast = lessonIndex === module.lessons.length - 1;
+const MODULE_COLORS = {
+  bootcamp:  { bg: 'bg-cyan-500/10',    border: 'border-cyan-500/30',    text: 'text-cyan-400',    dot: 'bg-cyan-400' },
+  polygons:  { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', dot: 'bg-emerald-400' },
+  importing: { bg: 'bg-blue-500/10',    border: 'border-blue-500/30',    text: 'text-blue-400',    dot: 'bg-blue-400' },
+  turbines:  { bg: 'bg-orange-500/10',  border: 'border-orange-500/30',  text: 'text-orange-400',  dot: 'bg-orange-400' },
+  cables:    { bg: 'bg-yellow-500/10',  border: 'border-yellow-500/30',  text: 'text-yellow-400',  dot: 'bg-yellow-400' },
+  analysis:  { bg: 'bg-purple-500/10',  border: 'border-purple-500/30',  text: 'text-purple-400',  dot: 'bg-purple-400' },
+  challenge: { bg: 'bg-amber-500/10',   border: 'border-amber-500/30',   text: 'text-amber-400',   dot: 'bg-amber-400' },
+};
 
-  const openInPlanner = () => {
-    const project = saveLessonProject(module.id, lessonIndex);
-    navigate('/planning', { state: { lessonProjectId: project.id, moduleId: module.id, lessonIndex } });
+const MODULE_DESCRIPTIONS = {
+  bootcamp:  'Learn every control, panel, and mode through a systems check. Control room activation.',
+  polygons:  'Map the Glenhaven site boundary, leased land, and hard exclusion zones.',
+  importing: 'Download training files and import real GIS data into the planning tool.',
+  turbines:  'Place 5–7 turbines, enable setback radii, and verify constraint compliance.',
+  cables:    'Design the 33kV collection network — substation, cable strings, load checking.',
+  analysis:  'Review AEP, capacity factor, and cable cost. Optimise for your chosen goal.',
+  challenge: 'Full wind farm design from blank map to export-ready project. No hand-holding.',
+};
+
+const MODULE_SKILLS = {
+  bootcamp:  ['Select/Pan/Draw modes', 'Panel navigation', 'Basemap switching', 'File operations'],
+  polygons:  ['Drawing polygons', 'Layer management', 'Exclusion zones', 'Visibility control'],
+  importing: ['GeoJSON import', 'CSV import', 'Layer classification', 'Data verification'],
+  turbines:  ['Turbine placement', 'Wind data', 'Setback radii', 'Layout naming'],
+  cables:    ['Substation placement', 'Cable routing', 'Snapping', 'Load checking'],
+  analysis:  ['KPI reading', 'Weibull parameters', 'Design optimisation', 'Version saving'],
+  challenge: ['Full workflow', 'Constraint compliance', 'Electrical design', 'Project export'],
+};
+
+function XPBar({ xp, level }) {
+  const xpInLevel = xp % 300;
+  const pct = (xpInLevel / 300) * 100;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-[10px] font-bold text-amber-400">
+        {level}
+      </div>
+      <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+        <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-[10px] text-slate-500">{xp} XP</span>
+    </div>
+  );
+}
+
+function BadgeGrid({ earned }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {Object.values(ACADEMY_BADGES).map(b => {
+        const isEarned = earned.includes(b.id);
+        return (
+          <div key={b.id} title={`${b.name}: ${b.desc}`}
+            className={cn('w-8 h-8 rounded-lg flex items-center justify-center text-base transition-all',
+              isEarned ? 'bg-amber-500/20 border border-amber-500/40' : 'bg-slate-800/60 border border-slate-700/40 grayscale opacity-30'
+            )}>
+            {b.icon}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ModuleCard({ mod, status, score, isLocked, onStart, onContinue, onReview, onOpenInPlanner }) {
+  const colors = MODULE_COLORS[mod.id] || MODULE_COLORS.bootcamp;
+  const icon = MODULE_ICONS[mod.id] || '📘';
+  const isChallenge = mod.id === 'challenge';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn(
+        'border rounded-xl overflow-hidden transition-all',
+        isChallenge ? 'border-amber-500/30 bg-amber-500/5' : colors.border,
+        isLocked ? 'opacity-60' : 'hover:brightness-110',
+        status === 'complete' ? 'ring-1 ring-emerald-500/20' : ''
+      )}
+    >
+      {/* Header */}
+      <div className={cn('px-4 py-3 flex items-center gap-3', colors.bg)}>
+        <span className="text-2xl">{icon}</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className={cn('text-sm font-bold text-white truncate')}>{mod.title}</p>
+            {isLocked && <Lock className="w-3 h-3 text-slate-500 shrink-0" />}
+            {status === 'complete' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+            {status === 'in_progress' && <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />}
+          </div>
+          <p className="text-[10px] text-slate-500">{mod.estMin} min · {mod.xp} XP</p>
+        </div>
+        {status === 'complete' && score && (
+          <div className={cn('text-xs font-bold px-2 py-0.5 rounded-full', colors.bg, colors.text, colors.border, 'border')}>
+            {score}%
+          </div>
+        )}
+      </div>
+
+      <div className="px-4 py-3 space-y-3">
+        <p className="text-xs text-slate-400 leading-relaxed">{MODULE_DESCRIPTIONS[mod.id]}</p>
+        
+        {/* Skills */}
+        <div className="flex flex-wrap gap-1">
+          {(MODULE_SKILLS[mod.id] || []).map(skill => (
+            <span key={skill} className={cn('text-[9px] px-1.5 py-0.5 rounded border', colors.bg, colors.border, colors.text)}>{skill}</span>
+          ))}
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 pt-1">
+          {isLocked ? (
+            <button onClick={onStart} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-700/50 text-slate-500 text-xs rounded-lg border border-slate-700">
+              <Lock className="w-3 h-3" /> Locked
+            </button>
+          ) : status === 'complete' ? (
+            <>
+              <button onClick={onReview} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700 transition-colors">
+                <BookOpen className="w-3 h-3" /> Review
+              </button>
+              <button onClick={onOpenInPlanner} className={cn('flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs rounded-lg border transition-colors', colors.bg, colors.border, colors.text, 'hover:brightness-125')}>
+                <ExternalLink className="w-3 h-3" /> Open in Planner
+              </button>
+            </>
+          ) : status === 'in_progress' ? (
+            <button onClick={onContinue} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition-colors">
+              <Play className="w-3 h-3" /> Continue
+            </button>
+          ) : (
+            <button onClick={onStart} className={cn('flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-lg border transition-colors', isChallenge ? 'bg-amber-600 hover:bg-amber-500 text-white border-amber-500' : `${colors.bg} ${colors.border} ${colors.text} hover:brightness-125`)}>
+              <Play className="w-3 h-3" /> {isChallenge ? 'Start Challenge' : 'Start Module'}
+            </button>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function DownloadsPanel() {
+  const [downloaded, setDownloaded] = useState({});
+
+  const handleDownload = (fileId) => {
+    downloadTrainingFile(fileId);
+    setDownloaded(prev => ({ ...prev, [fileId]: true }));
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Progress dots */}
-      <div className="flex gap-2 mb-6">
-        {module.lessons.map((_, i) => (
-          <button
-            key={i}
-            onClick={() => setLessonIndex(i)}
-            className={cn(
-              'h-1.5 rounded-full transition-all duration-300',
-              i < lessonIndex ? cn(colors.badge, 'w-6') :
-              i === lessonIndex ? cn(colors.badge, 'w-8') :
-              'bg-slate-800 w-4'
-            )}
-          />
-        ))}
-      </div>
-
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={lessonIndex}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.2 }}
-          className="flex-1"
-        >
-          <p className={cn('text-xs uppercase tracking-wider font-medium mb-2', colors.text)}>
-            Lesson {lessonIndex + 1} of {module.lessons.length}
-          </p>
-          <h2 className="text-xl font-bold text-white mb-4">{lesson.title}</h2>
-          <div className={cn('rounded-xl border p-5 text-sm leading-relaxed text-slate-300 whitespace-pre-line', colors.bg, colors.border)}>
-            {lesson.content}
+    <div className="space-y-2">
+      <p className="text-[10px] text-slate-500 uppercase tracking-wider">Training Data Files</p>
+      {TRAINING_FILES.map(file => (
+        <div key={file.id} className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all', downloaded[file.id] ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-slate-700 bg-slate-800/50')}>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-white truncate">{file.label}</p>
+            <p className="text-[10px] text-slate-500 truncate">{file.description}</p>
+            <p className="text-[9px] text-slate-600 mt-0.5">{file.expectedFeatures} feature{file.expectedFeatures !== 1 ? 's' : ''} · {file.featureType}</p>
           </div>
-
           <button
-            onClick={openInPlanner}
-            className={cn(
-              'mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium border transition-colors',
-              colors.border, colors.bg, colors.text,
-              'hover:brightness-125'
-            )}
-          >
-            <ExternalLink className="w-4 h-4" />
-            Open this lesson in Planner Tool
+            onClick={() => handleDownload(file.id)}
+            className={cn('flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 border',
+              downloaded[file.id] ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-slate-700 border-slate-600 text-slate-300 hover:text-white hover:bg-slate-600'
+            )}>
+            {downloaded[file.id] ? <CheckCircle2 className="w-3 h-3" /> : <Download className="w-3 h-3" />}
+            {downloaded[file.id] ? 'Downloaded' : 'Download'}
           </button>
-        </motion.div>
-      </AnimatePresence>
-
-      <div className="flex gap-3 mt-4">
-        {lessonIndex > 0 && (
-          <button
-            onClick={() => setLessonIndex(i => i - 1)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm text-slate-300 transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" /> Back
-          </button>
-        )}
-        <button
-          onClick={() => isLast ? onComplete() : setLessonIndex(i => i + 1)}
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium text-white transition-colors"
-        >
-          {isLast ? 'Go to Exercise' : 'Next Lesson'}
-          <ChevronRight className="w-4 h-4" />
-        </button>
-      </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -105,128 +191,190 @@ function LessonView({ module, onComplete }) {
 export default function Learn() {
   const location = useLocation();
   const navigate = useNavigate();
-
-  const initialModuleId = location.state?.moduleId || MODULES[0].id;
-  const [selectedModuleId, setSelectedModuleId] = useState(initialModuleId);
-  const [view, setView] = useState('lesson');
+  const [progress, setProgress] = useState(loadProgress());
+  const [view, setView] = useState('hub'); // 'hub' | module id
+  const [showDownloads, setShowDownloads] = useState(false);
 
   useEffect(() => {
+    setProgress(loadProgress());
+    // Handle return from planner
     if (location.state?.moduleId) {
-      setSelectedModuleId(location.state.moduleId);
+      setView(location.state.moduleId);
     }
   }, [location.state]);
 
-  const selectedModule = MODULES.find(m => m.id === selectedModuleId) || MODULES[0];
-  const colors = COLOR_MAP[selectedModule.color] || COLOR_MAP.blue;
+  const overallProgress = getOverallProgress();
+  const lastActive = progress.lastActiveModule;
+
+  const handleStartModule = (moduleId) => {
+    // Pre-save the checkpoint project
+    const checkpointMap = {
+      bootcamp: buildGlenhavenBlank,
+      polygons: buildGlenhavenBlank,
+      importing: buildGlenhavenBlank,
+      turbines: buildGlenhavenWithConstraints,
+      cables: buildGlenhavenCableChallenge,
+      analysis: buildGlenhavenCableChallenge,
+      challenge: buildGlenhavenFinalChallenge,
+    };
+    const builder = checkpointMap[moduleId];
+    if (builder) {
+      const projectData = builder();
+      saveCheckpoint(moduleId, projectData);
+    }
+    setView(moduleId);
+  };
+
+  const handleOpenInPlanner = (moduleId) => {
+    const id = `academy_checkpoint_${moduleId}`;
+    navigate('/planning', { state: { lessonProjectId: id, moduleId, lessonIndex: 0 } });
+  };
+
+  const handleReset = () => {
+    if (!window.confirm('Reset all WindPath Academy progress? This cannot be undone.')) return;
+    resetProgress();
+    setProgress(loadProgress());
+  };
+
+  const isModuleLocked = (modId) => {
+    if (modId === 'challenge') {
+      const prevDone = ['bootcamp','polygons','importing','turbines','cables','analysis'];
+      const doneCount = prevDone.filter(id => progress.modules[id]?.status === 'complete').length;
+      return doneCount < 4; // Require 4/6 previous modules
+    }
+    return false;
+  };
+
+  if (view !== 'hub') {
+    return (
+      <AcademyModuleView
+        moduleId={view}
+        onBack={() => { setProgress(loadProgress()); setView('hub'); }}
+        onOpenInPlanner={handleOpenInPlanner}
+      />
+    );
+  }
 
   return (
-    <div className="flex h-full">
-      {/* Scenario sidebar */}
-      <div className="w-56 shrink-0 bg-slate-900 border-r border-slate-800 overflow-y-auto hidden md:block">
-        <div className="p-3 space-y-1">
-          <p className="text-[10px] text-slate-500 uppercase tracking-wider px-2 pb-2">Training Scenarios</p>
-          {MODULES.map((mod) => {
-            const Icon = ICON_MAP[mod.icon] || BookOpen;
-            const isActive = mod.id === selectedModuleId;
-            return (
-              <button
-                key={mod.id}
-                onClick={() => { setSelectedModuleId(mod.id); setView('lesson'); }}
-                className={cn(
-                  'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all text-xs',
-                  isActive ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'
-                )}
-              >
-                <div className={cn('w-6 h-6 rounded flex items-center justify-center shrink-0', isActive ? 'bg-slate-700 text-slate-200' : 'bg-slate-800 text-slate-500')}>
-                  <Icon className="w-3 h-3" />
-                </div>
-                <span className="truncate font-medium">{mod.title}</span>
-              </button>
-            );
-          })}
+    <div className="flex flex-col h-full overflow-hidden bg-slate-950">
+      {/* Header */}
+      <div className="shrink-0 px-6 py-4 bg-slate-900 border-b border-slate-800">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+            <Wind className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-white">WindPath Academy</h1>
+            <p className="text-xs text-slate-400">Glenhaven Wind Farm — Guided Design Scenario</p>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={() => setShowDownloads(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-colors">
+              <Download className="w-3 h-3" /> Training Files
+            </button>
+            <button onClick={handleReset}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-500 hover:text-red-400 transition-colors">
+              <RotateCcw className="w-3 h-3" /> Reset
+            </button>
+          </div>
         </div>
+
+        {/* Progress overview */}
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Overall Progress</span>
+              <span className="text-[10px] text-slate-400">{overallProgress.done}/{overallProgress.total} modules</span>
+            </div>
+            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${overallProgress.percent}%` }} />
+            </div>
+          </div>
+          <div className="w-48">
+            <XPBar xp={progress.totalXP} level={progress.level} />
+          </div>
+        </div>
+
+        {/* Badges */}
+        {progress.badges.length > 0 && (
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-[10px] text-slate-600">Badges:</span>
+            <BadgeGrid earned={progress.badges} />
+          </div>
+        )}
       </div>
 
-      {/* Main panel */}
-      <div className="flex-1 overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className={cn('px-6 py-4 border-b border-slate-800 flex items-center gap-4 flex-wrap', colors.bg)}>
-          <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center border shrink-0', colors.bg, colors.border)}>
-            {React.createElement(ICON_MAP[selectedModule.icon] || BookOpen, { className: cn('w-5 h-5', colors.text) })}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="font-bold text-white truncate">{selectedModule.title}</h1>
-            <p className="text-xs text-slate-400 truncate">{selectedModule.subtitle}</p>
-          </div>
-          {/* Tabs */}
-          <div className="flex rounded-lg overflow-hidden border border-slate-800 shrink-0">
-            {[
-              { id: 'lesson', label: 'Lessons' },
-              { id: 'exercise', label: '🗺 Exercise' },
-            ].map(({ id, label }) => (
-              <button
-                key={id}
-                onClick={() => setView(id)}
-                className={cn('px-3 py-1.5 text-xs font-medium transition-colors',
-                  view === id ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'
-                )}
-              >
-                {label}
-              </button>
-            ))}
+      {/* Main content */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Downloads panel */}
+        <AnimatePresence>
+          {showDownloads && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden border-b border-slate-800">
+              <div className="px-6 py-4 bg-slate-900/50">
+                <DownloadsPanel />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Scenario card */}
+        <div className="px-6 py-5 border-b border-slate-800">
+          <div className="bg-gradient-to-r from-emerald-500/10 to-cyan-500/5 border border-emerald-500/20 rounded-xl p-4">
+            <div className="flex items-start gap-4">
+              <div className="text-3xl">🏔️</div>
+              <div className="flex-1">
+                <p className="text-[10px] text-emerald-400 uppercase tracking-wider font-medium mb-1">Guided Design Scenario</p>
+                <h2 className="text-base font-bold text-white mb-1">Glenhaven Wind Farm</h2>
+                <p className="text-xs text-slate-400 leading-relaxed mb-3">
+                  You are a junior wind development analyst at GreenVolt Energy. Over the next 7 modules, you'll design an early-stage layout for the Glenhaven Wind Farm — from blank site to final export.
+                  Each module builds on the last, teaching real planning tool skills through realistic tasks.
+                </p>
+                <div className="flex gap-3">
+                  {lastActive && progress.modules[lastActive]?.status === 'in_progress' ? (
+                    <button onClick={() => setView(lastActive)}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-semibold text-white transition-colors">
+                      <Play className="w-3.5 h-3.5" /> Continue: {ACADEMY_MODULES.find(m => m.id === lastActive)?.title}
+                    </button>
+                  ) : (
+                    <button onClick={() => handleStartModule('bootcamp')}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-semibold text-white transition-colors">
+                      <Play className="w-3.5 h-3.5" /> Start Full Scenario
+                    </button>
+                  )}
+                  <button onClick={() => navigate('/planning')}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs text-slate-300 border border-slate-700 transition-colors">
+                    <ExternalLink className="w-3.5 h-3.5" /> Open Planning Tool
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <AnimatePresence mode="wait">
-            {view === 'lesson' && (
-              <motion.div key="lesson" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
-                <LessonView module={selectedModule} onComplete={() => setView('exercise')} />
-              </motion.div>
-            )}
-            {view === 'exercise' && (
-              <motion.div key="exercise" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                {(() => {
-                  const ex = EXERCISES[selectedModuleId];
-                  if (!ex) return (
-                    <div className="text-center py-10 text-slate-500 text-sm">No exercise for this module yet.</div>
-                  );
-                  return (
-                    <div className="max-w-lg">
-                      <p className={cn('text-xs uppercase tracking-wider font-medium mb-1', colors.text)}>
-                        Practical Exercise
-                      </p>
-                      <h2 className="text-xl font-bold text-white mb-2">{ex.title}</h2>
-                      <p className="text-slate-400 text-sm mb-6">{ex.intro}</p>
-
-                      <div className="space-y-2 mb-6">
-                        {ex.steps.map((step, i) => (
-                          <div key={i} className="flex items-start gap-3 bg-slate-800/60 rounded-xl px-3 py-2.5 border border-slate-700">
-                            <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-400 shrink-0 mt-0.5">{i + 1}</div>
-                            <p className="text-xs text-slate-300 leading-snug">{step.instruction}</p>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 mb-4">
-                        <p className="text-xs text-emerald-300 leading-relaxed">
-                          <strong>How it works:</strong> Click the button below to open the Planning Tool with a step-by-step guide floating over the map. Complete each step — the guide detects your progress automatically.
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={() => navigate('/planning', { state: { exerciseId: selectedModuleId } })}
-                        className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-semibold text-white transition-colors"
-                      >
-                        Open Exercise in Planning Tool <ExternalLink className="w-4 h-4" />
-                      </button>
-                    </div>
-                  );
-                })()}
-              </motion.div>
-            )}
-          </AnimatePresence>
+        {/* Module grid */}
+        <div className="px-6 py-5">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-4">Course Modules</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {ACADEMY_MODULES.map((mod) => {
+              const mp = progress.modules[mod.id] || {};
+              const status = mp.status || 'not_started';
+              const locked = isModuleLocked(mod.id);
+              return (
+                <ModuleCard
+                  key={mod.id}
+                  mod={mod}
+                  status={status}
+                  score={mp.score}
+                  isLocked={locked}
+                  onStart={() => handleStartModule(mod.id)}
+                  onContinue={() => setView(mod.id)}
+                  onReview={() => setView(mod.id)}
+                  onOpenInPlanner={() => handleOpenInPlanner(mod.id)}
+                />
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

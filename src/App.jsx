@@ -7,7 +7,7 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { PlanningProvider } from '@/lib/PlanningContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import AppLayout from '@/components/layout/AppLayout';
-import Learn from '@/pages/Learn';
+import Learn from '@/pages/Learn.jsx';
 import Planning from '@/pages/Planning';
 
 import DataTables from '@/pages/DataTables';

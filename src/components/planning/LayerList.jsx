@@ -176,6 +176,7 @@ export default function LayerList({
                 onClick={e => {
                   e.stopPropagation();
                   updateLayer(layer.id, { visible: !layer.visible });
+                  window.__trainingEvent__ = { type: 'layer_visibility_toggled', payload: { layerId: layer.id }, ts: Date.now() };
                 }}
                 className="text-slate-500 hover:text-white p-0.5 shrink-0"
               >

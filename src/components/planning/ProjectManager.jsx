@@ -387,7 +387,7 @@ export default function ProjectFileButtons({
     <>
       <div className="relative shrink-0 flex items-center gap-1" ref={dropdownRef}>
         <button
-          onClick={() => setDropdownOpen(v => !v)}
+          onClick={() => { setDropdownOpen(v => !v); window.__trainingEvent__ = { type: 'file_menu_opened', payload: {}, ts: Date.now() }; }}
           className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-all"
         >
           <FileText className="w-3 h-3" /> File <ChevronDown className={cn("w-3 h-3 transition-transform", dropdownOpen && "rotate-180")} />

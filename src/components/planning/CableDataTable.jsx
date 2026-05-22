@@ -168,7 +168,7 @@ export default function CableDataTable({
       {/* Optimise button */}
       {cables.length > 0 && (
         <button
-          onClick={onOptimiseCables}
+          onClick={() => { onOptimiseCables(); window.__trainingEvent__ = { type: 'cables_optimised', payload: {}, ts: Date.now() }; }}
           className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 text-xs font-medium hover:bg-emerald-600/30 transition-colors"
         >
           <Zap className="w-3.5 h-3.5" />

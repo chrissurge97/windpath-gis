@@ -327,10 +327,26 @@ export default function Planning() {
 
   const handleClassifyConfirm = useImportClassify(layers, selectedTurbineType, selectedCableTypeId, setLayers, setImportClassifyLayers);
 
-  // ── Notify lesson guide of current mode/tab for task tracking ───────────
+  // ── Notify lesson guide of current mode/tab/counts for task tracking ──────
   useEffect(() => {
-    window.__lessonGuideState__ = { mode, tab: rightTab, ts: Date.now() };
-  }, [mode, rightTab]);
+    const polyLayers = layers.filter(l => !['turbine','cable','wind_resource','substation'].includes(l.type));
+    const polygonCount = polyLayers.reduce((s, l) => s + l.features.filter(f => f.geometry?.type === 'Polygon').length, 0);
+    const noTurbineZoneCount = polyLayers.reduce((s, l) => s + (l.no_turbines ? l.features.filter(f => f.geometry?.type === 'Polygon').length : l.features.filter(f => f.properties?.no_turbines).length), 0) + polyLayers.filter(l => l.no_turbines).length;
+    window.__lessonGuideState__ = {
+      mode,
+      tab: rightTab,
+      basemap: baseMap,
+      turbineCount: turbines.length,
+      cableCount: cables.length,
+      substationCount: substations.length,
+      polygonCount,
+      polygonLayerCount: polyLayers.length,
+      totalLayerCount: layers.length,
+      noTurbineZoneCount,
+      importCount: window.__importCount__ || 0,
+      ts: Date.now(),
+    };
+  }, [mode, rightTab, baseMap, turbines.length, cables.length, substations.length, layers]);
 
   // ── Clear project on lesson entry or exercise start ────────────────────────
   useEffect(() => {
@@ -358,7 +374,9 @@ export default function Planning() {
     const data = { id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams, globalRadii };
     saveTimer.current = setTimeout(() => {
       updateProjectState(data);
-      saveProject(currentProjectId, data).catch(err => console.warn('Auto-save error:', err));
+      saveProject(currentProjectId, data)
+        .then(() => { window.__trainingEvent__ = { type: 'project_saved', payload: { id: currentProjectId }, ts: Date.now() }; })
+        .catch(err => console.warn('Auto-save error:', err));
     }, 1500);
     return () => clearTimeout(saveTimer.current);
   }, [layers, turbineTypes, cableTypes, projectName, currentProjectId, windParams]);
@@ -683,6 +701,7 @@ export default function Planning() {
 
   const applyTurbineMenu = () => {
     if (!turbineMenuFeature) return;
+    window.__trainingEvent__ = { type: 'turbine_renamed', payload: { name: turbineMenuName }, ts: Date.now() };
     const tt = turbineTypes.find((t) => t.id === turbineMenuTypeId) || turbineTypes[0];
     updateTurbineProps(turbineMenuFeature.id, {
       ...turbineMenuFeature.properties,
@@ -714,6 +733,19 @@ export default function Planning() {
     }
   }, []);
 
+  // ── Training event hooks ──────────────────────────────────────────────────
+  useEffect(() => {
+    window.__trainingEvent__ = { type: 'basemap_changed', payload: { basemap: baseMap }, ts: Date.now() };
+  }, [baseMap]);
+
+  useEffect(() => {
+    window.__trainingEvent__ = { type: 'tab_changed', payload: { tab: rightTab }, ts: Date.now() };
+  }, [rightTab]);
+
+  useEffect(() => {
+    window.__trainingEvent__ = { type: 'mode_changed', payload: { mode }, ts: Date.now() };
+  }, [mode]);
+
   const handleImport = useHandleImport({
     selectedTurbineType, selectedCableTypeId,
     setImportLoading, setImportClassifyLayers,
@@ -734,7 +766,9 @@ export default function Planning() {
       setPendingCableTopology({ cables, turbines, substations, project });
     },
     onImportComplete: () => {
-      setTimeout(() => handleBatchFetchWind(), 500);
+    window.__importCount__ = (window.__importCount__ || 0) + 1;
+    window.__trainingEvent__ = { type: 'import_completed', payload: {}, ts: Date.now() };
+    setTimeout(() => handleBatchFetchWind(), 500);
     },
   });
 
@@ -1221,6 +1255,7 @@ export default function Planning() {
                         }
                       },
                       dragend: (e) => {
+                        window.__trainingEvent__ = { type: 'turbine_moved', payload: { id: f.id }, ts: Date.now() };
                         const newLatLng = e.target.getLatLng();
                         const newCoords = [newLatLng.lng, newLatLng.lat];
                         // Check exclusion zones for turbines
@@ -1719,7 +1754,7 @@ export default function Planning() {
                 </div>
                 <div className="text-[10px] text-slate-600 mb-3">{lat.toFixed(5)}, {lng.toFixed(5)}</div>
                 <div className="flex gap-2">
-                  <button onClick={() => setSubstationMenuFeature(null)}
+                  <button onClick={() => { setSubstationMenuFeature(null); window.__trainingEvent__ = { type: 'substation_configured', payload: {}, ts: Date.now() }; }}
                   className="flex-1 py-1.5 bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-300 text-xs font-medium rounded-lg border border-yellow-600/30 transition-colors">
                     Done
                   </button>
@@ -1867,7 +1902,7 @@ export default function Planning() {
           setLayers={setLayers} mapRef={mapRef} setShowNewZoneDialog={setShowNewZoneDialog}
           projectName={projectName} setTurbineTypes={setTurbineTypes}
           globalRadii={globalRadii} onRadiiChange={setGlobalRadii}
-          showRadii={showRadii} onToggleRadii={() => setShowRadii((v) => !v)}
+          showRadii={showRadii} onToggleRadii={() => { setShowRadii((v) => !v); window.__trainingEvent__ = { type: 'setback_toggled', payload: {}, ts: Date.now() }; }}
           onDataTables={() => setShowDataTables(true)} />
         
       </div>
