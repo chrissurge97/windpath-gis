@@ -534,30 +534,51 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
         } else if (fname.endsWith('.csv')) {
           log(`Parsing CSV: ${file.name}`);
           const text = await file.text();
-          const lines = text.split('\n').filter(Boolean);
+          const lines = text.split('\n').filter(l => l.trim());
           const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
-          const csvFeatures = [];
-          for (let i = 1; i < lines.length; i++) {
-            const vals = lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g)?.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"')) || [];
-            const row = Object.fromEntries(headers.map((h, j) => [h, vals[j] || '']));
-            if (!row.lat || !row.lng) continue;
-            const lat = parseFloat(row.lat), lng = parseFloat(row.lng);
-            if (isNaN(lat) || isNaN(lng)) continue;
-            csvFeatures.push({
-              id: `csv_${i}`, layerId: baseName,
-              geometry: { type: 'Point', coordinates: [lng, lat] },
-              properties: { name: row.name || `Feature ${i}`, notes: row.notes || '' }
-            });
-          }
-          if (csvFeatures.length > 0) {
-            log(`CSV: ${csvFeatures.length} point features`, 'success');
-            allImported.push({
-              id: `lyr_csv_${Date.now()}`, name: baseName, type: 'polygon',
-              visible: true, color: '#8b5cf6', fillOpacity: 0.2,
-              strokeOpacity: 0.8, strokeWeight: 2, no_turbines: false, features: csvFeatures
-            });
+
+          // Find lat/lng columns case-insensitively
+          const latCol = headers.find(h => /^(lat|latitude|y)$/i.test(h));
+          const lngCol = headers.find(h => /^(lng|lon|long|longitude|x)$/i.test(h));
+
+          if (!latCol || !lngCol) {
+            log(`CSV: could not find lat/lng columns. Found: ${headers.join(', ')}`, 'warn');
+            alert(`CSV import failed: could not find lat/lng columns.\nFound columns: ${headers.join(', ')}\nExpected columns named: lat, lng (or latitude/longitude/x/y)`);
           } else {
-            log('CSV: no valid lat/lng rows found', 'warn');
+            const csvFeatures = [];
+            for (let i = 1; i < lines.length; i++) {
+              const vals = lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g)?.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"')) || [];
+              const row = Object.fromEntries(headers.map((h, j) => [h, vals[j] ?? '']));
+              const lat = parseFloat(row[latCol]), lng = parseFloat(row[lngCol]);
+              if (isNaN(lat) || isNaN(lng)) continue;
+              // Include all CSV columns as properties (excluding lat/lng)
+              const props = { name: row.name || row.Name || row.NAME || `Feature ${i}` };
+              for (const h of headers) {
+                if (h === latCol || h === lngCol) continue;
+                props[h] = row[h];
+              }
+              csvFeatures.push({
+                id: `csv_${i}`,
+                geometry: { type: 'Point', coordinates: [lng, lat] },
+                properties: props,
+              });
+            }
+            if (csvFeatures.length > 0) {
+              log(`CSV: ${csvFeatures.length} point features`, 'success');
+              const rawLayer = {
+                id: `lyr_csv_${Date.now()}`, name: baseName, type: 'polygon',
+                visible: true, color: '#8b5cf6', fillOpacity: 0.2,
+                strokeOpacity: 0.8, strokeWeight: 2, no_turbines: false, features: csvFeatures,
+              };
+              if (onLoading) onLoading(false);
+              if (onClassifyMode) {
+                onClassifyMode([rawLayer]);
+                return;
+              }
+              allImported.push(rawLayer);
+            } else {
+              log('CSV: no valid lat/lng rows found', 'warn');
+            }
           }
         }
       } catch (err) {
