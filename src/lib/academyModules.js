@@ -341,7 +341,7 @@ You're working with data from the planning team — your job is to get it into t
         goal: 'Download and import the Glenhaven site boundary GeoJSON.',
         tasks: [
           { id: 'downloaded_boundary', label: 'Download glenhaven-site-boundary.geojson', watch: 'download', value: 'glenhaven-site-boundary', required: true },
-          { id: 'imported_boundary', label: 'Import the file into the Planning tool', watch: 'importCount', minValue: 1, required: true },
+          { id: 'imported_boundary', label: 'Import the file into the Planning tool', watch: 'event', value: 'import_completed', required: true },
         ],
         why: 'Real GIS workflows involve importing external data — from planning portals, consultants, or OSi/EPA.',
         hint: 'Click the Download button below, then click Import in the Planning toolbar and select the downloaded file.',
@@ -367,7 +367,7 @@ You're working with data from the planning team — your job is to get it into t
         goal: 'Download and import the land parcels GeoJSON.',
         tasks: [
           { id: 'downloaded_parcels', label: 'Download glenhaven-land-parcels.geojson', watch: 'download', value: 'glenhaven-land-parcels', required: true },
-          { id: 'imported_parcels', label: 'Import the parcels file', watch: 'importCount', minValue: 2, required: true },
+          { id: 'imported_parcels', label: 'Import the parcels file', watch: 'event', value: 'import_completed', required: true },
         ],
         downloadFile: 'glenhaven-land-parcels',
         why: 'Land parcel data comes from the Land Registry, OSi datasets, or client-supplied mapping.',
@@ -379,7 +379,7 @@ You're working with data from the planning team — your job is to get it into t
         goal: 'Download the turbine candidates CSV and import it.',
         tasks: [
           { id: 'downloaded_csv', label: 'Download glenhaven-turbine-candidates.csv', watch: 'download', value: 'glenhaven-turbine-candidates', required: true },
-          { id: 'imported_csv', label: 'Import the CSV file', watch: 'importCount', minValue: 3, required: true },
+          { id: 'imported_csv', label: 'Import the CSV file', watch: 'event', value: 'import_completed', required: true },
         ],
         downloadFile: 'glenhaven-turbine-candidates',
         why: 'CSV turbine candidate files are common in pre-feasibility — engineers do terrain analysis in GIS and export candidate points.',
