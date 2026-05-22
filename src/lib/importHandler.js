@@ -535,7 +535,27 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           log(`Parsing CSV: ${file.name}`);
           const text = await file.text();
           const lines = text.split('\n').filter(l => l.trim());
-          const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
+
+          // Robust CSV row parser that handles quoted fields
+          const parseCSVRow = (line) => {
+            const result = [];
+            let cur = '', inQuote = false;
+            for (let i = 0; i < line.length; i++) {
+              const ch = line[i];
+              if (ch === '"') {
+                if (inQuote && line[i + 1] === '"') { cur += '"'; i++; }
+                else { inQuote = !inQuote; }
+              } else if (ch === ',' && !inQuote) {
+                result.push(cur.trim()); cur = '';
+              } else {
+                cur += ch;
+              }
+            }
+            result.push(cur.trim());
+            return result;
+          };
+
+          const headers = parseCSVRow(lines[0]);
 
           // Find lat/lng columns case-insensitively
           const latCol = headers.find(h => /^(lat|latitude|y)$/i.test(h));
@@ -548,7 +568,7 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
           } else {
             const csvFeatures = [];
             for (let i = 1; i < lines.length; i++) {
-              const vals = lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g)?.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"')) || [];
+              const vals = parseCSVRow(lines[i]);
               const row = Object.fromEntries(headers.map((h, j) => [h, vals[j] ?? '']));
               const lat = parseFloat(row[latCol]), lng = parseFloat(row[lngCol]);
               if (isNaN(lat) || isNaN(lng)) continue;
