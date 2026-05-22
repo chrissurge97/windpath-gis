@@ -215,7 +215,7 @@ export default function AcademyModuleView({ moduleId, onBack, onOpenInPlanner })
         <div className="mt-2 flex gap-1">
           {steps.map((s, i) => (
             <button key={s.id} onClick={() => { setStepIndex(i); setShowHint(false); setShowWhy(false); setShowStuck(false); }}
-              className={cn('flex-1 h-1 rounded-full transition-all', i < stepIndex ? 'bg-emerald-500' : i === stepIndex ? colors.dot?.replace('bg-', 'bg-') || 'bg-cyan-400' : 'bg-slate-700')} />
+              className={cn('flex-1 h-1 rounded-full transition-all', i < stepIndex ? 'bg-emerald-500' : i === stepIndex ? (colors.text.replace('text-', 'bg-')) : 'bg-slate-700')} />
           ))}
         </div>
       </div>

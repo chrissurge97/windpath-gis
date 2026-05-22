@@ -3,9 +3,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Wind, Zap, Map, Layers, BarChart2, Trophy, CheckCircle2, Lock,
-  ChevronRight, Star, Download, Play, RotateCcw, ExternalLink,
-  BookOpen, Target, Clock, Award, Sparkles, ArrowRight
+  Wind, CheckCircle2, Lock,
+  Download, Play, RotateCcw, ExternalLink,
+  BookOpen, ArrowRight
 } from 'lucide-react';
 import { loadProgress, resetProgress, getOverallProgress, ACADEMY_MODULES, ACADEMY_BADGES } from '@/lib/academyProgress';
 import { TRAINING_FILES, downloadTrainingFile } from '@/lib/trainingDownloads';
@@ -18,13 +18,13 @@ const MODULE_ICONS = {
 };
 
 const MODULE_COLORS = {
-  bootcamp:  { bg: 'bg-cyan-500/10',    border: 'border-cyan-500/30',    text: 'text-cyan-400',    dot: 'bg-cyan-400' },
-  polygons:  { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', dot: 'bg-emerald-400' },
-  importing: { bg: 'bg-blue-500/10',    border: 'border-blue-500/30',    text: 'text-blue-400',    dot: 'bg-blue-400' },
-  turbines:  { bg: 'bg-orange-500/10',  border: 'border-orange-500/30',  text: 'text-orange-400',  dot: 'bg-orange-400' },
-  cables:    { bg: 'bg-yellow-500/10',  border: 'border-yellow-500/30',  text: 'text-yellow-400',  dot: 'bg-yellow-400' },
-  analysis:  { bg: 'bg-purple-500/10',  border: 'border-purple-500/30',  text: 'text-purple-400',  dot: 'bg-purple-400' },
-  challenge: { bg: 'bg-amber-500/10',   border: 'border-amber-500/30',   text: 'text-amber-400',   dot: 'bg-amber-400' },
+  bootcamp:  { bg: 'bg-cyan-500/10',    border: 'border-cyan-500/30',    text: 'text-cyan-400' },
+  polygons:  { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400' },
+  importing: { bg: 'bg-blue-500/10',    border: 'border-blue-500/30',    text: 'text-blue-400' },
+  turbines:  { bg: 'bg-orange-500/10',  border: 'border-orange-500/30',  text: 'text-orange-400' },
+  cables:    { bg: 'bg-yellow-500/10',  border: 'border-yellow-500/30',  text: 'text-yellow-400' },
+  analysis:  { bg: 'bg-purple-500/10',  border: 'border-purple-500/30',  text: 'text-purple-400' },
+  challenge: { bg: 'bg-amber-500/10',   border: 'border-amber-500/30',   text: 'text-amber-400' },
 };
 
 const MODULE_DESCRIPTIONS = {
@@ -97,12 +97,11 @@ function ModuleCard({ mod, status, score, isLocked, onStart, onContinue, onRevie
         status === 'complete' ? 'ring-1 ring-emerald-500/20' : ''
       )}
     >
-      {/* Header */}
       <div className={cn('px-4 py-3 flex items-center gap-3', colors.bg)}>
         <span className="text-2xl">{icon}</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className={cn('text-sm font-bold text-white truncate')}>{mod.title}</p>
+            <p className="text-sm font-bold text-white truncate">{mod.title}</p>
             {isLocked && <Lock className="w-3 h-3 text-slate-500 shrink-0" />}
             {status === 'complete' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
             {status === 'in_progress' && <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />}
@@ -110,7 +109,7 @@ function ModuleCard({ mod, status, score, isLocked, onStart, onContinue, onRevie
           <p className="text-[10px] text-slate-500">{mod.estMin} min · {mod.xp} XP</p>
         </div>
         {status === 'complete' && score && (
-          <div className={cn('text-xs font-bold px-2 py-0.5 rounded-full', colors.bg, colors.text, colors.border, 'border')}>
+          <div className={cn('text-xs font-bold px-2 py-0.5 rounded-full border', colors.bg, colors.text, colors.border)}>
             {score}%
           </div>
         )}
@@ -118,18 +117,14 @@ function ModuleCard({ mod, status, score, isLocked, onStart, onContinue, onRevie
 
       <div className="px-4 py-3 space-y-3">
         <p className="text-xs text-slate-400 leading-relaxed">{MODULE_DESCRIPTIONS[mod.id]}</p>
-        
-        {/* Skills */}
         <div className="flex flex-wrap gap-1">
           {(MODULE_SKILLS[mod.id] || []).map(skill => (
             <span key={skill} className={cn('text-[9px] px-1.5 py-0.5 rounded border', colors.bg, colors.border, colors.text)}>{skill}</span>
           ))}
         </div>
-
-        {/* Actions */}
         <div className="flex gap-2 pt-1">
           {isLocked ? (
-            <button onClick={onStart} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-700/50 text-slate-500 text-xs rounded-lg border border-slate-700">
+            <button className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-700/50 text-slate-500 text-xs rounded-lg border border-slate-700">
               <Lock className="w-3 h-3" /> Locked
             </button>
           ) : status === 'complete' ? (
@@ -158,12 +153,6 @@ function ModuleCard({ mod, status, score, isLocked, onStart, onContinue, onRevie
 
 function DownloadsPanel() {
   const [downloaded, setDownloaded] = useState({});
-
-  const handleDownload = (fileId) => {
-    downloadTrainingFile(fileId);
-    setDownloaded(prev => ({ ...prev, [fileId]: true }));
-  };
-
   return (
     <div className="space-y-2">
       <p className="text-[10px] text-slate-500 uppercase tracking-wider">Training Data Files</p>
@@ -172,10 +161,9 @@ function DownloadsPanel() {
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-white truncate">{file.label}</p>
             <p className="text-[10px] text-slate-500 truncate">{file.description}</p>
-            <p className="text-[9px] text-slate-600 mt-0.5">{file.expectedFeatures} feature{file.expectedFeatures !== 1 ? 's' : ''} · {file.featureType}</p>
           </div>
           <button
-            onClick={() => handleDownload(file.id)}
+            onClick={() => { downloadTrainingFile(file.id); setDownloaded(prev => ({ ...prev, [file.id]: true })); }}
             className={cn('flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 border',
               downloaded[file.id] ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-slate-700 border-slate-600 text-slate-300 hover:text-white hover:bg-slate-600'
             )}>
@@ -192,12 +180,11 @@ export default function Learn() {
   const location = useLocation();
   const navigate = useNavigate();
   const [progress, setProgress] = useState(loadProgress());
-  const [view, setView] = useState('hub'); // 'hub' | module id
+  const [view, setView] = useState('hub');
   const [showDownloads, setShowDownloads] = useState(false);
 
   useEffect(() => {
     setProgress(loadProgress());
-    // Handle return from planner
     if (location.state?.moduleId) {
       setView(location.state.moduleId);
     }
@@ -207,21 +194,14 @@ export default function Learn() {
   const lastActive = progress.lastActiveModule;
 
   const handleStartModule = (moduleId) => {
-    // Pre-save the checkpoint project
     const checkpointMap = {
-      bootcamp: buildGlenhavenBlank,
-      polygons: buildGlenhavenBlank,
-      importing: buildGlenhavenBlank,
-      turbines: buildGlenhavenWithConstraints,
-      cables: buildGlenhavenCableChallenge,
-      analysis: buildGlenhavenCableChallenge,
+      bootcamp: buildGlenhavenBlank, polygons: buildGlenhavenBlank,
+      importing: buildGlenhavenBlank, turbines: buildGlenhavenWithConstraints,
+      cables: buildGlenhavenCableChallenge, analysis: buildGlenhavenCableChallenge,
       challenge: buildGlenhavenFinalChallenge,
     };
     const builder = checkpointMap[moduleId];
-    if (builder) {
-      const projectData = builder();
-      saveCheckpoint(moduleId, projectData);
-    }
+    if (builder) saveCheckpoint(moduleId, builder());
     setView(moduleId);
   };
 
@@ -239,8 +219,7 @@ export default function Learn() {
   const isModuleLocked = (modId) => {
     if (modId === 'challenge') {
       const prevDone = ['bootcamp','polygons','importing','turbines','cables','analysis'];
-      const doneCount = prevDone.filter(id => progress.modules[id]?.status === 'complete').length;
-      return doneCount < 4; // Require 4/6 previous modules
+      return prevDone.filter(id => progress.modules[id]?.status === 'complete').length < 4;
     }
     return false;
   };
@@ -257,7 +236,6 @@ export default function Learn() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-slate-950">
-      {/* Header */}
       <div className="shrink-0 px-6 py-4 bg-slate-900 border-b border-slate-800">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
@@ -278,8 +256,6 @@ export default function Learn() {
             </button>
           </div>
         </div>
-
-        {/* Progress overview */}
         <div className="flex items-center gap-4">
           <div className="flex-1">
             <div className="flex items-center justify-between mb-1">
@@ -294,8 +270,6 @@ export default function Learn() {
             <XPBar xp={progress.totalXP} level={progress.level} />
           </div>
         </div>
-
-        {/* Badges */}
         {progress.badges.length > 0 && (
           <div className="mt-2 flex items-center gap-2">
             <span className="text-[10px] text-slate-600">Badges:</span>
@@ -304,9 +278,7 @@ export default function Learn() {
         )}
       </div>
 
-      {/* Main content */}
       <div className="flex-1 overflow-y-auto">
-        {/* Downloads panel */}
         <AnimatePresence>
           {showDownloads && (
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
@@ -318,7 +290,6 @@ export default function Learn() {
           )}
         </AnimatePresence>
 
-        {/* Scenario card */}
         <div className="px-6 py-5 border-b border-slate-800">
           <div className="bg-gradient-to-r from-emerald-500/10 to-cyan-500/5 border border-emerald-500/20 rounded-xl p-4">
             <div className="flex items-start gap-4">
@@ -328,7 +299,6 @@ export default function Learn() {
                 <h2 className="text-base font-bold text-white mb-1">Glenhaven Wind Farm</h2>
                 <p className="text-xs text-slate-400 leading-relaxed mb-3">
                   You are a junior wind development analyst at GreenVolt Energy. Over the next 7 modules, you'll design an early-stage layout for the Glenhaven Wind Farm — from blank site to final export.
-                  Each module builds on the last, teaching real planning tool skills through realistic tasks.
                 </p>
                 <div className="flex gap-3">
                   {lastActive && progress.modules[lastActive]?.status === 'in_progress' ? (
@@ -352,7 +322,6 @@ export default function Learn() {
           </div>
         </div>
 
-        {/* Module grid */}
         <div className="px-6 py-5">
           <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-4">Course Modules</p>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
