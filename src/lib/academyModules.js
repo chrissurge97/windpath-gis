@@ -415,25 +415,12 @@ Your brief: "Place 5–7 turbines on the Glenhaven ridge, respecting all exclusi
     checkpointKey: 'constraints',
     steps: [
       {
-        id: 'select_turbine_type',
-        title: '⚙️ Select Turbine Type',
-        story: 'The project team has specified Vestas V150-4.5 for this site — the most common turbine in Irish wind farm applications.',
-        goal: 'Open the Turbines tab and select the Vestas V150-4.5 (or any turbine type).',
-        tasks: [
-          { id: 'tab_turbines', label: 'Open the Turbines tab', watch: 'tab', value: 'turbines', required: true },
-          { id: 'turbine_type_seen', label: 'View the turbine type selector', watch: 'event', value: 'turbine_tab_opened', required: false },
-        ],
-        mapCenter: GLENHAVEN_CENTER,
-        mapZoom: 12,
-        why: 'Turbine type determines rated power (MW), rotor diameter (affects setback distances), and hub height (affects wind shear calculation).',
-        hint: 'The turbine type selector is at the top of the Turbines tab — click to expand it.',
-        coachTip: '💡 A 150m rotor = 750m minimum spacing (5D). Hub height affects AEP significantly — higher hubs catch faster wind.',
-      },
-      {
         id: 'place_first_turbines',
         title: '📍 Place Your First 3 Turbines',
         story: 'The ridge runs northeast across the site. Start with 3 turbines along the highest ground — check the satellite basemap to find the ridge.',
         goal: 'Place at least 3 turbines on the map, outside any exclusion zones.',
+        mapCenter: GLENHAVEN_CENTER,
+        mapZoom: 12,
         tasks: [
           { id: 'turbine_mode', label: 'Activate Place Turbine mode', watch: 'mode', value: 'place_turbine', required: true },
           { id: 'turbines_3', label: 'Place at least 3 turbines', watch: 'turbineCount', minValue: 3, required: true },
