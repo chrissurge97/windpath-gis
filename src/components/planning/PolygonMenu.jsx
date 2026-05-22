@@ -154,7 +154,7 @@ export default function PolygonMenu({ feature, layer, onApply, onDelete, onClose
 
       <div className="flex gap-2 mb-2">
         <button
-          onClick={() => onApply({ name, color, fillOpacity, notes, no_turbines: noTurbines })}
+          onClick={() => { window.__trainingEvent__ = { type: 'polygon_named', payload: { name }, ts: Date.now() }; onApply({ name, color, fillOpacity, notes, no_turbines: noTurbines }); }}
           className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition-colors"
         >
           Apply

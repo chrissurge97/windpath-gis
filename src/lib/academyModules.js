@@ -270,7 +270,7 @@ You're working with data from the planning team — your job is to get it into t
         goal: 'Click the polygon in Select mode and name it "Glenhaven Gross Site Boundary".',
         tasks: [
           { id: 'select_mode', label: 'Switch to Select mode', watch: 'mode', value: 'select', required: true },
-          { id: 'polygon_named', label: 'Name the polygon (click it to open menu)', watch: 'namedPolygon', required: true },
+          { id: 'polygon_named', label: 'Name the polygon (click it to open menu)', watch: 'event', value: 'polygon_named', required: true },
         ],
         why: 'Consistent naming is essential — solicitors, planners, and consultants all reference layers by name.',
         hint: 'Switch to Select mode, click your polygon, then fill in the Name field and click Apply.',
