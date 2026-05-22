@@ -543,7 +543,8 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
 
           if (!latCol || !lngCol) {
             log(`CSV: could not find lat/lng columns. Found: ${headers.join(', ')}`, 'warn');
-            alert(`CSV import failed: could not find lat/lng columns.\nFound columns: ${headers.join(', ')}\nExpected columns named: lat, lng (or latitude/longitude/x/y)`);
+            if (onLoading) onLoading(false);
+            alert(`CSV import failed: could not find lat/lng columns.\nFound columns: ${headers.join(', ')}\nExpected: lat, lng (or latitude/longitude)`);
           } else {
             const csvFeatures = [];
             for (let i = 1; i < lines.length; i++) {
@@ -551,8 +552,7 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
               const row = Object.fromEntries(headers.map((h, j) => [h, vals[j] ?? '']));
               const lat = parseFloat(row[latCol]), lng = parseFloat(row[lngCol]);
               if (isNaN(lat) || isNaN(lng)) continue;
-              // Include all CSV columns as properties (excluding lat/lng)
-              const props = { name: row.name || row.Name || row.NAME || `Feature ${i}` };
+              const props = { name: row.name || row.Name || row.NAME || row.id || row.ID || `Feature ${i}` };
               for (const h of headers) {
                 if (h === latCol || h === lngCol) continue;
                 props[h] = row[h];
@@ -564,20 +564,21 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
               });
             }
             if (csvFeatures.length > 0) {
-              log(`CSV: ${csvFeatures.length} point features`, 'success');
+              log(`CSV → GeoJSON: ${csvFeatures.length} point features`, 'success');
               const rawLayer = {
                 id: `lyr_csv_${Date.now()}`, name: baseName, type: 'polygon',
                 visible: true, color: '#8b5cf6', fillOpacity: 0.2,
                 strokeOpacity: 0.8, strokeWeight: 2, no_turbines: false, features: csvFeatures,
               };
               if (onLoading) onLoading(false);
-              if (onClassifyMode) {
-                onClassifyMode([rawLayer]);
-                return;
-              }
+              // Always go through classify modal so user can assign type (turbine, etc.)
+              // useImportClassify fires import_completed event when confirmed
+              if (onClassifyMode) { onClassifyMode([rawLayer]); return; }
               allImported.push(rawLayer);
             } else {
+              if (onLoading) onLoading(false);
               log('CSV: no valid lat/lng rows found', 'warn');
+              alert('CSV import: no valid rows found. Check that lat/lng values are numbers.');
             }
           }
         }

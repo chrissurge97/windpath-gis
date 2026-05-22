@@ -46,6 +46,7 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
   const [showStuck, setShowStuck] = useState(false);
   const [justCompleted, setJustCompleted] = useState(null); // id of just-completed task
   const [downloadedFiles, setDownloadedFiles] = useState({});
+  const stepEnteredAt = useRef(Date.now());
 
   // Drag state
   const panelRef = useRef(null);
@@ -118,9 +119,10 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
         if (task.watch === 'noTurbineZoneCount' && (state?.noTurbineZoneCount || 0) >= (task.minValue || 1)) done = true;
         if (task.watch === 'importCount' && (state?.importCount || 0) >= (task.minValue || 1)) done = true;
 
-        // Event-based completion
-        if (task.watch === 'event' && evt?.type === task.value) done = true;
-        if (task.watch === 'download' && evt?.type === 'download_clicked' && evt?.payload?.fileId === task.value) done = true;
+        // Event-based completion — only accept events that fired AFTER this step was entered
+        const evtFresh = evt?.ts >= stepEnteredAt.current;
+        if (task.watch === 'event' && evtFresh && evt?.type === task.value) done = true;
+        if (task.watch === 'download' && evtFresh && evt?.type === 'download_clicked' && evt?.payload?.fileId === task.value) done = true;
 
         // Layer name checks (case-insensitive, trimmed)
         if (task.watch === 'layerExists') {
@@ -145,6 +147,7 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
     setShowHint(false);
     setShowWhy(false);
     setShowStuck(false);
+    stepEnteredAt.current = Date.now();
   }, [stepIndex]);
 
   if (!module) return null;
