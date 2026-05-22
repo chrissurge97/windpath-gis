@@ -350,6 +350,7 @@ export default function Planning() {
       totalLayerCount: layers.length,
       noTurbineZoneCount,
       importCount: window.__importCount__ || 0,
+      turbineRenameCount: window.__turbineRenameCount__ || 0,
       layerNames: layers.map(l => l.name.trim().toLowerCase()),
       ts: Date.now(),
     };
@@ -737,7 +738,8 @@ export default function Planning() {
 
   const applyTurbineMenu = () => {
     if (!turbineMenuFeature) return;
-    window.__trainingEvent__ = { type: 'turbine_renamed', payload: { name: turbineMenuName }, ts: Date.now() };
+    window.__turbineRenameCount__ = (window.__turbineRenameCount__ || 0) + 1;
+    window.__trainingEvent__ = { type: 'turbine_renamed', payload: { name: turbineMenuName, count: window.__turbineRenameCount__ }, ts: Date.now() };
     const tt = turbineTypes.find((t) => t.id === turbineMenuTypeId) || turbineTypes[0];
     updateTurbineProps(turbineMenuFeature.id, {
       ...turbineMenuFeature.properties,

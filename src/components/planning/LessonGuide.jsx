@@ -118,6 +118,7 @@ export default function LessonGuide({ moduleId, initialLessonIndex = 0, mapRef, 
         if (task.watch === 'totalLayerCount' && (state?.totalLayerCount || 0) >= (task.minValue || 1)) done = true;
         if (task.watch === 'noTurbineZoneCount' && (state?.noTurbineZoneCount || 0) >= (task.minValue || 1)) done = true;
         if (task.watch === 'importCount' && (state?.importCount || 0) >= (task.minValue || 1)) done = true;
+        if (task.watch === 'turbineRenameCount' && (state?.turbineRenameCount || 0) >= (task.minValue || 1)) done = true;
 
         // Event-based completion — only accept events that fired AFTER this step was entered
         const evtFresh = evt?.ts >= stepEnteredAt.current;

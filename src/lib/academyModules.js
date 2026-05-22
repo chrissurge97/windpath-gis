@@ -460,7 +460,7 @@ Your brief: "Place 5–7 turbines on the Glenhaven ridge, respecting all exclusi
         story: 'The noise consultant needs turbine names for their model. "Turbine 1" isn\'t good enough — they need T01, T02 format.',
         goal: 'Rename at least 3 turbines using T01, T02 naming convention.',
         tasks: [
-          { id: 'turbines_renamed', label: 'Rename at least 3 turbines (T01, T02 format)', watch: 'event', value: 'turbine_renamed', minCount: 3, required: true },
+          { id: 'turbines_renamed', label: 'Rename at least 3 turbines (T01, T02 format)', watch: 'turbineRenameCount', minValue: 3, required: true },
         ],
         why: 'Turbine naming conventions (T01–T10) are used consistently across noise, shadow, ecology, and LVIA reports.',
         hint: 'Click a turbine → edit the name field in the popup → click Apply. Or use the pencil icon in the Turbines tab.',
