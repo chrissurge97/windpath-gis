@@ -183,6 +183,7 @@ export default function Learn() {
   const [progress, setProgress] = useState(loadProgress());
   const [view, setView] = useState('hub');
   const [showDownloads, setShowDownloads] = useState(false);
+  const [cleaningServer, setCleaningServer] = useState(false);
 
   useEffect(() => {
     setProgress(loadProgress());
@@ -220,8 +221,14 @@ export default function Learn() {
 
   const handleDeleteTrainingFiles = async () => {
     if (!window.confirm('Delete all training project files from the server? This frees up storage — your progress records are kept.')) return;
-    const n = await deleteAllTrainingProjects();
-    window.alert(`Deleted ${n} training project${n !== 1 ? 's' : ''} from the server.`);
+    setCleaningServer(true);
+    try {
+      const n = await deleteAllTrainingProjects();
+      window.alert(`Deleted ${n} training project${n !== 1 ? 's' : ''} from the server.`);
+    } catch (e) {
+      window.alert('Failed to clean server: ' + e.message);
+    }
+    setCleaningServer(false);
   };
 
   const isModuleLocked = (modId) => {
@@ -258,10 +265,13 @@ export default function Learn() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-colors">
               <Download className="w-3 h-3" /> Training Files
             </button>
-            <button onClick={handleDeleteTrainingFiles}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-500 hover:text-orange-400 transition-colors"
+            <button onClick={handleDeleteTrainingFiles} disabled={cleaningServer}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-500 hover:text-orange-400 transition-colors disabled:opacity-50"
               title="Remove training project files from server storage">
-              <Trash2 className="w-3 h-3" /> Clean Server
+              {cleaningServer
+                ? <><svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Cleaning…</>
+                : <><Trash2 className="w-3 h-3" /> Clean Server</>
+              }
             </button>
             <button onClick={handleReset}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-500 hover:text-red-400 transition-colors">
