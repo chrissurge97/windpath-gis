@@ -274,7 +274,7 @@ export default function Learn() {
       bootcamp: buildGlenhavenBlank, polygons: buildGlenhavenBlank,
       importing: buildGlenhavenBlank, turbines: buildGlenhavenWithConstraints,
       cables: buildGlenhavenCableChallenge, analysis: buildGlenhavenCableChallenge,
-      challenge: buildGlenhavenFinalChallenge,
+      challenge: buildGlenhavenBlank,
     };
     const builder = checkpointMap[moduleId];
     // saveCheckpoint stores to localStorage only — no server save
