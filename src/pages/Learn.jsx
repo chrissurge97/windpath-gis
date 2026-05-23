@@ -501,10 +501,13 @@ export default function Learn() {
     if (!fromEl) return;
     const fromRect = fromEl.getBoundingClientRect();
 
-    newBadges.forEach((badgeId, i) => {
+    // If completionist badge arrives alongside another badge, delay it by 5s
+    const nonGraduate = newBadges.filter(b => b !== 'completionist');
+    const hasGraduate = newBadges.includes('completionist');
+
+    nonGraduate.forEach((badgeId, i) => {
       const badge = ACADEMY_BADGES[badgeId];
       if (!badge) return;
-      // Delay each badge slightly if multiple arrive at once
       setTimeout(() => {
         const toEl = badgeRefs.current[badgeId];
         const toRect = toEl ? toEl.getBoundingClientRect() : null;
@@ -512,6 +515,18 @@ export default function Learn() {
         setFlyingBadges(prev => [...prev, { uid, badge, fromRect, toRect }]);
       }, i * 200);
     });
+
+    if (hasGraduate) {
+      const badge = ACADEMY_BADGES['completionist'];
+      // Delay 5s after the last non-graduate badge (or 5s if none)
+      const baseDelay = nonGraduate.length > 0 ? 5000 : 0;
+      setTimeout(() => {
+        const toEl = badgeRefs.current['completionist'];
+        const toRect = toEl ? toEl.getBoundingClientRect() : null;
+        const uid = `completionist_${Date.now()}`;
+        setFlyingBadges(prev => [...prev, { uid, badge, fromRect, toRect }]);
+      }, baseDelay);
+    }
   }, [progress.badges]);
 
   const handleAutoComplete = () => {
