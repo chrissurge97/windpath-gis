@@ -102,7 +102,7 @@ const BADGE_LABELS = {
 function FlyingBadge({ badge, fromRect, toRect, onDone }) {
   const isGraduate = badge.id === 'completionist';
   // Graduate badge lingers longer in the swell phase
-  const swellDuration = isGraduate ? 2200 : 800;
+  const swellDuration = isGraduate ? 3200 : 1800;
   const totalDuration = swellDuration + 700;
 
   const [phase, setPhase] = useState('swell'); // swell -> fly -> done
