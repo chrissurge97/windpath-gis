@@ -482,7 +482,7 @@ export default function Learn() {
   const [showDevConfig, setShowDevConfig] = useState(false);
   const [autoCompleting, setAutoCompleting] = useState(false);
   const [flyingBadges, setFlyingBadges] = useState([]);
-  const [showPassed, setShowPassed] = useState(() => loadProgress().badges.includes('completionist'));
+  const [showPassed, setShowPassed] = useState(false);
   const confettiIntervalRef = useRef(null);
   const badgeRefs = useRef({});
   const bannerRef = useRef(null);
@@ -568,7 +568,9 @@ export default function Learn() {
   };
 
   useEffect(() => {
-    setProgress(loadProgress());
+    const p = loadProgress();
+    setProgress(p);
+    setShowPassed(p.badges.includes('completionist'));
     if (location.state?.moduleId) {
       setView(location.state.moduleId);
     }
@@ -599,6 +601,7 @@ export default function Learn() {
     if (!window.confirm('Reset all WindPath Academy progress? This cannot be undone.')) return;
     resetProgress();
     setProgress(loadProgress());
+    setShowPassed(false);
   };
 
   const handleDeleteTrainingFiles = async () => {
