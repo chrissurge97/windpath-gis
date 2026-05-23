@@ -530,6 +530,7 @@ export default function Planning() {
       }
       );
       updateLayer(subLayer.id, { features: [...subLayer.features, f] });
+      window.__trainingEvent__ = { type: 'substation_placed', payload: { id: f.id }, ts: Date.now() };
       return;
     }
 

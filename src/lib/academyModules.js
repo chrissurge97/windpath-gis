@@ -505,10 +505,10 @@ Your electrical engineer has sent a note: "Keep the cable routes tight — every
         id: 'place_substation',
         title: '🏭 Place the Collection Substation',
         story: 'Central to the turbine cluster, near a road — that\'s where your substation goes. The civil team needs reasonable road access.',
-        goal: 'Place a substation on the map.',
+        goal: 'Place a NEW substation on the map.',
         tasks: [
           { id: 'sub_mode', label: 'Activate Substation placement mode', watch: 'mode', value: 'place_substation', required: true },
-          { id: 'sub_placed', label: 'Place a substation', watch: 'substationCount', minValue: 1, required: true },
+          { id: 'sub_placed', label: 'Place a substation on the map', watch: 'event', value: 'substation_placed', required: true },
         ],
         mapCenter: GLENHAVEN_CENTER,
         mapZoom: 13,
