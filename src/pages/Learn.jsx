@@ -251,6 +251,118 @@ function DevConfigPanel({ progress, onClose, onRefresh }) {
   );
 }
 
+function CurrentModuleBanner({ progress, onStart, onContinue, onNavigatePlanner }) {
+  // Find the current active module: first in_progress, else first not_started, else null (all done)
+  const currentMod = ACADEMY_MODULES.find(m => progress.modules[m.id]?.status === 'in_progress')
+    || ACADEMY_MODULES.find(m => !progress.modules[m.id] || progress.modules[m.id]?.status === 'not_started')
+    || null;
+
+  const [justCompleted, setJustCompleted] = useState(null); // modId that just got completed
+  const [visible, setVisible] = useState(true);
+  const prevProgressRef = useRef(progress);
+
+  // Detect when currentMod changes to 'complete' — show tick then fade
+  useEffect(() => {
+    const prev = prevProgressRef.current;
+    prevProgressRef.current = progress;
+    if (!currentMod) return;
+    const wasNotComplete = prev.modules[currentMod.id]?.status !== 'complete';
+    const isNowComplete = progress.modules[currentMod.id]?.status === 'complete';
+    if (wasNotComplete && isNowComplete) {
+      setJustCompleted(currentMod.id);
+      setVisible(true);
+      // After showing tick for 1.5s, fade out
+      setTimeout(() => setVisible(false), 1500);
+      // Re-show for next module
+      setTimeout(() => { setJustCompleted(null); setVisible(true); }, 2200);
+    }
+  }, [progress, currentMod]);
+
+  if (!currentMod) {
+    // All done
+    return (
+      <div className="px-6 py-5 border-b border-slate-800">
+        <div className="bg-gradient-to-r from-emerald-500/10 to-cyan-500/5 border border-emerald-500/20 rounded-xl p-4 flex items-center gap-4">
+          <div className="text-3xl">🏆</div>
+          <div className="flex-1">
+            <p className="text-[10px] text-emerald-400 uppercase tracking-wider font-medium mb-1">All Modules Complete</p>
+            <h2 className="text-base font-bold text-white mb-1">Glenhaven Wind Farm</h2>
+            <p className="text-xs text-slate-400">You've completed the full design scenario. Outstanding work!</p>
+          </div>
+          <CheckCircle2 className="w-8 h-8 text-emerald-400 shrink-0" />
+        </div>
+      </div>
+    );
+  }
+
+  const colors = MODULE_COLORS[currentMod.id] || MODULE_COLORS.bootcamp;
+  const icon = MODULE_ICONS[currentMod.id] || '📘';
+  const modStatus = progress.modules[currentMod.id]?.status || 'not_started';
+  const totalSteps = currentMod.steps?.length || 1;
+  // Estimate completion: count completed steps stored, fallback to 0
+  const completedSteps = progress.modules[currentMod.id]?.completedSteps || 0;
+  const pct = modStatus === 'complete' ? 100 : Math.round((completedSteps / totalSteps) * 100);
+
+  return (
+    <div className="px-6 py-5 border-b border-slate-800">
+      <AnimatePresence mode="wait">
+        {visible && (
+          <motion.div
+            key={currentMod.id + (justCompleted ? '_done' : '')}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.35 }}
+            className={cn('border rounded-xl p-4 flex items-center gap-4', colors.bg, colors.border)}
+          >
+            <div className="text-3xl shrink-0">{icon}</div>
+            <div className="flex-1 min-w-0">
+              <p className={cn('text-[10px] uppercase tracking-wider font-medium mb-0.5', colors.text)}>
+                {modStatus === 'in_progress' ? 'Current Module' : 'Up Next'}
+              </p>
+              <h2 className="text-sm font-bold text-white truncate">{currentMod.title}</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">{MODULE_DESCRIPTIONS[currentMod.id]}</p>
+              {modStatus === 'in_progress' && (
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="flex-1 h-1 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-[9px] text-slate-500 shrink-0">{pct}%</span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {justCompleted === currentMod.id ? (
+                <motion.div
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+                >
+                  <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+                </motion.div>
+              ) : modStatus === 'in_progress' ? (
+                <button onClick={() => onContinue(currentMod.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-semibold text-white transition-colors">
+                  <Play className="w-3 h-3" /> Continue
+                </button>
+              ) : (
+                <button onClick={() => onStart(currentMod.id)}
+                  className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors', colors.bg, colors.border, colors.text, 'hover:brightness-125')}>
+                  <Play className="w-3 h-3" /> Start
+                </button>
+              )}
+              <button onClick={onNavigatePlanner}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                <ExternalLink className="w-3 h-3" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 export default function Learn() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -439,37 +551,7 @@ export default function Learn() {
           )}
         </AnimatePresence>
 
-        <div className="px-6 py-5 border-b border-slate-800">
-          <div className="bg-gradient-to-r from-emerald-500/10 to-cyan-500/5 border border-emerald-500/20 rounded-xl p-4">
-            <div className="flex items-start gap-4">
-              <div className="text-3xl">🏔️</div>
-              <div className="flex-1">
-                <p className="text-[10px] text-emerald-400 uppercase tracking-wider font-medium mb-1">Guided Design Scenario</p>
-                <h2 className="text-base font-bold text-white mb-1">Glenhaven Wind Farm</h2>
-                <p className="text-xs text-slate-400 leading-relaxed mb-3">
-                  You are a junior wind development analyst at GreenVolt Energy. Over the next 7 modules, you'll design an early-stage layout for the Glenhaven Wind Farm — from blank site to final export.
-                </p>
-                <div className="flex gap-3">
-                  {lastActive && progress.modules[lastActive]?.status === 'in_progress' ? (
-                    <button onClick={() => setView(lastActive)}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-semibold text-white transition-colors">
-                      <Play className="w-3.5 h-3.5" /> Continue: {ACADEMY_MODULES.find(m => m.id === lastActive)?.title}
-                    </button>
-                  ) : (
-                    <button onClick={() => handleStartModule('bootcamp')}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-semibold text-white transition-colors">
-                      <Play className="w-3.5 h-3.5" /> Start Full Scenario
-                    </button>
-                  )}
-                  <button onClick={() => navigate('/planning')}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs text-slate-300 border border-slate-700 transition-colors">
-                    <ExternalLink className="w-3.5 h-3.5" /> Open Planning Tool
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <CurrentModuleBanner progress={progress} onStart={handleStartModule} onContinue={(id) => setView(id)} onNavigatePlanner={() => navigate('/planning')} />
 
         <div className="px-6 py-5">
           <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-4">Course Modules</p>
