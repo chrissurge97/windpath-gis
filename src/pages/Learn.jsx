@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,6 +8,7 @@ import {
   BookOpen, ArrowRight, Trash2, Settings, X
 } from 'lucide-react';
 import { loadProgress, saveProgress, resetProgress, getOverallProgress, markModuleComplete, ACADEMY_MODULES, ACADEMY_BADGES } from '@/lib/academyProgress';
+import confetti from 'canvas-confetti';
 import { deleteAllTrainingProjects } from '@/lib/projectStorage';
 import { TRAINING_FILES, downloadTrainingFile } from '@/lib/trainingDownloads';
 import { saveCheckpoint, buildGlenhavenBlank, buildGlenhavenWithConstraints, buildGlenhavenCableChallenge, buildGlenhavenFinalChallenge } from '@/lib/academyModules';
@@ -258,6 +259,44 @@ export default function Learn() {
   const [showDownloads, setShowDownloads] = useState(false);
   const [cleaningServer, setCleaningServer] = useState(false);
   const [showDevConfig, setShowDevConfig] = useState(false);
+  const [autoCompleting, setAutoCompleting] = useState(false);
+  const confettiIntervalRef = useRef(null);
+
+  const handleAutoComplete = () => {
+    if (autoCompleting) return;
+    setAutoCompleting(true);
+
+    // Start continuous confetti
+    confettiIntervalRef.current = setInterval(() => {
+      confetti({
+        particleCount: 18,
+        spread: 70,
+        origin: { x: Math.random(), y: Math.random() * 0.6 + 0.1 },
+        colors: ['#10b981', '#06b6d4', '#f59e0b', '#8b5cf6', '#f97316'],
+        gravity: 0.8,
+        scalar: 0.9,
+        ticks: 120,
+      });
+    }, 400);
+
+    const modules = ACADEMY_MODULES.map(m => m.id);
+    modules.forEach((modId, i) => {
+      setTimeout(() => {
+        markModuleComplete(modId, 100);
+        setProgress(loadProgress());
+        // Big burst on each module
+        confetti({ particleCount: 80, spread: 100, origin: { x: 0.5, y: 0.4 }, colors: ['#10b981', '#facc15', '#38bdf8'] });
+        if (i === modules.length - 1) {
+          // Final burst + stop
+          setTimeout(() => {
+            confetti({ particleCount: 200, spread: 160, origin: { x: 0.5, y: 0.3 } });
+            clearInterval(confettiIntervalRef.current);
+            setAutoCompleting(false);
+          }, 800);
+        }
+      }, i * 3000);
+    });
+  };
 
   useEffect(() => {
     setProgress(loadProgress());
@@ -457,6 +496,13 @@ export default function Learn() {
         </div>
       </div>
     </div>
+      {/* Hidden auto-complete button — bottom left */}
+      <button
+        onClick={handleAutoComplete}
+        disabled={autoCompleting}
+        title=""
+        className="fixed bottom-3 left-3 z-50 w-4 h-4 rounded-full opacity-0 hover:opacity-10 bg-white transition-opacity cursor-default"
+      />
     </>
   );
 }
