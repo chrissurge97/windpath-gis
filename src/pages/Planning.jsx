@@ -377,7 +377,8 @@ export default function Planning() {
   // ── Persist (debounced) ────────────────────────────────────────────────────
   const saveTimer = useRef(null);
   useEffect(() => {
-    if (!currentProjectId || currentProjectId === '__demo__') return;
+    // Academy checkpoints live in localStorage only — skip server save
+    if (!currentProjectId || currentProjectId === '__demo__' || currentProjectId.startsWith('academy_checkpoint_') || currentProjectId.startsWith('__imported_')) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     const data = { id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams, globalRadii };
     saveTimer.current = setTimeout(() => {

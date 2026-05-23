@@ -5,9 +5,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Wind, CheckCircle2, Lock,
   Download, Play, RotateCcw, ExternalLink,
-  BookOpen, ArrowRight
+  BookOpen, ArrowRight, Trash2
 } from 'lucide-react';
 import { loadProgress, resetProgress, getOverallProgress, ACADEMY_MODULES, ACADEMY_BADGES } from '@/lib/academyProgress';
+import { deleteAllTrainingProjects } from '@/lib/projectStorage';
 import { TRAINING_FILES, downloadTrainingFile } from '@/lib/trainingDownloads';
 import { saveCheckpoint, buildGlenhavenBlank, buildGlenhavenWithConstraints, buildGlenhavenCableChallenge, buildGlenhavenFinalChallenge } from '@/lib/academyModules';
 import AcademyModuleView from '@/components/academy/AcademyModuleView';
@@ -201,6 +202,7 @@ export default function Learn() {
       challenge: buildGlenhavenFinalChallenge,
     };
     const builder = checkpointMap[moduleId];
+    // saveCheckpoint stores to localStorage only — no server save
     if (builder) saveCheckpoint(moduleId, builder());
     setView(moduleId);
   };
@@ -214,6 +216,12 @@ export default function Learn() {
     if (!window.confirm('Reset all WindPath Academy progress? This cannot be undone.')) return;
     resetProgress();
     setProgress(loadProgress());
+  };
+
+  const handleDeleteTrainingFiles = async () => {
+    if (!window.confirm('Delete all training project files from the server? This frees up storage — your progress records are kept.')) return;
+    const n = await deleteAllTrainingProjects();
+    window.alert(`Deleted ${n} training project${n !== 1 ? 's' : ''} from the server.`);
   };
 
   const isModuleLocked = (modId) => {
@@ -249,6 +257,11 @@ export default function Learn() {
             <button onClick={() => setShowDownloads(v => !v)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-colors">
               <Download className="w-3 h-3" /> Training Files
+            </button>
+            <button onClick={handleDeleteTrainingFiles}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-500 hover:text-orange-400 transition-colors"
+              title="Remove training project files from server storage">
+              <Trash2 className="w-3 h-3" /> Clean Server
             </button>
             <button onClick={handleReset}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-500 hover:text-red-400 transition-colors">

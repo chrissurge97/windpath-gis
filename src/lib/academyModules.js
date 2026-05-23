@@ -134,7 +134,7 @@ export function buildGlenhavenFinalChallenge() {
 // Save a checkpoint to localStorage so it can be opened from the planner
 export function saveCheckpoint(key, projectData) {
   const id = `academy_checkpoint_${key}`;
-  const full = { ...projectData, id };
+  const full = { ...projectData, id, is_training: true };
   localStorage.setItem(`planning_project_${id}`, JSON.stringify(full));
   // Register in index
   let index = [];

@@ -9,6 +9,16 @@
     "description": {
       "type": "string",
       "description": "Full project JSON blob (layers, turbineTypes, cableTypes, windParams, globalRadii)"
+    },
+    "folder": {
+      "type": "string",
+      "description": "Folder path, e.g. 'My Projects/Ireland' or empty for root",
+      "default": ""
+    },
+    "is_training": {
+      "type": "boolean",
+      "description": "True if this project was auto-created by a training module",
+      "default": false
     }
   },
   "required": [
