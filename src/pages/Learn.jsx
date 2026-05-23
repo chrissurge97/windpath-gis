@@ -65,20 +65,83 @@ function XPBar({ xp, level }) {
   );
 }
 
-function BadgeGrid({ earned }) {
+function BadgeGrid({ earned, badgeRefs }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {Object.values(ACADEMY_BADGES).map(b => {
         const isEarned = earned.includes(b.id);
         return (
-          <div key={b.id} title={`${b.name}: ${b.desc}`}
-            className={cn('w-8 h-8 rounded-lg flex items-center justify-center text-base transition-all',
+          <div
+            key={b.id}
+            ref={el => { if (badgeRefs) badgeRefs.current[b.id] = el; }}
+            title={`${b.name}: ${b.desc}`}
+            className={cn('w-8 h-8 rounded-lg flex items-center justify-center text-base transition-all duration-500',
               isEarned ? 'bg-amber-500/20 border border-amber-500/40' : 'bg-slate-800/60 border border-slate-700/40 grayscale opacity-30'
             )}>
             {b.icon}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Flying badge that animates from banner to badge slot
+function FlyingBadge({ badge, fromRect, toRect, onDone }) {
+  const [phase, setPhase] = useState('swell'); // swell -> fly -> done
+
+  useEffect(() => {
+    // Phase 1: swell for 600ms
+    const t1 = setTimeout(() => setPhase('fly'), 600);
+    // Phase 2: fly for 700ms, then done
+    const t2 = setTimeout(() => { setPhase('done'); onDone(); }, 1300);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  if (phase === 'done') return null;
+
+  const fromX = fromRect.left + fromRect.width / 2;
+  const fromY = fromRect.top + fromRect.height / 2;
+  const toX = toRect ? toRect.left + toRect.width / 2 : fromX;
+  const toY = toRect ? toRect.top + toRect.height / 2 : fromY;
+
+  const swellStyle = {
+    position: 'fixed',
+    left: fromX,
+    top: fromY,
+    transform: 'translate(-50%, -50%) scale(1)',
+    fontSize: '4rem',
+    zIndex: 9999,
+    pointerEvents: 'none',
+    transition: 'none',
+  };
+
+  const flyStyle = {
+    position: 'fixed',
+    left: toX,
+    top: toY,
+    transform: 'translate(-50%, -50%) scale(0.5)',
+    fontSize: '4rem',
+    zIndex: 9999,
+    pointerEvents: 'none',
+    transition: 'left 0.7s cubic-bezier(0.4,0,0.2,1), top 0.7s cubic-bezier(0.4,0,0.2,1), transform 0.7s cubic-bezier(0.4,0,0.2,1), opacity 0.7s ease',
+    opacity: phase === 'fly' ? 0.9 : 1,
+  };
+
+  // swell: grows from 1 → 2.5 via CSS animation, fly: moves to target
+  return (
+    <div style={phase === 'swell' ? swellStyle : flyStyle}>
+      <motion.span
+        initial={{ scale: 1 }}
+        animate={{ scale: phase === 'swell' ? 2.5 : 0.45 }}
+        transition={phase === 'swell'
+          ? { duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }
+          : { duration: 0.65, ease: [0.4, 0, 0.2, 1] }
+        }
+        style={{ display: 'block', lineHeight: 1 }}
+      >
+        {badge.icon}
+      </motion.span>
     </div>
   );
 }
@@ -372,7 +435,38 @@ export default function Learn() {
   const [cleaningServer, setCleaningServer] = useState(false);
   const [showDevConfig, setShowDevConfig] = useState(false);
   const [autoCompleting, setAutoCompleting] = useState(false);
+  const [flyingBadges, setFlyingBadges] = useState([]); // [{id, badge, fromRect, toRect}]
   const confettiIntervalRef = useRef(null);
+  const badgeRefs = useRef({});
+  const bannerRef = useRef(null);
+  const prevBadgesRef = useRef(progress.badges);
+
+  // Detect newly earned badges and launch flying animation
+  useEffect(() => {
+    const prev = prevBadgesRef.current;
+    const curr = progress.badges;
+    const newBadges = curr.filter(b => !prev.includes(b));
+    prevBadgesRef.current = curr;
+
+    if (newBadges.length === 0) return;
+
+    // Get source rect from banner
+    const fromEl = bannerRef.current;
+    if (!fromEl) return;
+    const fromRect = fromEl.getBoundingClientRect();
+
+    newBadges.forEach((badgeId, i) => {
+      const badge = ACADEMY_BADGES[badgeId];
+      if (!badge) return;
+      // Delay each badge slightly if multiple arrive at once
+      setTimeout(() => {
+        const toEl = badgeRefs.current[badgeId];
+        const toRect = toEl ? toEl.getBoundingClientRect() : null;
+        const uid = `${badgeId}_${Date.now()}_${i}`;
+        setFlyingBadges(prev => [...prev, { uid, badge, fromRect, toRect }]);
+      }, i * 200);
+    });
+  }, [progress.badges]);
 
   const handleAutoComplete = () => {
     if (autoCompleting) return;
@@ -534,7 +628,7 @@ export default function Learn() {
         {progress.badges.length > 0 && (
           <div className="mt-2 flex items-center gap-2">
             <span className="text-[10px] text-slate-600">Badges:</span>
-            <BadgeGrid earned={progress.badges} />
+            <BadgeGrid earned={progress.badges} badgeRefs={badgeRefs} />
           </div>
         )}
       </div>
@@ -551,7 +645,9 @@ export default function Learn() {
           )}
         </AnimatePresence>
 
-        <CurrentModuleBanner progress={progress} onStart={handleStartModule} onContinue={(id) => setView(id)} onNavigatePlanner={() => navigate('/planning')} />
+        <div ref={bannerRef}>
+          <CurrentModuleBanner progress={progress} onStart={handleStartModule} onContinue={(id) => setView(id)} onNavigatePlanner={() => navigate('/planning')} />
+        </div>
 
         <div className="px-6 py-5">
           <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-4">Course Modules</p>
@@ -578,6 +674,17 @@ export default function Learn() {
         </div>
       </div>
     </div>
+      {/* Flying badge animations */}
+      {flyingBadges.map(fb => (
+        <FlyingBadge
+          key={fb.uid}
+          badge={fb.badge}
+          fromRect={fb.fromRect}
+          toRect={fb.toRect}
+          onDone={() => setFlyingBadges(prev => prev.filter(x => x.uid !== fb.uid))}
+        />
+      ))}
+
       {/* Hidden auto-complete button — bottom left */}
       <button
         onClick={handleAutoComplete}
