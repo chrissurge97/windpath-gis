@@ -659,7 +659,7 @@ export default function Learn() {
                 animate={{ scale: 1, opacity: 1, rotate: -8 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 18, duration: 0.8 }}
                 className="absolute left-1/2 top-1/2 pointer-events-none select-none"
-                style={{ zIndex: 10, transform: 'translateX(calc(-40%)) translateY(calc(-40% ))' }}
+                style={{ zIndex: 10, transform: 'translateX(calc(-40% - 96px)) translateY(calc(-40% - 19px))' }}
               >
                 <div style={{
                   border: '4px solid rgba(34,197,94,0.85)',
