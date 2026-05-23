@@ -144,6 +144,51 @@ function MoveDialog({ project, folders, onMove, onClose }) {
   );
 }
 
+// ── Sidebar folder node ───────────────────────────────────────────────────────
+function FolderNode({ path, depth, folders, expandedFolders, currentFolder, setCurrentFolder, setSearch, setFilterTraining, setExpandedFolders, countInFolder, handleDeleteFolder }) {
+  const label = getFolderLabel(path);
+  const isActive = currentFolder === path;
+  const children = folders.filter(f => {
+    const fParts = f.split('/');
+    const pathParts = path ? path.split('/') : [];
+    return fParts.length === pathParts.length + 1 && fParts.slice(0, pathParts.length).join('/') === path;
+  });
+  const isExpanded = expandedFolders.has(path);
+  const count = countInFolder(path);
+
+  return (
+    <div>
+      <div onClick={() => { setCurrentFolder(path); setSearch(''); setFilterTraining(null); }}
+        className={cn('flex items-center gap-1.5 py-1 px-2 rounded cursor-pointer group transition-colors text-xs',
+          isActive ? 'bg-emerald-500/15 text-emerald-300' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+        )}
+        style={{ paddingLeft: 8 + depth * 14 }}>
+        {children.length > 0 ? (
+          <button onClick={e => { e.stopPropagation(); setExpandedFolders(prev => { const n = new Set(prev); n.has(path) ? n.delete(path) : n.add(path); return n; }); }}
+            className="shrink-0 text-slate-600 hover:text-slate-300">
+            {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          </button>
+        ) : <div className="w-3 shrink-0" />}
+        {path === '' ? <Home className="w-3 h-3 shrink-0" /> : <Folder className="w-3 h-3 shrink-0" />}
+        <span className="flex-1 truncate">{path === '' ? 'Root' : label}</span>
+        {count > 0 && <span className="text-[9px] text-slate-600">{count}</span>}
+        {path !== '' && (
+          <button onClick={e => { e.stopPropagation(); handleDeleteFolder(path); }}
+            className="opacity-0 group-hover:opacity-100 text-slate-700 hover:text-red-400 transition-all">
+            <X className="w-2.5 h-2.5" />
+          </button>
+        )}
+      </div>
+      {isExpanded && children.map(child => (
+        <FolderNode key={child} path={child} depth={depth + 1}
+          folders={folders} expandedFolders={expandedFolders} currentFolder={currentFolder}
+          setCurrentFolder={setCurrentFolder} setSearch={setSearch} setFilterTraining={setFilterTraining}
+          setExpandedFolders={setExpandedFolders} countInFolder={countInFolder} handleDeleteFolder={handleDeleteFolder} />
+      ))}
+    </div>
+  );
+}
+
 // ── New folder dialog ─────────────────────────────────────────────────────────
 function NewFolderDialog({ currentFolder, onConfirm, onClose }) {
   const [name, setName] = useState('');
@@ -375,46 +420,6 @@ export default function FileExplorer({
 
   const breadcrumbs = currentFolder ? ['', ...currentFolder.split('/')] : [''];
 
-  // ── Sidebar folder tree ────────────────────────────────────────────────────
-  function FolderNode({ path, depth }) {
-    const label = getFolderLabel(path);
-    const isActive = currentFolder === path;
-    const children = folders.filter(f => {
-      const fParts = f.split('/');
-      const pathParts = path ? path.split('/') : [];
-      return fParts.length === pathParts.length + 1 && fParts.slice(0, pathParts.length).join('/') === path;
-    });
-    const isExpanded = expandedFolders.has(path);
-    const count = countInFolder(path);
-
-    return (
-      <div>
-        <div onClick={() => { setCurrentFolder(path); setSearch(''); setFilterTraining(null); }}
-          className={cn('flex items-center gap-1.5 py-1 px-2 rounded cursor-pointer group transition-colors text-xs',
-            isActive ? 'bg-emerald-500/15 text-emerald-300' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-          )}
-          style={{ paddingLeft: 8 + depth * 14 }}>
-          {children.length > 0 ? (
-            <button onClick={e => { e.stopPropagation(); setExpandedFolders(prev => { const n = new Set(prev); n.has(path) ? n.delete(path) : n.add(path); return n; }); }}
-              className="shrink-0 text-slate-600 hover:text-slate-300">
-              {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-            </button>
-          ) : <div className="w-3 shrink-0" />}
-          {path === '' ? <Home className="w-3 h-3 shrink-0" /> : <Folder className="w-3 h-3 shrink-0" />}
-          <span className="flex-1 truncate">{path === '' ? 'Root' : label}</span>
-          {count > 0 && <span className="text-[9px] text-slate-600">{count}</span>}
-          {path !== '' && (
-            <button onClick={e => { e.stopPropagation(); handleDeleteFolder(path); }}
-              className="opacity-0 group-hover:opacity-100 text-slate-700 hover:text-red-400 transition-all">
-              <X className="w-2.5 h-2.5" />
-            </button>
-          )}
-        </div>
-        {isExpanded && children.map(child => <FolderNode key={child} path={child} depth={depth + 1} />)}
-      </div>
-    );
-  }
-
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div ref={overlayRef} className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/60 backdrop-blur-sm"
@@ -510,7 +515,10 @@ export default function FileExplorer({
                 <Wind className="w-3 h-3" /> Training Files
               </button>
               <div className="h-px bg-slate-800 my-1" />
-              <FolderNode path="" depth={0} />
+              <FolderNode path="" depth={0}
+                folders={folders} expandedFolders={expandedFolders} currentFolder={currentFolder}
+                setCurrentFolder={setCurrentFolder} setSearch={setSearch} setFilterTraining={setFilterTraining}
+                setExpandedFolders={setExpandedFolders} countInFolder={countInFolder} handleDeleteFolder={handleDeleteFolder} />
             </div>
           </div>
 
