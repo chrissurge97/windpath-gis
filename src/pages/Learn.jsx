@@ -86,15 +86,30 @@ function BadgeGrid({ earned, badgeRefs }) {
   );
 }
 
+// Map badge IDs to completion labels
+const BADGE_LABELS = {
+  first_steps:    'Module 1: Interface Bootcamp Complete',
+  polygon_master: 'Module 2: Polygons & Exclusion Zones Complete',
+  data_officer:   'Module 3: Importing Project Data Complete',
+  turbine_placer: 'Module 4: Turbines & Setback Zones Complete',
+  grid_engineer:  'Module 5: Cables & Electrical Layout Complete',
+  analyst:        'Module 6: Analysis & Optimisation Complete',
+  site_designer:  'Module 7: Final Design Challenge Complete',
+  completionist:  '🎓 Congratulations on completing all modules!',
+};
+
 // Flying badge that animates from banner to badge slot
 function FlyingBadge({ badge, fromRect, toRect, onDone }) {
+  const isGraduate = badge.id === 'completionist';
+  // Graduate badge lingers longer in the swell phase
+  const swellDuration = isGraduate ? 2200 : 800;
+  const totalDuration = swellDuration + 700;
+
   const [phase, setPhase] = useState('swell'); // swell -> fly -> done
 
   useEffect(() => {
-    // Phase 1: swell for 600ms
-    const t1 = setTimeout(() => setPhase('fly'), 600);
-    // Phase 2: fly for 700ms, then done
-    const t2 = setTimeout(() => { setPhase('done'); onDone(); }, 1300);
+    const t1 = setTimeout(() => setPhase('fly'), swellDuration);
+    const t2 = setTimeout(() => { setPhase('done'); onDone(); }, totalDuration);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
@@ -109,39 +124,70 @@ function FlyingBadge({ badge, fromRect, toRect, onDone }) {
     position: 'fixed',
     left: fromX,
     top: fromY,
-    transform: 'translate(-50%, -50%) scale(1)',
-    fontSize: '4rem',
+    transform: 'translate(-50%, -50%)',
     zIndex: 9999,
     pointerEvents: 'none',
-    transition: 'none',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
   };
 
   const flyStyle = {
     position: 'fixed',
     left: toX,
     top: toY,
-    transform: 'translate(-50%, -50%) scale(0.5)',
-    fontSize: '4rem',
+    transform: 'translate(-50%, -50%)',
     zIndex: 9999,
     pointerEvents: 'none',
-    transition: 'left 0.7s cubic-bezier(0.4,0,0.2,1), top 0.7s cubic-bezier(0.4,0,0.2,1), transform 0.7s cubic-bezier(0.4,0,0.2,1), opacity 0.7s ease',
-    opacity: phase === 'fly' ? 0.9 : 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    transition: 'left 0.7s cubic-bezier(0.4,0,0.2,1), top 0.7s cubic-bezier(0.4,0,0.2,1)',
   };
 
-  // swell: grows from 1 → 2.5 via CSS animation, fly: moves to target
+  const label = BADGE_LABELS[badge.id] || badge.name;
+
   return (
     <div style={phase === 'swell' ? swellStyle : flyStyle}>
-      <motion.span
-        initial={{ scale: 1 }}
-        animate={{ scale: phase === 'swell' ? 2.5 : 0.45 }}
+      <motion.div
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}
+        initial={{ scale: 1, opacity: 1 }}
+        animate={{
+          scale: phase === 'swell' ? (isGraduate ? 3 : 2.5) : 0.45,
+          opacity: phase === 'fly' ? 0.9 : 1,
+        }}
         transition={phase === 'swell'
           ? { duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }
           : { duration: 0.65, ease: [0.4, 0, 0.2, 1] }
         }
-        style={{ display: 'block', lineHeight: 1 }}
       >
-        {badge.icon}
-      </motion.span>
+        <span style={{ fontSize: '3.5rem', lineHeight: 1, display: 'block' }}>{badge.icon}</span>
+        {phase === 'swell' && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.3 }}
+            style={{
+              background: isGraduate ? 'linear-gradient(135deg, rgba(245,158,11,0.95), rgba(16,185,129,0.95))' : 'rgba(15,23,42,0.92)',
+              border: isGraduate ? '1px solid rgba(245,158,11,0.6)' : '1px solid rgba(100,116,139,0.4)',
+              borderRadius: '10px',
+              padding: '6px 14px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{
+              fontSize: isGraduate ? '0.55rem' : '0.5rem',
+              fontWeight: 700,
+              color: '#fff',
+              letterSpacing: '0.02em',
+              textAlign: 'center',
+              display: 'block',
+            }}>
+              {label}
+            </span>
+          </motion.div>
+        )}
+      </motion.div>
     </div>
   );
 }
