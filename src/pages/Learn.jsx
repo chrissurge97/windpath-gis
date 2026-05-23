@@ -481,7 +481,8 @@ export default function Learn() {
   const [cleaningServer, setCleaningServer] = useState(false);
   const [showDevConfig, setShowDevConfig] = useState(false);
   const [autoCompleting, setAutoCompleting] = useState(false);
-  const [flyingBadges, setFlyingBadges] = useState([]); // [{id, badge, fromRect, toRect}]
+  const [flyingBadges, setFlyingBadges] = useState([]);
+  const [showPassed, setShowPassed] = useState(() => loadProgress().badges.includes('completionist'));
   const confettiIntervalRef = useRef(null);
   const badgeRefs = useRef({});
   const bannerRef = useRef(null);
@@ -525,6 +526,7 @@ export default function Learn() {
         const toRect = toEl ? toEl.getBoundingClientRect() : null;
         const uid = `completionist_${Date.now()}`;
         setFlyingBadges(prev => [...prev, { uid, badge, fromRect, toRect }]);
+        setShowPassed(true);
       }, baseDelay);
     }
   }, [progress.badges]);
@@ -640,7 +642,7 @@ export default function Learn() {
     )}
     <div className="flex flex-col h-full overflow-hidden bg-slate-950">
       <div className="shrink-0 px-6 py-4 bg-slate-900 border-b border-slate-800">
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-3 mb-3 relative">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
             <Wind className="w-5 h-5 text-emerald-400" />
           </div>
@@ -648,6 +650,38 @@ export default function Learn() {
             <h1 className="text-lg font-bold text-white">WindPath Academy</h1>
             <p className="text-xs text-slate-400">Glenhaven Wind Farm — Guided Design Scenario</p>
           </div>
+
+          {/* PASSED stamp — appears after completionist badge */}
+          <AnimatePresence>
+            {showPassed && (
+              <motion.div
+                initial={{ scale: 3, opacity: 0, rotate: -12 }}
+                animate={{ scale: 1, opacity: 1, rotate: -8 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 18, duration: 0.4 }}
+                className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 pointer-events-none select-none"
+                style={{ zIndex: 10 }}
+              >
+                <div style={{
+                  border: '4px solid rgba(34,197,94,0.85)',
+                  borderRadius: '8px',
+                  padding: '2px 14px',
+                  color: 'rgba(34,197,94,0.85)',
+                  fontFamily: '"Arial Black", "Impact", sans-serif',
+                  fontSize: '2rem',
+                  fontWeight: 900,
+                  letterSpacing: '0.15em',
+                  textTransform: 'uppercase',
+                  lineHeight: 1.1,
+                  boxShadow: '0 0 0 2px rgba(34,197,94,0.2)',
+                  textShadow: '0 0 12px rgba(34,197,94,0.4)',
+                  whiteSpace: 'nowrap',
+                }}>
+                  PASSED
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div className="ml-auto flex items-center gap-2">
             <button onClick={() => setShowDownloads(v => !v)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-colors">
