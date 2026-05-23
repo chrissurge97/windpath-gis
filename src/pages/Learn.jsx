@@ -5,9 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Wind, CheckCircle2, Lock,
   Download, Play, RotateCcw, ExternalLink,
-  BookOpen, ArrowRight, Trash2
+  BookOpen, ArrowRight, Trash2, Settings, X
 } from 'lucide-react';
-import { loadProgress, resetProgress, getOverallProgress, ACADEMY_MODULES, ACADEMY_BADGES } from '@/lib/academyProgress';
+import { loadProgress, saveProgress, resetProgress, getOverallProgress, markModuleComplete, ACADEMY_MODULES, ACADEMY_BADGES } from '@/lib/academyProgress';
 import { deleteAllTrainingProjects } from '@/lib/projectStorage';
 import { TRAINING_FILES, downloadTrainingFile } from '@/lib/trainingDownloads';
 import { saveCheckpoint, buildGlenhavenBlank, buildGlenhavenWithConstraints, buildGlenhavenCableChallenge, buildGlenhavenFinalChallenge } from '@/lib/academyModules';
@@ -177,6 +177,79 @@ function DownloadsPanel() {
   );
 }
 
+function DevConfigPanel({ progress, onClose, onRefresh }) {
+  const handleToggle = (modId) => {
+    const p = loadProgress();
+    const current = p.modules[modId]?.status;
+    if (current === 'complete') {
+      p.modules[modId].status = 'not_started';
+      delete p.modules[modId].completedAt;
+      saveProgress(p);
+    } else {
+      markModuleComplete(modId, 100);
+    }
+    onRefresh();
+  };
+
+  const handleUnlockChallenge = () => {
+    // Mark all prerequisite modules complete
+    ['bootcamp','polygons','importing','turbines','cables','analysis'].forEach(id => {
+      const p = loadProgress();
+      if (p.modules[id]?.status !== 'complete') markModuleComplete(id, 100);
+    });
+    onRefresh();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-96 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-bold text-white">Dev Config — Progress Override</h2>
+            <p className="text-[10px] text-slate-500 mt-0.5">Mark modules complete / incomplete for testing</p>
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="space-y-1.5 mb-4">
+          {ACADEMY_MODULES.map(mod => {
+            const isComplete = progress.modules[mod.id]?.status === 'complete';
+            return (
+              <div key={mod.id} className="flex items-center justify-between px-3 py-2 bg-slate-800/60 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{MODULE_ICONS[mod.id]}</span>
+                  <span className="text-xs text-slate-300 font-medium">{mod.title}</span>
+                </div>
+                <button
+                  onClick={() => handleToggle(mod.id)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-all',
+                    isComplete
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-300'
+                      : 'bg-slate-700 border-slate-600 text-slate-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:text-emerald-300'
+                  )}>
+                  {isComplete ? <><CheckCircle2 className="w-3 h-3" /> Complete</> : <>Mark Done</>}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="border-t border-slate-800 pt-3 space-y-2">
+          <button onClick={handleUnlockChallenge}
+            className="w-full py-2 px-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold rounded-lg hover:bg-amber-500/20 transition-colors flex items-center justify-center gap-2">
+            🏆 Unlock Final Challenge (mark 6 modules complete)
+          </button>
+          <button onClick={onClose}
+            className="w-full py-2 px-3 bg-slate-800 border border-slate-700 text-slate-400 text-xs rounded-lg hover:text-white transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Learn() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -184,6 +257,7 @@ export default function Learn() {
   const [view, setView] = useState('hub');
   const [showDownloads, setShowDownloads] = useState(false);
   const [cleaningServer, setCleaningServer] = useState(false);
+  const [showDevConfig, setShowDevConfig] = useState(false);
 
   useEffect(() => {
     setProgress(loadProgress());
@@ -250,6 +324,14 @@ export default function Learn() {
   }
 
   return (
+    <>
+    {showDevConfig && (
+      <DevConfigPanel
+        progress={progress}
+        onClose={() => setShowDevConfig(false)}
+        onRefresh={() => setProgress(loadProgress())}
+      />
+    )}
     <div className="flex flex-col h-full overflow-hidden bg-slate-950">
       <div className="shrink-0 px-6 py-4 bg-slate-900 border-b border-slate-800">
         <div className="flex items-center gap-3 mb-3">
@@ -272,6 +354,11 @@ export default function Learn() {
                 ? <><svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Cleaning…</>
                 : <><Trash2 className="w-3 h-3" /> Clean Server</>
               }
+            </button>
+            <button onClick={() => setShowDevConfig(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-500 hover:text-purple-400 transition-colors"
+              title="Dev: override module progress">
+              <Settings className="w-3 h-3" /> Dev Config
             </button>
             <button onClick={handleReset}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-500 hover:text-red-400 transition-colors">
@@ -370,5 +457,6 @@ export default function Learn() {
         </div>
       </div>
     </div>
+    </>
   );
 }
