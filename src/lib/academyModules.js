@@ -654,37 +654,177 @@ You need to open the Analysis tab, read the KPIs, and make at least one design i
 
   challenge: {
     id: 'challenge',
-    title: 'Module 7 — Final Design Challenge',
-    subtitle: 'Glenhaven Wind Farm — Stakeholder Brief',
-    story: `FINAL CHALLENGE: You have been briefed to produce an early-stage layout for the Glenhaven Wind Farm development.
+    title: 'Module 7 — Full Design Delivery',
+    subtitle: 'Glenhaven Wind Farm — Complete Professional Workflow',
+    story: `You have been appointed as lead analyst on the Glenhaven Wind Farm project. The project director needs a complete, export-ready design file delivered by end of day.
 
-Brief from the project director: "We need 6–8 turbines, all constraints respected, electrical infrastructure designed, and the project file ready to share with our technical consultants by end of day."
+The brief covers everything: import the provided data, draw missing constraints, configure setbacks, place turbines, lay cables, annotate the map, populate metadata, run analysis, and export for the consultants.
 
-This is your chance to demonstrate everything you've learned. No step-by-step hand-holding — just a brief and a map.`,
-    objective: 'Design a complete 6–8 turbine wind farm layout from scratch, meeting all technical requirements.',
+This module tests every skill you've built. Work through each phase in sequence — the quality of your output matters.`,
+    objective: 'Complete a full professional wind farm design workflow across all tool features.',
     color: 'yellow',
     icon: '🏆',
-    checkpointKey: 'final',
-    isFinalChallenge: true,
-    requirements: [
-      { id: 'boundary', label: 'Site boundary polygon drawn', check: ({ polygonCount }) => polygonCount >= 1 },
-      { id: 'exclusions', label: 'At least 2 exclusion/constraint layers', check: ({ polygonLayerCount }) => polygonLayerCount >= 3 },
-      { id: 'turbines_count', label: '6–8 turbines placed', check: ({ turbineCount }) => turbineCount >= 6 && turbineCount <= 8 },
-      { id: 'no_violations', label: 'No turbines inside hard exclusion zones', check: ({ violationCount }) => violationCount === 0 },
-      { id: 'substation', label: 'At least one substation placed', check: ({ substationCount }) => substationCount >= 1 },
-      { id: 'cables_connected', label: 'All turbines connected by cables', check: ({ cableCount, turbineCount }) => cableCount >= turbineCount },
-      { id: 'cables_ok', label: 'No overloaded cables', check: ({ overloadedCables }) => overloadedCables === 0 },
-    ],
+    checkpointKey: 'blank',
+    isFinalChallenge: false,
+    hasDownloads: true,
     steps: [
+      // ── PHASE 1: Data Import ────────────────────────────────────────────────
       {
-        id: 'challenge_brief',
-        title: '📋 Read the Brief',
-        story: 'Glenhaven is a 7-turbine onshore wind farm in Co. Roscommon. You have a gross site area of ~18km², one residential buffer zone in the SW, and a SAC in the NE. Your job: produce a viable early-stage layout.',
-        goal: 'Start the challenge by loading the Glenhaven base site.',
+        id: 'phase1_import',
+        title: '📥 Phase 1: Import Site Data',
+        story: 'The GIS consultant has provided the Glenhaven boundary and constraint files. Your first job is to get the data into the tool and verify it loaded correctly.',
+        goal: 'Import the Glenhaven site boundary and exclusion zone files.',
         tasks: [
-          { id: 'started', label: 'Begin the challenge', watch: 'event', value: 'challenge_started', required: true },
+          { id: 'import_boundary', label: 'Download & import glenhaven-site-boundary.geojson', watch: 'download', value: 'glenhaven-site-boundary', required: true },
+          { id: 'import_done', label: 'Complete the import (click Import toolbar button)', watch: 'event', value: 'import_completed', required: true },
+          { id: 'layers_verify', label: 'Open Layers tab and verify import appears', watch: 'tab', value: 'layers', required: true },
         ],
+        mapCenter: GLENHAVEN_CENTER,
+        mapZoom: 12,
+        why: 'All professional GIS workflows begin with importing supplied data. Verification ensures the file wasn\'t truncated or misclassified.',
+        hint: 'Click "Training Files" at the top to download the file, then click Import in the toolbar.',
+        downloadFile: 'glenhaven-site-boundary',
+        coachTip: '📂 After import, expand the layer in the Layers tab to count features — compare with the brief.',
+      },
+      // ── PHASE 2: Draw Missing Constraints ──────────────────────────────────
+      {
+        id: 'phase2_exclusions',
+        title: '🚫 Phase 2: Map the Constraint Zones',
+        story: 'The ecology report flagged two areas not in the supplied file: a residential buffer in the SW and a peat bog SAC in the NE. You need to draw these manually and mark them as hard exclusions.',
+        goal: 'Create a Hard Exclusions layer, draw 2 constraint polygons, and mark them as no-turbine zones.',
+        tasks: [
+          { id: 'layer_created', label: 'Create a new layer named "Hard Exclusions"', watch: 'layerExists', value: 'Hard Exclusions', required: true },
+          { id: 'polygon_mode', label: 'Activate Polygon drawing mode', watch: 'mode', value: 'draw_polygon', required: true },
+          { id: 'excl_drawn', label: 'Draw at least 2 exclusion polygons', watch: 'polygonCount', minValue: 2, required: true },
+          { id: 'no_turbine', label: 'Mark at least one polygon as No-Turbine Zone', watch: 'noTurbineZoneCount', minValue: 1, required: true },
+        ],
+        why: 'Hard exclusion zones define where turbines cannot be placed. They must be drawn before turbine placement or the constraint system won\'t block violations.',
+        hint: 'Layers tab → "+ Add Zone" → draw polygons → click polygon → tick No-Turbine Zone → Apply.',
+        coachTip: '🔴 Red = hard exclusion (residential, SAC). Orange = soft constraint. Name each polygon with descriptive text for the planning file.',
+      },
+      // ── PHASE 3: Layer Visibility & Organisation ────────────────────────────
+      {
+        id: 'phase3_layers',
+        title: '👁️ Phase 3: Organise & Control Layers',
+        story: 'Before placing turbines, tidy up the layer stack. Your manager wants to see a "constraints-only" view for the stakeholder meeting.',
+        goal: 'Create a Soft Constraints layer, toggle visibility, and reorder layers.',
+        tasks: [
+          { id: 'soft_layer', label: 'Create a layer named "Soft Constraints"', watch: 'layerExists', value: 'Soft Constraints', required: true },
+          { id: 'visibility_toggled', label: 'Toggle at least one layer invisible then back on', watch: 'event', value: 'layer_visibility_toggled', required: true },
+          { id: 'layer_selected', label: 'Select the Hard Exclusions layer as active', watch: 'layerSelected', value: 'Hard Exclusions', required: true },
+        ],
+        why: 'Layer organisation is essential for client-facing maps. Stakeholders should see a clean map, not every layer stacked at once.',
+        hint: 'In the Layers tab, click the 👁 eye icon to toggle layers. Use ↑↓ arrows to reorder. Click a layer name to select it.',
+      },
+      // ── PHASE 4: Turbine Placement with Setbacks ───────────────────────────
+      {
+        id: 'phase4_turbines',
+        title: '🌀 Phase 4: Place Turbines with Setback Radii',
+        story: 'Now place the turbine layout. Before placing, configure your setback radii — the noise consultant needs a minimum 500m residential setback and 5D turbine-to-turbine separation enabled.',
+        goal: 'Enable setback radii, then place 6 turbines outside all exclusion zones.',
+        tasks: [
+          { id: 'turbines_tab', label: 'Open the Turbines tab', watch: 'tab', value: 'turbines', required: true },
+          { id: 'setback_enabled', label: 'Enable at least one setback radius in Turbine Setback Config', watch: 'event', value: 'radii_enabled', required: true },
+          { id: 'setback_visible', label: 'Show setback radii on the map', watch: 'event', value: 'setback_toggled', required: true },
+          { id: 'turbine_mode', label: 'Activate Place Turbine mode', watch: 'mode', value: 'place_turbine', required: true },
+          { id: 'turbines_6', label: 'Place at least 6 turbines outside exclusion zones', watch: 'turbineCount', minValue: 6, required: true },
+        ],
+        why: 'Setback radii must be configured before placement to ensure the layout is compliant from the start — not corrected after the fact.',
+        hint: 'Turbines tab → "Turbine Setback Config" → enable a radius → use the "Visible/Hidden" button to show on map → Draw Tools → Place Turbine.',
+        coachTip: '⚡ If you see the red "Placement Blocked" warning, move away from the exclusion or setback zone. This is the system protecting your layout.',
+      },
+      // ── PHASE 5: Rename & Enrich Turbines ─────────────────────────────────
+      {
+        id: 'phase5_turbine_data',
+        title: '✏️ Phase 5: Name Turbines & Add Metadata',
+        story: 'The noise consultant and shadow flicker modeller both need turbine names and hub heights in the data file. Rename each turbine and add custom field metadata.',
+        goal: 'Rename all turbines to T01–T06 format and add at least one custom field.',
+        tasks: [
+          { id: 'select_mode', label: 'Switch to Select mode', watch: 'mode', value: 'select', required: true },
+          { id: 'turbines_renamed', label: 'Rename at least 4 turbines (T01, T02 format)', watch: 'turbineRenameCount', minValue: 4, required: true },
+          { id: 'turbine_moved', label: 'Move at least one turbine to optimise its position', watch: 'event', value: 'turbine_moved', required: true },
+        ],
+        why: 'T01–T06 naming is the universal convention across noise, ecology, LVIA, and shadow flicker reports. Consistent names avoid confusion between consultants.',
+        hint: 'Click each turbine → edit the name field → click Apply. Or use the pencil icon in the Turbines tab list.',
+        coachTip: '💡 Add custom fields like "Landowner Zone" or "Foundation Type" for detailed planning submissions.',
+      },
+      // ── PHASE 6: Add Points & Text Annotations ─────────────────────────────
+      {
+        id: 'phase6_annotations',
+        title: '📍 Phase 6: Points & Text Annotations',
+        story: 'Your project manager wants key infrastructure marked on the map: the access track entry point and a "Grid Connection Study Area" text label. Add both.',
+        goal: 'Place a labelled point feature for the access track and add a text annotation on the map.',
+        tasks: [
+          { id: 'point_mode', label: 'Activate Place Point mode', watch: 'mode', value: 'place_point', required: true },
+          { id: 'point_placed', label: 'Place a point on the map (opens edit menu)', watch: 'polygonCount', minValue: 0, required: false },
+          { id: 'text_mode', label: 'Activate Place Text mode', watch: 'mode', value: 'place_text', required: true },
+        ],
+        why: 'Point features and text annotations are essential for marking infrastructure, study boundaries, and key site references in client deliverables.',
+        hint: 'Draw Tools → Place Point → click map → name it. Then Draw Tools → Place Text → click map → type your annotation.',
+        coachTip: '📌 Use points to mark: access track entry, grid connection point, met mast locations, borrow pits. Text annotations label zones and study areas.',
+      },
+      // ── PHASE 7: Electrical Layout ─────────────────────────────────────────
+      {
+        id: 'phase7_electrical',
+        title: '⚡ Phase 7: Design the Electrical Network',
+        story: 'The electrical engineer is waiting for the collection network. Place the substation centrally, draw cable strings from turbines to substation, and verify no cables are overloaded.',
+        goal: 'Place a substation, connect all turbines with cables, verify no overloads.',
+        tasks: [
+          { id: 'sub_mode', label: 'Activate Substation placement mode', watch: 'mode', value: 'place_substation', required: true },
+          { id: 'sub_placed', label: 'Place a substation centrally in the layout', watch: 'event', value: 'substation_placed', required: true },
+          { id: 'cable_mode', label: 'Activate Draw Cable mode', watch: 'mode', value: 'draw_cable', required: true },
+          { id: 'cables_drawn', label: 'Draw at least 5 cable segments', watch: 'cableCount', minValue: 5, required: true },
+          { id: 'cables_tab', label: 'Open Cables tab and check for overloads', watch: 'tab', value: 'cables', required: true },
+        ],
+        why: 'Every turbine must have a continuous cable path to the substation. Overloaded cables (red bars) must be upgraded before the file is shared.',
+        hint: 'Draw Tools → Substation → click map. Then Draw Cable → snap to turbines → connect to substation. Check Cables tab for red load bars.',
+        coachTip: '🔌 Hover near a turbine until the yellow snap ring appears before clicking — this creates a proper topology connection.',
+      },
+      // ── PHASE 8: Data Tables ───────────────────────────────────────────────
+      {
+        id: 'phase8_datatables',
+        title: '📊 Phase 8: Edit Attributes in Data Tables',
+        story: 'The planning team needs correct attribute data in every feature. Use the Data Tables panel to review and update feature properties for cables and polygons.',
+        goal: 'Open Data Tables and review the project attribute data.',
+        tasks: [
+          { id: 'datatables_opened', label: 'Click the "Data Tables" button in the toolbar', watch: 'tab', value: 'turbines', required: false },
+        ],
+        why: 'Data Tables provide a spreadsheet-style view of all features — faster for bulk attribute editing than clicking individual features on the map.',
+        hint: 'Click "Data Tables" in the top-right toolbar. Review cable lengths, polygon names, and turbine attributes.',
+        coachTip: '📋 In a real project, data tables are exported as CSV for QA audits. Every field must have a value — blank fields fail the data audit.',
+      },
+      // ── PHASE 9: Analysis & Optimisation ──────────────────────────────────
+      {
+        id: 'phase9_analysis',
+        title: '📈 Phase 9: Run the Analysis',
+        story: 'Before export, run the design analysis. Check AEP, capacity factor, and cable cost. Set your optimisation goal and adjust the Weibull parameters to match the site met data (k=2.1, λ=8.5).',
+        goal: 'Open Analysis tab, select a goal, and adjust Weibull parameters.',
+        tasks: [
+          { id: 'analysis_tab', label: 'Open the Analysis tab', watch: 'tab', value: 'analysis', required: true },
+          { id: 'goal_selected', label: 'Select an optimisation goal', watch: 'event', value: 'analysis_goal_selected', required: true },
+          { id: 'weibull_adjusted', label: 'Adjust the Weibull λ slider to ~8.5', watch: 'event', value: 'weibull_changed', required: true },
+        ],
+        why: 'The Analysis tab calculates AEP from actual hub-height wind speeds and Weibull distribution — this is the number your investors care about.',
+        hint: 'Analysis tab → select an optimisation goal → drag the λ (scale) slider to approximately 8.5.',
+        coachTip: '📈 Target: Capacity Factor > 30%, Net AEP > 80 GWh for a 6-turbine project. Below these thresholds, the project may not be financeable.',
+      },
+      // ── PHASE 10: Export ───────────────────────────────────────────────────
+      {
+        id: 'phase10_export',
+        title: '📤 Phase 10: Export the Final File',
+        story: 'The consultants need the data in different formats: GeoJSON for the ecology team, KML for the client\'s Google Earth review, and CSV for the noise modeller. Export the project.',
+        goal: 'Export the project in at least two different formats.',
+        tasks: [
+          { id: 'satellite_check', label: 'Switch to Satellite basemap for final review', watch: 'basemap', value: 'satellite', required: true },
+          { id: 'save_project', label: 'Save the project with a final name', watch: 'event', value: 'project_saved', required: true },
+        ],
+        why: 'Different consultants need different file formats: GeoJSON (GIS), KML (Google Earth), Shapefile (Ordnance Survey), CSV (spreadsheet tools).',
+        hint: 'Click the Export button (top-right toolbar) → choose GeoJSON or KML → download. Repeat for a second format.',
+        coachTip: '📦 In a real submission you\'d export: GeoJSON (constraints team), KML (client), Shapefile (planning authority), PDF (board report).',
       },
     ],
+    successMessage: '🏆 Outstanding! You\'ve completed the full Glenhaven design workflow — import, constraints, setbacks, turbines, cables, annotations, analysis, and export. You\'re ready for a real project.',
+    badge: 'chief_analyst',
+    xp: 500,
   },
 };
