@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Eye, EyeOff, ArrowUp, ArrowDown, Trash2, ChevronRight, ChevronDown, MapPin, Minus } from 'lucide-react';
 import L from 'leaflet';
+import LayerBulkMenu from './LayerBulkMenu';
 
 // Approximate polygon area in km² using the shoelace formula with haversine
 function polygonAreaKm2(ring) {
@@ -139,6 +140,7 @@ export default function LayerList({
                 </span>
               )}
               {layer.no_turbines && <span className="text-[9px] text-red-400 shrink-0" title="No turbines allowed">⛔</span>}
+              {layer.bulkSetbackM > 0 && <span className="text-[9px] text-cyan-600 shrink-0" title={`Setback: ${layer.bulkSetbackM}m`}>📏</span>}
               <span className="text-[10px] text-slate-600 shrink-0">{layer.features.length}</span>
 
               {/* Z-order controls */}
@@ -195,6 +197,8 @@ export default function LayerList({
                   <Trash2 className="w-3 h-3" />
                 </button>
               )}
+
+              <LayerBulkMenu layer={layer} updateLayer={updateLayer} />
             </div>
 
             {/* Expanded features list */}
