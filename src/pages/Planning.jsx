@@ -206,10 +206,10 @@ export default function Planning() {
   const [selectedLayerId, setSelectedLayerId] = useState(null);
 
   const [showNewZoneDialog, setShowNewZoneDialog] = useState(false);
-  const [mode, setMode] = useState('select');
+  const [mode, setMode] = useState('pan');
   const [drawingPoints, setDrawingPoints] = useState([]);
   const [selectedFeatureId, setSelectedFeatureId] = useState(null);
-  const [rightTab, setRightTab] = useState('analysis');
+  const [rightTab, setRightTab] = useState('layers');
   const [loadingWind, setLoadingWind] = useState(false);
   const [batchFetchingWind, setBatchFetchingWind] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
@@ -278,14 +278,12 @@ export default function Planning() {
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showDataTables, setShowDataTables] = useState(false);
   const [showConfigMenu, setShowConfigMenu] = useState(false);
-  const [features, setFeatures] = useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('app_features') || '{}');
-      return { windAnalysis: true, irelandMapLock: false, importClassifier: true, developableArea: true, manualImportReview: true, ...saved };
-    } catch {
-      return { windAnalysis: true, irelandMapLock: false, importClassifier: true, developableArea: true, manualImportReview: true };
-    }
-  });
+  const [features, setFeatures] = useState(() => ({
+    windAnalysis: true,
+    importClassifier: true,
+    developableArea: true,
+    manualImportReview: true,
+  }));
   const mapRef = useRef(null);
   const [panesReady, setPanesReady] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
