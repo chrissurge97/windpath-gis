@@ -16,7 +16,7 @@ const NAV_ITEMS = [
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const { data: user } = useQuery({
     queryKey: ['me'],
