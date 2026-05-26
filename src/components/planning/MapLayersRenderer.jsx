@@ -86,47 +86,69 @@ function NativePointLayer({ layers, mode, setPointMenuFeature, setPointMenuLayer
         fillOpacity: 1,
       });
 
-      marker.on('click', (e) => {
-        L.DomEvent.stopPropagation(e);
-        if (mode === 'select' || mode === 'pan') {
+      // Click handled via mousedown/mouseup below to avoid conflict with drag
+      // In pan mode (no drag), use a plain click handler
+      if (mode === 'pan') {
+        marker.on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
           setPointMenuFeatureRef.current(f);
           setPointMenuLayerIdRef.current(layer.id);
           setTurbineMenuFeatureRef.current(null);
           setPolygonMenuFeatureRef.current(null);
           setCableMenuFeatureRef.current(null);
           setSubstationMenuFeatureRef.current(null);
-        }
-      });
-
-      // Make draggable in select mode
-      if (mode === 'select') {
-        marker.options.draggable = true;
-        let dragging = false;
-        marker.on('mousedown', (e) => {
-          dragging = true;
-          map.dragging.disable();
-          L.DomEvent.stopPropagation(e);
-          map.on('mousemove', onDrag);
-          map.on('mouseup', onDragEnd);
         });
-        const onDrag = (e) => {
-          if (!dragging) return;
-          marker.setLatLng(e.latlng);
-        };
-        const onDragEnd = (e) => {
-          if (!dragging) return;
-          dragging = false;
-          map.dragging.enable();
-          map.off('mousemove', onDrag);
-          map.off('mouseup', onDragEnd);
-          const { lat: newLat, lng: newLng } = marker.getLatLng();
-          // Use a snapshot of the layer's features at drag-end time via the layer ref
-          updateLayerRef.current(layer.id, {
-            features: layer.features.map(ft =>
-              ft.id === f.id ? { ...ft, geometry: { ...ft.geometry, coordinates: [newLng, newLat] } } : ft
-            )
-          });
-        };
+      }
+
+      // Make draggable in select mode — only start drag after mouse moves to avoid blocking click
+      if (mode === 'select') {
+        let dragStarted = false;
+        let mouseDownLatLng = null;
+
+        marker.on('mousedown', (e) => {
+          mouseDownLatLng = e.latlng;
+          dragStarted = false;
+          L.DomEvent.stopPropagation(e);
+
+          const onMouseMove = (e2) => {
+            if (!dragStarted) {
+              // Only start drag if mouse moved more than a few pixels
+              const moved = map.latLngToContainerPoint(e2.latlng);
+              const origin = map.latLngToContainerPoint(mouseDownLatLng);
+              if (Math.hypot(moved.x - origin.x, moved.y - origin.y) < 5) return;
+              dragStarted = true;
+              map.dragging.disable();
+            }
+            marker.setLatLng(e2.latlng);
+          };
+
+          const onMouseUp = (e2) => {
+            map.off('mousemove', onMouseMove);
+            map.off('mouseup', onMouseUp);
+            if (!dragStarted) {
+              // It was a click, not a drag — open the menu
+              map.dragging.enable();
+              setPointMenuFeatureRef.current(f);
+              setPointMenuLayerIdRef.current(layer.id);
+              setTurbineMenuFeatureRef.current(null);
+              setPolygonMenuFeatureRef.current(null);
+              setCableMenuFeatureRef.current(null);
+              setSubstationMenuFeatureRef.current(null);
+              return;
+            }
+            dragStarted = false;
+            map.dragging.enable();
+            const { lat: newLat, lng: newLng } = marker.getLatLng();
+            updateLayerRef.current(layer.id, {
+              features: layer.features.map(ft =>
+                ft.id === f.id ? { ...ft, geometry: { ...ft.geometry, coordinates: [newLng, newLat] } } : ft
+              )
+            });
+          };
+
+          map.on('mousemove', onMouseMove);
+          map.on('mouseup', onMouseUp);
+        });
       }
 
       group.addLayer(marker);
