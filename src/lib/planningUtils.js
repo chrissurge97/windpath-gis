@@ -15,18 +15,30 @@ export async function fetchElevation(lat, lng) {
   }
 }
 
+// In-memory cache keyed by "lat2dp_lng2dp" to avoid duplicate fetches for nearby turbines
+const _windCache = new Map();
+
+function windCacheKey(lat, lng) {
+  // Round to ~1km grid (2 decimal places ≈ 1.1 km)
+  return `${lat.toFixed(2)}_${lng.toFixed(2)}`;
+}
+
 /**
  * Fetch real historical wind data from Open-Meteo ERA5 (free, no API key required)
- * Returns { mean_speed, k, lambda } — Weibull params estimated from hourly data
+ * Returns { mean_speed, k, lambda } — Weibull params estimated from hourly data.
+ * Results are cached by ~1 km grid cell so nearby turbines reuse the same fetch.
  */
 export async function fetchWindData(lat, lng) {
+  const key = windCacheKey(lat, lng);
+  if (_windCache.has(key)) return _windCache.get(key);
+
   try {
-    // Get last 30 days of hourly 10m wind speed
+    // 7 days is enough for a stable mean and keeps the response tiny (~168 values vs ~720)
     const end = new Date();
-    const start = new Date(end - 30 * 24 * 3600 * 1000);
+    const start = new Date(end - 7 * 24 * 3600 * 1000);
     const fmt = d => d.toISOString().split('T')[0];
 
-    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${fmt(start)}&end_date=${fmt(end)}&hourly=wind_speed_10m&wind_speed_unit=ms&timezone=UTC`;
+    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat.toFixed(3)}&longitude=${lng.toFixed(3)}&start_date=${fmt(start)}&end_date=${fmt(end)}&hourly=wind_speed_10m&wind_speed_unit=ms&timezone=UTC`;
     const res = await fetch(url);
     const data = await res.json();
 
@@ -37,19 +49,18 @@ export async function fetchWindData(lat, lng) {
     const variance = speeds.reduce((a, b) => a + (b - mean) ** 2, 0) / speeds.length;
     const std = Math.sqrt(variance);
 
-    // Estimate Weibull parameters from mean and std using method of moments
-    const cv = std / mean; // coefficient of variation
-    // k ≈ (mean/std)^1.086 approximation
     const k = Math.max(1.2, Math.min(4, Math.pow(mean / (std || 0.01), 1.086)));
     const lambda = mean / gammaApprox(1 + 1 / k);
 
-    return {
+    const result = {
       mean_speed: +mean.toFixed(2),
       std: +std.toFixed(2),
       k: +k.toFixed(2),
       lambda: +lambda.toFixed(2),
       samples: speeds.length,
     };
+    _windCache.set(key, result);
+    return result;
   } catch {
     return null;
   }

@@ -816,30 +816,28 @@ export default function Planning() {
     if (!turbineLayer || turbines.length === 0) return;
     setBatchFetchingWind(true);
     try {
-      const updated = await Promise.all(turbines.map(async (t) => {
-        const [lng, lat] = t.geometry.coordinates;
-        let elevation = t.properties.elevation_m;
-        let wind_speed_ms = t.properties.wind_speed_ms;
-        try { elevation = elevation || await fetchElevation(lat, lng); } catch {}
-        try {
-          const wd = await fetchWindData(lat, lng);
-          wind_speed_ms = wind_speed_ms || wd?.mean_speed;
-        } catch {}
-        const hubHeight = t.properties.hub_height || 90;
-        const hubSpeed = wind_speed_ms ? windAtHubHeight(wind_speed_ms, 10, hubHeight) : null;
-        const aep = hubSpeed ? calcTurbineAEP(hubSpeed, DEFAULT_POWER_CURVE) : null;
-        return {
-          ...t,
-          properties: {
-            ...t.properties,
-            elevation_m: elevation,
-            wind_speed_ms,
-            hub_wind_speed: hubSpeed,
-            ...(aep && { aep_mwh: aep.aep_mwh })
+      const CONCURRENCY = 4;
+      const results = [...turbines];
+      for (let i = 0; i < turbines.length; i += CONCURRENCY) {
+        const batch = turbines.slice(i, i + CONCURRENCY);
+        const batchResults = await Promise.all(batch.map(async (t) => {
+          const [lng, lat] = t.geometry.coordinates;
+          let elevation = t.properties.elevation_m;
+          let wind_speed_ms = t.properties.wind_speed_ms;
+          if (!wind_speed_ms) {
+            try { const wd = await fetchWindData(lat, lng); wind_speed_ms = wd?.mean_speed; } catch {}
           }
-        };
-      }));
-      updateLayer(turbineLayer.id, { features: updated });
+          if (!elevation) {
+            try { elevation = await fetchElevation(lat, lng); } catch {}
+          }
+          const hubHeight = t.properties.hub_height || 90;
+          const hubSpeed = wind_speed_ms ? windAtHubHeight(wind_speed_ms, 10, hubHeight) : null;
+          const aep = hubSpeed ? calcTurbineAEP(hubSpeed, DEFAULT_POWER_CURVE) : null;
+          return { ...t, properties: { ...t.properties, elevation_m: elevation, wind_speed_ms, hub_wind_speed: hubSpeed, ...(aep && { aep_mwh: aep.aep_mwh }) } };
+        }));
+        batchResults.forEach((t, j) => { results[i + j] = t; });
+        updateLayer(turbineLayer.id, { features: [...results] });
+      }
     } finally {
       setBatchFetchingWind(false);
     }
