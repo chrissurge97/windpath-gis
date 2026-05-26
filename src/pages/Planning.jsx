@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, startTransition } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { usePlanningProject } from '@/lib/PlanningContext';
-import {
-  MapContainer, TileLayer, Marker, Popup, Circle, Polygon, Polyline,
-  useMapEvents } from
-'react-leaflet';
+import { MapContainer, TileLayer, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { cn } from '@/lib/utils';
@@ -20,7 +17,6 @@ import { createLayer, createFeature, downloadJSON, layersToGeoJSON, DEFAULT_POWE
 import RightPanelTabs from '@/components/planning/RightPanelTabs';
 import { checkExclusionZones } from '@/lib/geoUtils';
 import { fetchElevation, fetchWindData } from '@/lib/planningUtils';
-import WindResourceRenderer from '@/components/gis/WindResourceLayer';
 import TurbineDataTable from '@/components/planning/TurbineDataTable';
 import CableDataTable from '@/components/planning/CableDataTable';
 import TurbineTypeEditor from '@/components/planning/TurbineTypeEditor';
@@ -33,7 +29,7 @@ import { exportProjectPDF } from '@/lib/exportPDF';
 import { exportProjectGeoJSON, exportProjectKMZ, downloadFile } from '@/lib/projectExport';
 import { reprojectGeoJSON } from '@/lib/crsUtils';
 import { exportShapefile } from '@/lib/shapefileUtils';
-import TurbineRadiiOverlay, { DEFAULT_TURBINE_RADII, checkTurbineRadii } from '@/components/planning/TurbineRadiiOverlay';
+import { DEFAULT_TURBINE_RADII, checkTurbineRadii } from '@/components/planning/TurbineRadiiOverlay';
 import RightPanel from '@/components/planning/PlanningRightPanel';
 import { buildDemoProject } from '@/lib/demoProject';
 import ExerciseGuide from '@/components/planning/ExerciseGuide';
@@ -41,8 +37,6 @@ import LessonGuide from '@/components/planning/LessonGuide.jsx';
 import DataTablesPanel from '@/components/planning/DataTablesPanel.jsx';
 import CableTopologyModal from '@/components/planning/CableTopologyModal';
 import TextAnnotationMenu from '@/components/planning/TextAnnotationMenu';
-import TextOverlay from '@/components/planning/TextOverlay';
-import SubstationMarker from '@/components/planning/SubstationMarker';
 import { EXERCISES } from '@/lib/exercises';
 import ExportMenu from '@/components/planning/ExportMenu';
 import ImportClassifyModal from '@/components/planning/ImportClassifyModal';
@@ -50,6 +44,7 @@ import { useImportClassify } from '@/lib/useImportClassify';
 import LayerImportExport from '@/components/planning/LayerImportExport';
 import LayerList from '@/components/planning/LayerList';
 import NewZoneDialog from '@/components/planning/NewZoneDialog';
+import MapLayersRenderer from '@/components/planning/MapLayersRenderer';
 import ProjectFileButtons, { saveProject, loadProject, OpenProjectModal, setupProjectImport } from '@/components/planning/ProjectManager';
 import { useHandleImport } from '@/lib/useHandleImport';
 import ConfigMenuWrapper from '@/components/planning/ConfigMenuWrapper';
@@ -63,17 +58,6 @@ L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
-});
-
-const turbineIcon = (color = '#10b981', selected = false) => L.divIcon({
-  html: `<div style="width:${selected ? 26 : 20}px;height:${selected ? 26 : 20}px;background:${color};border:${selected ? '3px' : '2px'} solid ${selected ? 'white' : 'rgba(255,255,255,0.5)'};border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 8px ${color}99">
-    <div style="width:2px;height:${selected ? 14 : 10}px;background:white;position:absolute;"></div>
-    <div style="width:${selected ? 12 : 9}px;height:2px;background:white;position:absolute;transform:rotate(60deg);transform-origin:left center;left:50%;margin-top:-4px;"></div>
-    <div style="width:${selected ? 12 : 9}px;height:2px;background:white;position:absolute;transform:rotate(-60deg);transform-origin:left center;left:50%;margin-top:4px;"></div>
-  </div>`,
-  className: '',
-  iconSize: [selected ? 26 : 20, selected ? 26 : 20],
-  iconAnchor: [selected ? 13 : 10, selected ? 13 : 10]
 });
 
 // ── Haversine distance ──────────────────────────────────────────────────────
@@ -1148,351 +1132,27 @@ export default function Planning() {
               onPolygonDragEnd={() => {polygonDragRef.current = { id: null, lastLatlng: null };}} />
             
 
-            {layers.map((layer) => {
-              if (!layer.visible) return null;
-              if (layer.type === 'wind_resource') return <WindResourceRenderer key={layer.id} layer={layer} />;
-              if (layer.type === 'substation') return null; // rendered separately below
-
-              return layer.features.map((f) => {
-                const pathOpts = { color: layer.color, fillColor: layer.color, fillOpacity: layer.fillOpacity, weight: layer.strokeWeight || 2, opacity: layer.strokeOpacity || 0.9 };
-
-                if (f.geometry.type === 'Polygon') {
-                  // Don't render inner closing vertex (last == first)
-                  const ring = f.geometry.coordinates[0];
-                  const positions = ring.slice(0, -1).map(([lng, lat]) => [lat, lng]);
-                  const isEditing = editingPolygonId === f.id;
-                  const polyColor = layer.type === 'polygon' ? layer.color || '#06b6d4' : pathOpts.color;
-                  const polyOpts = { ...pathOpts, color: polyColor, fillColor: polyColor,
-                    weight: isEditing ? 2.5 : pathOpts.weight,
-                    dashArray: isEditing ? '6 4' : undefined };
-                  // In drawing modes, let clicks bubble through to the map handler
-                  const nonSelectMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation'].includes(mode);
-                  return (
-                    <React.Fragment key={f.id}>
-                    <Polygon positions={positions} pathOptions={polyOpts}
-
-                      bubblingMouseEvents={nonSelectMode}
-                      eventHandlers={{
-                        click: (e) => {
-                          if (nonSelectMode) return; // let it bubble for drawing
-                          L.DomEvent.stopPropagation(e);
-                          if (isEditing) {
-                            insertPolygonVertex(f.id, layer.id, e.latlng.lat, e.latlng.lng);
-                          } else if (mode === 'select' || mode === 'pan') {
-                            openPolygonMenu(f, layer.id);
-                          }
-                        },
-                        mousedown: (e) => {
-                          // Only allow polygon drag in select mode (not pan)
-                          if (mode === 'select' && !isEditing) {
-                            L.DomEvent.stopPropagation(e);
-                            polygonDragRef.current = { id: f.id, lastLatlng: e.latlng };
-                          }
-                        },
-                        mousemove: (e) => {
-                          if (nonSelectMode) return;
-                          const container = e.target._map?.getContainer();
-                          const rect = container?.getBoundingClientRect();
-                          if (!rect) return;
-                          setLayerTooltip({
-                            x: e.originalEvent.clientX - rect.left,
-                            y: e.originalEvent.clientY - rect.top,
-                            layerName: layer.name,
-                            featureName: f.properties?.name || '',
-                            description: f.properties?.designation || f.properties?.reason || f.properties?.zone || f.properties?.type || f.properties?.notes || ''
-                          });
-                        },
-                        mouseout: () => setLayerTooltip(null)
-                      }} />
-                      
-                      {/* Vertex edit handles */}
-                      {isEditing && positions.map(([lat, lng], vi) => {
-                        const vIcon = L.divIcon({
-                          html: `<div style="width:10px;height:10px;background:#fff;border:2px solid ${polyColor};border-radius:50%;cursor:move"></div>`,
-                          className: '', iconSize: [10, 10], iconAnchor: [5, 5]
-                        });
-                        return (
-                          <Marker key={`v-${f.id}-${vi}`} position={[lat, lng]} icon={vIcon} draggable
-                          eventHandlers={{
-                            dragend: (e) => {
-                              const newPts = positions.map(([la, ln], i) =>
-                              i === vi ? [e.target.getLatLng().lat, e.target.getLatLng().lng] : [la, ln]
-                              );
-                              updatePolygonVertices(f.id, layer.id, newPts);
-                            }
-                          }} />);
-
-
-                      })}
-                    </React.Fragment>);
-
-                }
-
-                if (f.geometry.type === 'MultiPolygon') {
-                  const nonSel = ['place_turbine','draw_cable','draw_polygon','place_substation'].includes(mode);
-                  const pc = layer.type==='polygon' ? layer.color||'#06b6d4' : layer.color;
-                  const po = {color:pc,fillColor:pc,fillOpacity:layer.fillOpacity,weight:layer.strokeWeight||2,opacity:layer.strokeOpacity||0.9};
-                  return (<React.Fragment key={f.id}>{f.geometry.coordinates.map((poly,pi)=>{
-                    const pos=poly.map(ring=>ring.slice(0,-1).map(([x,y])=>[y,x]));
-                    return <Polygon key={`${f.id}-${pi}`} positions={pos} pathOptions={po} bubblingMouseEvents={nonSel} eventHandlers={{click:(e)=>{if(nonSel)return;L.DomEvent.stopPropagation(e);if(mode==='select'||mode==='pan')openPolygonMenu(f,layer.id);},mousemove:(e)=>{if(nonSel)return;const c=e.target._map?.getContainer();const r=c?.getBoundingClientRect();if(!r)return;setLayerTooltip({x:e.originalEvent.clientX-r.left,y:e.originalEvent.clientY-r.top,layerName:layer.name,featureName:f.properties?.name||'',description:f.properties?.designation||f.properties?.reason||''});},mouseout:()=>setLayerTooltip(null)}} />;
-                  })}</React.Fragment>);
-                }
-                if (f.geometry.type === 'LineString') {
-                  const ct = cableTypes.find((t) => t.id === f.properties.cable_type_id) || cableTypes[0];
-                  const positions = f.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-                  const usedMw = calcCableLoad(f.id, cables, turbines);
-                  const usedA = ct ? +(usedMw * 1000 / (Math.sqrt(3) * ct.voltage_kv)).toFixed(0) : 0;
-                  const overloaded = usedMw > 0 && usedA > (ct?.ampacity_a || 0);
-                  const isSelected = cableMenuFeature?.id === f.id;
-                  const nonSelectMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation'].includes(mode);
-                  const isInteractive = mode === 'select' || mode === 'pan';
-                  // Capture a stable snapshot of the feature for the click handler
-                  const fSnapshot = f;
-                  const visWeight = isSelected ? 5 : overloaded ? 4 : 3;
-                  return (
-                    <React.Fragment key={f.id}>
-                      {/* Visible cable line */}
-                      <Polyline positions={positions}
-                      pane="cablePane"
-                      pathOptions={{ color: isSelected ? '#38bdf8' : overloaded ? '#ef4444' : ct?.color || '#f97316', weight: visWeight, opacity: 0.9, dashArray: overloaded ? '8 4' : undefined }}
-                      bubblingMouseEvents={false}
-                      eventHandlers={{
-                        click: (e) => {
-                          if (nonSelectMode && !isInteractive) return;
-                          if (nonSelectMode) return;
-                          L.DomEvent.stop(e);
-                          setCableMenuFeature(fSnapshot);
-                          setTurbineMenuFeature(null);
-                          setSubstationMenuFeature(null);
-                          setPolygonMenuFeature(null);
-                          setRightTab('cables');
-                        }
-                      }} />
-                      
-                      {/* Wide transparent hit-area in same elevated pane */}
-                      <Polyline positions={positions}
-                      pane="cablePane"
-                      pathOptions={{ color: 'transparent', weight: 20, opacity: 0.001 }}
-                      bubblingMouseEvents={false}
-                      eventHandlers={{
-                        click: (e) => {
-                          if (nonSelectMode) return;
-                          L.DomEvent.stop(e);
-                          setCableMenuFeature(fSnapshot);
-                          setTurbineMenuFeature(null);
-                          setSubstationMenuFeature(null);
-                          setPolygonMenuFeature(null);
-                          setRightTab('cables');
-                        }
-                      }} />
-                      
-                    </React.Fragment>);
-
-                }
-
-                if (f.geometry.type === 'Point' && layer.type === 'turbine') {
-                  const [lng, lat] = f.geometry.coordinates;
-                  const isSelected = f.id === selectedFeatureId;
-                  const tt = turbineTypes.find((t) => t.id === f.properties.turbine_type_id) || selectedTurbineType;
-                  const icon = turbineIcon(tt?.color || layer.color, isSelected);
-                  return (
-                    <Marker key={f.id} position={[lat, lng]} icon={icon} draggable={mode === 'select'}
-                    eventHandlers={{
-                      click: (e) => {
-                        if (mode === 'select') { L.DomEvent.stopPropagation(e); setSelectedFeatureId(f.id); openTurbineMenu(f); }
-                      },
-                      dragend: (e) => {
-                        window.__trainingEvent__ = { type: 'turbine_moved', payload: { id: f.id }, ts: Date.now() };
-                        const newLatLng = e.target.getLatLng();
-                        const newCoords = [newLatLng.lng, newLatLng.lat];
-                        // Check exclusion zones for turbines
-                        if (layer.type === 'turbine') {
-                          const exclusionHit = checkExclusionZones(newLatLng.lat, newLatLng.lng, layers);
-                          if (exclusionHit) {
-                            setExclusionWarning({ layerName: exclusionHit.layer.name, featureName: exclusionHit.feature.properties?.name || exclusionHit.layer.name });
-                            setTimeout(() => setExclusionWarning(null), 5000);
-                            // Snap marker back to original position
-                            const [origLng, origLat] = f.geometry.coordinates;
-                            e.target.setLatLng([origLat, origLng]);
-                            return;
-                          }
-                          // Check turbine radii separation zones
-                          const otherTurbines = turbines.filter((t) => t.id !== f.id);
-                          const radiiHit = checkTurbineRadii(newLatLng.lat, newLatLng.lng, otherTurbines, turbineTypes, globalRadii);
-                          if (radiiHit) {
-                            setExclusionWarning({ layerName: `${radiiHit.radiusLabel} separation zone`, featureName: radiiHit.turbineName, isRadii: true, radiusM: radiiHit.radiusM });
-                            setTimeout(() => setExclusionWarning(null), 5000);
-                            // Snap marker back to original position
-                            const [origLng, origLat] = f.geometry.coordinates;
-                            e.target.setLatLng([origLat, origLng]);
-                            return;
-                          }
-                        }
-                        updateLayer(layer.id, {
-                          features: layer.features.map((ft) =>
-                          ft.id === f.id ?
-                          { ...ft, geometry: { ...ft.geometry, coordinates: newCoords } } :
-                          ft
-                          )
-                        });
-                        // Update connected cables endpoints, lengths, and sizes
-                        if (cableLayer) {
-                          const updatedCables = cableLayer.features.map((cable) => {
-                            const start = cable.properties.start_node;
-                            const end = cable.properties.end_node;
-                            if (!start?.id && !end?.id) return cable;
-                            const isStart = start?.id === f.id;
-                            const isEnd = end?.id === f.id;
-                            if (!isStart && !isEnd) return cable;
-                            const coords = cable.geometry.coordinates.map(([lng, lat]) => [lng, lat]);
-                            if (isStart) coords[0] = newCoords;
-                            if (isEnd) coords[coords.length - 1] = newCoords;
-                            let totalLen = 0;
-                            for (let i = 0; i < coords.length - 1; i++) totalLen += haversineM(coords[i][1], coords[i][0], coords[i + 1][1], coords[i + 1][0]);
-                            const usedMw = calcCableLoad(cable.id, cables, turbines);
-                            const ct = cableTypes.find((t) => t.id === cable.properties.cable_type_id) || cableTypes[0];
-                            const voltage = ct?.voltage_kv || 33;
-                            const usedA = ct ? +(usedMw * 1000 / (Math.sqrt(3) * voltage)).toFixed(0) : 0;
-                            let newCableTypeId = cable.properties.cable_type_id;
-                            if (usedMw > 0 && usedA > (ct?.ampacity_a || 0)) {
-                              const sorted = cableTypes.filter((c) => c.voltage_kv === voltage).sort((a, b) => a.ampacity_a - b.ampacity_a);
-                              const suitable = sorted.find((c) => {
-                                const cap = Math.sqrt(3) * c.voltage_kv * c.ampacity_a / 1000;
-                                return cap >= usedMw;
-                              });
-                              if (suitable) newCableTypeId = suitable.id;
-                            }
-                            return { ...cable, geometry: { ...cable.geometry, coordinates: coords }, properties: { ...cable.properties, length_m: +totalLen.toFixed(0), cable_type_id: newCableTypeId } };
-                          });
-                          updateLayer(cableLayer.id, { features: updatedCables });
-                        }
-                      }
-                    }} />);
-
-                }
-
-                // Text annotations are rendered via TextOverlay (fixed pixel size)
-                if (f.geometry.type === 'Point' && f.properties._featureType === 'text') return null;
-
-                // Point features in any non-turbine layer
-                if (f.geometry.type === 'Point' && layer.type !== 'turbine' && layer.type !== 'substation' && layer.type !== 'wind_resource' && f.properties?._featureType !== 'text') {
-                  const [lng, lat] = f.geometry.coordinates;
-                  const ptIcon = L.divIcon({
-                    html: `<div style="width:10px;height:10px;background:${layer.color || '#8b5cf6'};border:2px solid rgba(255,255,255,0.6);border-radius:50%;box-shadow:0 0 6px ${layer.color || '#8b5cf6'}88"></div>`,
-                    className: '', iconSize: [10, 10], iconAnchor: [5, 5]
-                  });
-                  const setbackM = f.properties?.setback_m;
-                  return (
-                    <React.Fragment key={f.id}>
-                      <Marker position={[lat, lng]} icon={ptIcon}
-                        draggable={mode === 'select'}
-                        eventHandlers={{
-                          click: (e) => {
-                            if (mode === 'select' || mode === 'pan') {
-                              L.DomEvent.stopPropagation(e);
-                              setPointMenuFeature(f);
-                              setPointMenuLayerId(layer.id);
-                              setTurbineMenuFeature(null);
-                              setPolygonMenuFeature(null);
-                              setCableMenuFeature(null);
-                              setSubstationMenuFeature(null);
-                            }
-                          },
-                          dragend: (e) => {
-                            const { lat: newLat, lng: newLng } = e.target.getLatLng();
-                            updateLayer(layer.id, {
-                              features: layer.features.map(ft =>
-                                ft.id === f.id ? { ...ft, geometry: { ...ft.geometry, coordinates: [newLng, newLat] } } : ft
-                              )
-                            });
-                          }
-                        }} />
-                      {setbackM > 0 && (
-                        <Circle center={[lat, lng]} radius={setbackM}
-                          pathOptions={{ color: layer.color || '#8b5cf6', fillColor: layer.color || '#8b5cf6', fillOpacity: 0.06, weight: 1, dashArray: '4 4', opacity: 0.5 }} />
-                      )}
-                    </React.Fragment>
-                  );
-                }
-
-                return null;
-              });
-            })}
-
-            {/* Drawing preview */}
-            {drawingPoints.length > 0 &&
-            <>
-                <Polyline positions={drawingPoints}
-              pathOptions={{ color: mode === 'draw_cable' ? '#f97316' : '#06b6d4', weight: 2, dashArray: '5 5' }} />
-                {drawingPoints.map((pt, i) => {
-                const snap = drawingSnapNodes[i];
-                const color = mode === 'draw_cable' ? snap ? '#facc15' : '#f97316' : '#06b6d4';
-                return (
-                  <Circle key={i} center={pt} radius={snap ? 80 : 40}
-                  pathOptions={{ color, fillColor: color, fillOpacity: 0.9, weight: snap ? 2 : 0 }} />);
-
-              })}
-              </>
-            }
-            {/* Snap preview ring */}
-            {snapPreview && mode === 'draw_cable' &&
-            <Circle
-              center={[snapPreview.lat, snapPreview.lng]}
-              radius={120}
-              pathOptions={{ color: '#facc15', fillColor: '#facc15', fillOpacity: 0.25, weight: 2, dashArray: '4 3' }} />
-
-            }
-
-            {/* Wind speed heatmap — removed */}
-
-            {/* Turbine separation radii */}
-            <TurbineRadiiOverlay turbines={turbines} turbineTypes={turbineTypes} globalRadii={globalRadii} visible={showRadii} />
-
-            {/* Text Annotations — fixed pixel size overlay */}
-            <TextOverlay
-              layers={layers}
-              mode={mode}
-              onSelect={(f, layerId) => {
-                setTextAnnotationMenu({ feature: f, layerId });
-                setTurbineMenuFeature(null);
-                setPolygonMenuFeature(null);
-                setCableMenuFeature(null);
-                setSubstationMenuFeature(null);
-              }}
-              onDragEnd={(featureId, layerId, newLng, newLat) => {
-                const layer = layers.find((l) => l.id === layerId);
-                if (!layer) return;
-                updateLayer(layerId, {
-                  features: layer.features.map((ft) =>
-                  ft.id === featureId ?
-                  { ...ft, geometry: { ...ft.geometry, coordinates: [newLng, newLat] } } :
-                  ft
-                  )
-                });
-              }} />
-            
-
-            {/* Placeable Substations */}
-            {showSubstations && substations.map((s) =>
-            <SubstationMarker
-              key={`sub-${s.id}`}
-              s={s}
-              mode={mode}
-              cableLayer={cableLayer}
-              cables={cables}
-              turbines={turbines}
-              substationLayer={substationLayer}
-              cableTypes={cableTypes}
-              haversineM={haversineM}
-              calcCableLoad={calcCableLoad}
-              calcSubstationLoad={calcSubstationLoad}
-              updateLayer={updateLayer}
-              setSubstationMenuFeature={setSubstationMenuFeature}
-              setTurbineMenuFeature={setTurbineMenuFeature}
-              setPolygonMenuFeature={setPolygonMenuFeature}
-              layers={layers} />
-
-            )}
+            <MapLayersRenderer
+              layers={layers} mode={mode} editingPolygonId={editingPolygonId}
+              selectedFeatureId={selectedFeatureId} cableMenuFeature={cableMenuFeature}
+              turbineTypes={turbineTypes} selectedTurbineType={selectedTurbineType} cableTypes={cableTypes}
+              turbines={turbines} cables={cables} substations={substations}
+              substationLayer={substationLayer} cableLayer={cableLayer}
+              globalRadii={globalRadii} showRadii={showRadii} showSubstations={showSubstations}
+              drawingPoints={drawingPoints} drawingSnapNodes={drawingSnapNodes} snapPreview={snapPreview}
+              polygonDragRef={polygonDragRef} mapRef={mapRef}
+              setLayerTooltip={setLayerTooltip} openPolygonMenu={openPolygonMenu}
+              insertPolygonVertex={insertPolygonVertex} updatePolygonVertices={updatePolygonVertices}
+              setCableMenuFeature={setCableMenuFeature} setTurbineMenuFeature={setTurbineMenuFeature}
+              setSubstationMenuFeature={setSubstationMenuFeature} setPolygonMenuFeature={setPolygonMenuFeature}
+              setRightTab={setRightTab} openTurbineMenu={openTurbineMenu}
+              setSelectedFeatureId={setSelectedFeatureId} updateLayer={updateLayer}
+              setExclusionWarning={setExclusionWarning}
+              setPointMenuFeature={setPointMenuFeature} setPointMenuLayerId={setPointMenuLayerId}
+              setTextAnnotationMenu={setTextAnnotationMenu}
+              haversineM={haversineM} checkExclusionZones={checkExclusionZones}
+              checkTurbineRadii={checkTurbineRadii}
+            />
           </MapContainer>
 
           {/* Map layer toggles */}
