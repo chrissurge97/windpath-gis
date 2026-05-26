@@ -7,6 +7,7 @@ import {
   Lightbulb, HelpCircle, Download, Play, Trophy, Star, ArrowLeft
 } from 'lucide-react';
 import { ACADEMY_MODULE_CONTENT } from '@/lib/academyModules';
+import { ACADEMY_BADGES } from '@/lib/academyProgress';
 import { loadProgress, markStepComplete, markModuleComplete, setModuleProgress, getModuleProgress } from '@/lib/academyProgress';
 import { TRAINING_FILES, downloadTrainingFile } from '@/lib/trainingDownloads';
 import { saveCheckpoint, buildGlenhavenBlank, buildGlenhavenWithConstraints, buildGlenhavenCableChallenge, buildGlenhavenFinalChallenge } from '@/lib/academyModules';
@@ -178,7 +179,7 @@ export default function AcademyModuleView({ moduleId, onBack, onOpenInPlanner })
             </div>
             {module.badge && (
               <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-center">
-                <p className="text-2xl">{module.badge === 'first_steps' ? '🚀' : module.badge === 'polygon_master' ? '🗺️' : module.badge === 'data_officer' ? '📂' : module.badge === 'turbine_placer' ? '🌀' : module.badge === 'grid_engineer' ? '⚡' : module.badge === 'analyst' ? '📊' : '🏆'}</p>
+                <p className="text-2xl">{ACADEMY_BADGES[module.badge]?.icon || '🏆'}</p>
                 <p className="text-[10px] text-slate-500">Badge Earned</p>
               </div>
             )}
