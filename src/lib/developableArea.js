@@ -50,7 +50,6 @@ export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
   const clippers = [];
 
   for (const layer of layers) {
-    if (!layer.visible) continue;
     if (['turbine', 'cable', 'wind_resource'].includes(layer.type)) continue;
 
     const isLayerBlocking = !!layer.no_turbines;
