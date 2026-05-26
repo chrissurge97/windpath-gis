@@ -508,6 +508,27 @@ export function exportShapefile(geojson, baseName = 'export') {
 }
 
 // ── Shapefile → GeoJSON (import) ─────────────────────────────────────────────
+
+// Decompress a deflate-compressed ArrayBuffer using the browser DecompressionStream API
+async function inflateRaw(compressedBuffer) {
+  const ds = new DecompressionStream('deflate-raw');
+  const writer = ds.writable.getWriter();
+  writer.write(new Uint8Array(compressedBuffer));
+  writer.close();
+  const chunks = [];
+  const reader = ds.readable.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+  const out = new Uint8Array(totalLen);
+  let pos = 0;
+  for (const chunk of chunks) { out.set(chunk, pos); pos += chunk.length; }
+  return out.buffer;
+}
+
 async function readZip(arrayBuffer) {
   const buf = new Uint8Array(arrayBuffer);
   const dv  = new DataView(arrayBuffer);
@@ -515,12 +536,23 @@ async function readZip(arrayBuffer) {
   let i = 0;
   while (i < buf.length - 4) {
     if (dv.getUint32(i, true) === 0x04034B50) {
-      const nameLen  = dv.getUint16(i + 26, true);
-      const extraLen = dv.getUint16(i + 28, true);
-      const compSize = dv.getUint32(i + 18, true);
+      const compression = dv.getUint16(i + 8,  true); // 0 = stored, 8 = deflated
+      const compSize    = dv.getUint32(i + 18, true);
+      const nameLen     = dv.getUint16(i + 26, true);
+      const extraLen    = dv.getUint16(i + 28, true);
       const name = new TextDecoder().decode(buf.slice(i + 30, i + 30 + nameLen));
       const dataStart = i + 30 + nameLen + extraLen;
-      files[name.toLowerCase()] = arrayBuffer.slice(dataStart, dataStart + compSize);
+      const compressedSlice = arrayBuffer.slice(dataStart, dataStart + compSize);
+
+      if (compression === 0) {
+        // Stored — use as-is
+        files[name.toLowerCase()] = compressedSlice;
+      } else if (compression === 8) {
+        // Deflated — decompress using browser DecompressionStream
+        files[name.toLowerCase()] = await inflateRaw(compressedSlice);
+      }
+      // Skip unsupported compression methods silently
+
       i = dataStart + compSize;
     } else { i++; }
   }
