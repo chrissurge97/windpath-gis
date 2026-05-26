@@ -18,7 +18,7 @@ export const ACADEMY_MODULES = [
 ];
 
 export const ACADEMY_BADGES = {
-  first_steps:      { id: 'first_steps',      name: 'Mission Control Online',   icon: '🚀', desc: 'Complete Module 1' },
+  first_steps:      { id: 'first_steps',      name: 'Mission Control Online',   icon: '🖥️', desc: 'Complete Module 1' },
   polygon_master:   { id: 'polygon_master',    name: 'Zone Mapper',              icon: '🗺️', desc: 'Complete Module 2' },
   data_officer:     { id: 'data_officer',      name: 'Data Room Cleared',        icon: '📂', desc: 'Complete Module 3' },
   turbine_placer:   { id: 'turbine_placer',    name: 'Turbine Engineer',         icon: '🌀', desc: 'Complete Module 4' },
