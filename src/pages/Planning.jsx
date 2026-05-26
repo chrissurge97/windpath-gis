@@ -281,9 +281,9 @@ export default function Planning() {
   const [features, setFeatures] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('app_features') || '{}');
-      return { windAnalysis: true, irelandMapLock: false, importClassifier: true, ...saved };
+      return { windAnalysis: true, irelandMapLock: false, importClassifier: true, developableArea: true, ...saved };
     } catch {
-      return { windAnalysis: true, irelandMapLock: false, importClassifier: true };
+      return { windAnalysis: true, irelandMapLock: false, importClassifier: true, developableArea: true };
     }
   });
   const mapRef = useRef(null);
@@ -1207,13 +1207,15 @@ export default function Planning() {
               {`Substations${substations.length > 0 ? ` (${substations.length})` : ''}`}
             </button>
 
-            <button onClick={() => setShowDevelopableArea((v) => !v)}
-            className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
-            showDevelopableArea ? "bg-cyan-500 text-slate-900 border-cyan-400 font-semibold" : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
-            )}>
-              <Layers className="w-3 h-3" />
-              Developable Area
-            </button>
+            {features.developableArea && (
+              <button onClick={() => setShowDevelopableArea((v) => !v)}
+              className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
+              showDevelopableArea ? "bg-cyan-500 text-slate-900 border-cyan-400 font-semibold" : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
+              )}>
+                <Layers className="w-3 h-3" />
+                Developable Area
+              </button>
+            )}
           </div>
 
 

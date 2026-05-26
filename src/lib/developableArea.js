@@ -59,25 +59,24 @@ export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
       const geom = f.geometry;
       if (!geom) continue;
 
-      // ── Polygon exclusion zones ──────────────────────────────────────────
+      // ── Polygon exclusion zones (with holes) ────────────────────────────────
       if (geom.type === 'Polygon') {
         const featureBlocking = isLayerBlocking || !!f.properties?.no_turbines;
         if (!featureBlocking) continue;
-        // polygon-clipping wants [ [ring], [hole], ... ] where ring is [[lng,lat],...]
-        const ring = geom.coordinates[0]; // [lng,lat] already
-        if (ring && ring.length >= 4) {
-          clippers.push([ring]);
+        // polygon-clipping wants [ [outer ring], [hole1], [hole2], ... ]
+        const coords = geom.coordinates;
+        if (coords && coords[0] && coords[0].length >= 4) {
+          clippers.push(coords);
         }
       }
 
-      // ── MultiPolygon exclusion zones ─────────────────────────────────────
+      // ── MultiPolygon exclusion zones (with holes) ────────────────────────
       if (geom.type === 'MultiPolygon') {
         const featureBlocking = isLayerBlocking || !!f.properties?.no_turbines;
         if (!featureBlocking) continue;
         for (const poly of geom.coordinates) {
-          const ring = poly[0];
-          if (ring && ring.length >= 4) {
-            clippers.push([ring]);
+          if (poly && poly[0] && poly[0].length >= 4) {
+            clippers.push(poly);
           }
         }
       }
