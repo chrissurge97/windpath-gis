@@ -646,60 +646,23 @@ function detectCRS(prjText) {
 }
 
 // ── Reproject projected coordinates to WGS84 ────────────────────────────────
-// Basic Transverse Mercator inverse projection for ITM (EPSG:2157) and IG (EPSG:29902)
-function tmInverse(E, N, params) {
-  const { a, e2, E0, N0, k0, lat0, lng0 } = params;
-  const e4 = e2 * e2, e6 = e4 * e2;
-  const n = (a - Math.sqrt(a * a * (1 - e2))) / (a + Math.sqrt(a * a * (1 - e2)));
-  const n2 = n*n, n3 = n2*n, n4 = n3*n;
-
-  const M0 = a * ((1 - e2/4 - 3*e4/64 - 5*e6/256) * lat0
-    - (3*e2/8 + 3*e4/32 + 45*e6/1024) * Math.sin(2*lat0)
-    + (15*e4/256 + 45*e6/1024) * Math.sin(4*lat0)
-    - (35*e6/3072) * Math.sin(6*lat0));
-
-  const M = M0 + (N - N0) / k0;
-  const mu = M / (a * (1 - e2/4 - 3*e4/64 - 5*e6/256));
-  const e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
-
-  const lat1 = mu
-    + (3*e1/2 - 27*e1*e1*e1/32) * Math.sin(2*mu)
-    + (21*e1*e1/16 - 55*e1*e1*e1*e1/32) * Math.sin(4*mu)
-    + (151*e1*e1*e1/96) * Math.sin(6*mu)
-    + (1097*e1*e1*e1*e1/512) * Math.sin(8*mu);
-
-  const sinLat1 = Math.sin(lat1);
-  const cosLat1 = Math.cos(lat1);
-  const tanLat1 = Math.tan(lat1);
-  const v = a / Math.sqrt(1 - e2 * sinLat1 * sinLat1);
-  const rho = a * (1 - e2) / Math.pow(1 - e2 * sinLat1 * sinLat1, 1.5);
-  const eta2 = v / rho - 1;
-
-  const D = (E - E0) / (v * k0);
-  const D2 = D*D, D3 = D2*D, D4 = D3*D, D5 = D4*D, D6 = D5*D;
-
-  const lat = lat1
-    - (v * tanLat1 / rho) * (D2/2
-      - (5 + 3*tanLat1*tanLat1 + 10*eta2 - 4*eta2*eta2 - 9*e2) * D4/24
-      + (61 + 90*tanLat1*tanLat1 + 298*eta2 + 45*tanLat1*tanLat1*tanLat1*tanLat1 - 252*e2 - 3*eta2*eta2) * D6/720);
-
-  const lng = lng0 + (D
-    - (1 + 2*tanLat1*tanLat1 + eta2) * D3/6
-    + (5 - 2*eta2 + 28*tanLat1*tanLat1 - 3*eta2*eta2 + 8*e2 + 24*tanLat1*tanLat1*tanLat1*tanLat1) * D5/120) / cosLat1;
-
-  return [lng * 180 / Math.PI, lat * 180 / Math.PI];
-}
-
-const ITM_PARAMS = { a: 6378137.0, e2: 0.00669438002290, E0: 600000, N0: 750000, k0: 0.99982, lat0: 53.5 * Math.PI / 180, lng0: -8.0 * Math.PI / 180 };
-const IG_PARAMS  = { a: 6377340.189, e2: 0.00667054, E0: 200000, N0: 250000, k0: 1.000035, lat0: 53.5 * Math.PI / 180, lng0: -8.0 * Math.PI / 180 };
+// Delegates to crsUtils which has the accurate OSi-spec meridian arc implementation
+import { itmToWGS84, igToWGS84 } from '@/lib/crsUtils';
 
 function reprojectCoord(coord, crs) {
   if (crs === 'WGS84') return coord;
-  const params = crs === 'ITM' ? ITM_PARAMS : IG_PARAMS;
-  // Heuristic: ITM/IG coords are in the hundreds-of-thousands range
   const [x, y] = coord;
-  if (Math.abs(x) < 180 && Math.abs(y) < 90) return coord; // Already WGS84
-  return tmInverse(x, y, params);
+  // Heuristic guard: if already in degree range, skip conversion
+  if (Math.abs(x) < 180 && Math.abs(y) < 90) return coord;
+  if (crs === 'ITM') {
+    const { lat, lng } = itmToWGS84(x, y);
+    return [lng, lat];
+  }
+  if (crs === 'IG') {
+    const { lat, lng } = igToWGS84(x, y);
+    return [lng, lat];
+  }
+  return coord;
 }
 
 function reprojectFeature(feature, crs) {
