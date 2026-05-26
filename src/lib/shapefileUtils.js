@@ -592,6 +592,8 @@ function deserializeProps(props) {
 }
 
 function parseDBF(arrayBuffer) {
+  const actualLen = arrayBuffer.byteLength;
+  if (actualLen < 32) return [];
   const dv = new DataView(arrayBuffer);
   const numRec     = dv.getUint32(4,  true);
   const headerSize = dv.getUint16(8,  true);
@@ -599,7 +601,7 @@ function parseDBF(arrayBuffer) {
 
   const fields = [];
   let off = 32;
-  while (off + 32 <= headerSize && dv.getUint8(off) !== 0x0D) {
+  while (off + 32 <= headerSize && off + 32 <= actualLen && dv.getUint8(off) !== 0x0D) {
     const nameBytes = new Uint8Array(arrayBuffer, off, 11);
     const name = new TextDecoder().decode(nameBytes).replace(/\0/g, '');
     const fieldLen = dv.getUint8(off + 16);
@@ -610,15 +612,16 @@ function parseDBF(arrayBuffer) {
   const records = [];
   let recOff = headerSize;
   for (let r = 0; r < numRec; r++) {
+    if (recOff >= actualLen) break;
     if (dv.getUint8(recOff) === 0x2A) { recOff += recordSize; continue; }
     recOff += 1;
     const props = {};
     for (const { name, len } of fields) {
+      if (recOff + len > actualLen) break;
       const val = new TextDecoder().decode(new Uint8Array(arrayBuffer, recOff, len)).trim();
       props[name] = (!isNaN(val) && val !== '') ? Number(val) : val;
       recOff += len;
     }
-    // Deserialize JSON-stringified objects (start_node, end_node, custom_fields)
     records.push(deserializeProps(props));
   }
   return records;
@@ -626,30 +629,46 @@ function parseDBF(arrayBuffer) {
 
 function parseSHP(arrayBuffer) {
   const dv = new DataView(arrayBuffer);
-  const fileByteLen = dv.getInt32(24, false) * 2;
+  const actualByteLen = arrayBuffer.byteLength;
+
+  // Use the minimum of stated file length and actual buffer size for safety
+  if (actualByteLen < 100) throw new Error('SHP file too short to be valid');
+  const statedByteLen = dv.getInt32(24, false) * 2;
+  const fileByteLen = Math.min(statedByteLen, actualByteLen);
+
   const features = [];
   let off = 100;
 
-  while (off + 8 <= fileByteLen) {
+  while (off + 8 <= fileByteLen && off + 8 <= actualByteLen) {
+    // Guard: ensure we can safely read the record header
+    if (off + 8 > actualByteLen) break;
+
     const contentWords = dv.getInt32(off + 4, false);
     const contentBytes = contentWords * 2;
     off += 8;
+
+    // Guard: ensure the content fits within the actual buffer
     if (contentBytes === 0) continue;
+    if (off + contentBytes > actualByteLen) break;
 
     const shpType = dv.getInt32(off, true);
 
     if (shpType === SHP_NULL) {
       features.push(null);
     } else if (shpType === SHP_POINT) {
+      if (off + 20 > actualByteLen) { features.push(null); off += contentBytes; continue; }
       const x = dv.getFloat64(off + 4,  true);
       const y = dv.getFloat64(off + 12, true);
       features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [x, y] }, properties: {} });
     } else if (shpType === SHP_POLYLINE || shpType === SHP_POLYGON) {
+      if (off + 44 > actualByteLen) { features.push(null); off += contentBytes; continue; }
       const numParts  = dv.getInt32(off + 36, true);
       const numPoints = dv.getInt32(off + 40, true);
+      const ptBase = off + 44 + numParts * 4;
+      // Guard: ensure point data fits
+      if (ptBase + numPoints * 16 > actualByteLen || numParts < 0 || numPoints < 0) { features.push(null); off += contentBytes; continue; }
       const partStarts = [];
       for (let i = 0; i < numParts; i++) partStarts.push(dv.getInt32(off + 44 + i * 4, true));
-      const ptBase = off + 44 + numParts * 4;
       const pts = [];
       for (let i = 0; i < numPoints; i++) {
         pts.push([dv.getFloat64(ptBase + i * 16, true), dv.getFloat64(ptBase + i * 16 + 8, true)]);
