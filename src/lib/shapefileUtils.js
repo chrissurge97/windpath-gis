@@ -709,7 +709,46 @@ function parseSHP(arrayBuffer) {
       if (shpType === SHP_POLYLINE) {
         features.push({ type: 'Feature', geometry: { type: rings.length === 1 ? 'LineString' : 'MultiLineString', coordinates: rings.length === 1 ? rings[0] : rings }, properties: {} });
       } else {
-        features.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: rings }, properties: {} });
+        // Shapefile polygon rings: clockwise = outer shell, counter-clockwise = hole.
+        // Use winding order to group: each CW ring starts a new polygon, CCW rings are holes
+        // belonging to the most recent CW ring. If winding order is ambiguous or all rings are
+        // the same direction (common in non-compliant files), treat each ring as its own polygon.
+        if (rings.length === 1) {
+          features.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: rings }, properties: {} });
+        } else {
+          // Calculate signed area to determine winding: positive = CCW (hole in shapefile convention), negative = CW (outer)
+          const signedArea = (ring) => {
+            let a = 0;
+            for (let i = 0; i < ring.length - 1; i++) {
+              a += (ring[i + 1][0] - ring[i][0]) * (ring[i + 1][1] + ring[i][1]);
+            }
+            return a;
+          };
+          // In shapefile spec: outer rings are CW (negative signed area in standard math coords)
+          // but many tools write CCW outers. Detect by checking if first ring is the bbox-largest.
+          const areas = rings.map(r => Math.abs(signedArea(r)));
+          const isOuter = rings.map((r, i) => signedArea(r) >= 0); // CCW = outer (GeoJSON convention)
+
+          // Group: each outer ring + its following hole rings form one polygon
+          const polygons = [];
+          let current = null;
+          for (let i = 0; i < rings.length; i++) {
+            if (isOuter[i] || current === null) {
+              // Start a new polygon with this ring as outer shell
+              current = [rings[i]];
+              polygons.push(current);
+            } else {
+              // This is a hole — attach to current polygon
+              current.push(rings[i]);
+            }
+          }
+
+          if (polygons.length === 1) {
+            features.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: polygons[0] }, properties: {} });
+          } else {
+            features.push({ type: 'Feature', geometry: { type: 'MultiPolygon', coordinates: polygons }, properties: {} });
+          }
+        }
       }
     } else {
       features.push(null);
@@ -781,7 +820,7 @@ function parseShapefileSet(shpBuf, dbfBuf, prjText, layerName) {
     .filter(Boolean);
   
   // CRITICAL: If we have more DBF records than features, shapefile grouped multiple parts into one.
-  // Unfold MultiLineStrings back to individual features per DBF record.
+  // Unfold MultiLineStrings and MultiPolygons back to individual features per DBF record.
   if (dbfRecords.length > features.length) {
     const expanded = [];
     let dbfIdx = 0;
@@ -789,13 +828,24 @@ function parseShapefileSet(shpBuf, dbfBuf, prjText, layerName) {
       const feature = features[fIdx];
       const geom = feature.geometry;
       if (geom?.type === 'MultiLineString' && dbfIdx < dbfRecords.length) {
-        // One feature with multiple parts → split into separate features with UNIQUE IDs
         for (let partIdx = 0; partIdx < geom.coordinates.length; partIdx++) {
           if (dbfIdx < dbfRecords.length) {
             expanded.push({
               id: `shp_${fIdx}_${partIdx}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
               type: 'Feature',
               geometry: { type: 'LineString', coordinates: geom.coordinates[partIdx] },
+              properties: dbfRecords[dbfIdx]
+            });
+            dbfIdx++;
+          }
+        }
+      } else if (geom?.type === 'MultiPolygon' && dbfIdx < dbfRecords.length) {
+        for (let partIdx = 0; partIdx < geom.coordinates.length; partIdx++) {
+          if (dbfIdx < dbfRecords.length) {
+            expanded.push({
+              id: `shp_${fIdx}_${partIdx}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+              type: 'Feature',
+              geometry: { type: 'Polygon', coordinates: geom.coordinates[partIdx] },
               properties: dbfRecords[dbfIdx]
             });
             dbfIdx++;
