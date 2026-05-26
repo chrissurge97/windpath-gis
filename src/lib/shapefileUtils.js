@@ -547,11 +547,15 @@ async function readZip(arrayBuffer) {
       if (compression === 0) {
         // Stored — use as-is
         files[name.toLowerCase()] = compressedSlice;
+        console.log(`[zip] stored: "${name}" — ${compSize}B`);
       } else if (compression === 8) {
         // Deflated — decompress using browser DecompressionStream
-        files[name.toLowerCase()] = await inflateRaw(compressedSlice);
+        const decompressed = await inflateRaw(compressedSlice);
+        files[name.toLowerCase()] = decompressed;
+        console.log(`[zip] deflated: "${name}" — ${compSize}B compressed → ${decompressed.byteLength}B`);
+      } else {
+        console.log(`[zip] unsupported compression ${compression}: "${name}" — skipped`);
       }
-      // Skip unsupported compression methods silently
 
       i = dataStart + compSize;
     } else { i++; }
@@ -826,8 +830,11 @@ export async function importShapefile(arrayBuffer, filename = '') {
   if (shpGroups.length === 0) throw new Error('No .shp file found in ZIP');
 
   const results = shpGroups.map(([base, g]) => {
+    const shpBuf = g['shp'];
+    const dbfBuf = g['dbf'] || null;
     const prjText = g['prj'] ? new TextDecoder().decode(g['prj']) : null;
-    return parseShapefileSet(g['shp'], g['dbf'] || null, prjText, base);
+    console.log(`[shp] Layer "${base}": shp=${shpBuf?.byteLength}B, dbf=${dbfBuf?.byteLength ?? 'none'}B, prj=${prjText ? 'yes' : 'no'}`);
+    return parseShapefileSet(shpBuf, dbfBuf, prjText, base);
   });
 
   // Return array for multi-layer, single object for single layer
