@@ -5,11 +5,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Wind, CheckCircle2, Lock,
   Download, Play, RotateCcw, ExternalLink,
-  BookOpen, ArrowRight, Trash2, Settings, X
+  BookOpen, ArrowRight, Settings, X
 } from 'lucide-react';
 import { loadProgress, saveProgress, resetProgress, getOverallProgress, markModuleComplete, ACADEMY_MODULES, ACADEMY_BADGES } from '@/lib/academyProgress';
 import confetti from 'canvas-confetti';
-import { deleteAllTrainingProjects } from '@/lib/projectStorage';
 import { TRAINING_FILES, downloadTrainingFile } from '@/lib/trainingDownloads';
 import { saveCheckpoint, buildGlenhavenBlank, buildGlenhavenWithConstraints, buildGlenhavenCableChallenge, buildGlenhavenFinalChallenge } from '@/lib/academyModules';
 import AcademyModuleView from '@/components/academy/AcademyModuleView';
@@ -50,12 +49,13 @@ const MODULE_SKILLS = {
 };
 
 function XPBar({ xp, level }) {
+  const cappedLevel = Math.min(level, 7);
   const xpInLevel = xp % 300;
   const pct = (xpInLevel / 300) * 100;
   return (
     <div className="flex items-center gap-2">
       <div className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-[10px] font-bold text-amber-400">
-        {level}
+        {cappedLevel}
       </div>
       <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
         <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
@@ -477,8 +477,7 @@ export default function Learn() {
   const navigate = useNavigate();
   const [progress, setProgress] = useState(loadProgress());
   const [view, setView] = useState('hub');
-  const [showDownloads, setShowDownloads] = useState(true);
-  const [cleaningServer, setCleaningServer] = useState(false);
+  const [showDownloads, setShowDownloads] = useState(false);
   const [showDevConfig, setShowDevConfig] = useState(false);
   const [autoCompleting, setAutoCompleting] = useState(false);
   const [flyingBadges, setFlyingBadges] = useState([]);
@@ -604,17 +603,7 @@ export default function Learn() {
     setShowPassed(false);
   };
 
-  const handleDeleteTrainingFiles = async () => {
-    if (!window.confirm('Delete all training project files from the server? This frees up storage — your progress records are kept.')) return;
-    setCleaningServer(true);
-    try {
-      const n = await deleteAllTrainingProjects();
-      window.alert(`Deleted ${n} training project${n !== 1 ? 's' : ''} from the server.`);
-    } catch (e) {
-      window.alert('Failed to clean server: ' + e.message);
-    }
-    setCleaningServer(false);
-  };
+
 
   const isModuleLocked = (modId) => {
     if (modId === 'challenge') {
@@ -690,14 +679,7 @@ export default function Learn() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-colors">
               <Download className="w-3 h-3" /> Training Files
             </button>
-            <button onClick={handleDeleteTrainingFiles} disabled={cleaningServer}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-500 hover:text-orange-400 transition-colors disabled:opacity-50"
-              title="Remove training project files from server storage">
-              {cleaningServer
-                ? <><svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Cleaning…</>
-                : <><Trash2 className="w-3 h-3" /> Clean Server</>
-              }
-            </button>
+
             <button onClick={() => setShowDevConfig(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-500 hover:text-purple-400 transition-colors"
               title="Dev: override module progress">
