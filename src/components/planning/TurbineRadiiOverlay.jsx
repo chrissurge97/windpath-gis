@@ -81,7 +81,7 @@ export default function TurbineRadiiOverlay({ turbines, turbineTypes, globalRadi
                 pathOptions={{
                   color: r.color,
                   fillColor: r.color,
-                  fillOpacity: 0.05,
+                  fillOpacity: 0,
                   weight: 1.5,
                   dashArray: r.blockPlacement ? '6 3' : '4 6',
                   opacity: 0.7,
