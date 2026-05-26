@@ -48,6 +48,7 @@ import MapLayersRenderer from '@/components/planning/MapLayersRenderer';
 import ProjectFileButtons, { saveProject, loadProject, OpenProjectModal, setupProjectImport } from '@/components/planning/ProjectManager';
 import { useHandleImport } from '@/lib/useHandleImport';
 import ConfigMenuWrapper from '@/components/planning/ConfigMenuWrapper';
+import CSVColumnMapper from '@/components/planning/CSVColumnMapper';
 import { loadCustomTurbines } from '@/components/planning/TurbineWizard';
 import { loadCustomCables } from '@/components/planning/CableWizard';
 import { calcCableLoad, calcSubstationLoad } from '@/lib/cableLoadUtils';
@@ -271,6 +272,7 @@ export default function Planning() {
 
 
   const [importClassifyLayers, setImportClassifyLayers] = useState(null); // layers awaiting classification
+  const [csvMapperState, setCsvMapperState] = useState(null); // { csvText, fileName }
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showDataTables, setShowDataTables] = useState(false);
   const [showConfigMenu, setShowConfigMenu] = useState(false);
@@ -774,6 +776,7 @@ export default function Planning() {
     selectedTurbineType, selectedCableTypeId,
     setImportLoading, setImportClassifyLayers,
     handleSwitchProject, setTurbineTypes, setCableTypes,
+    onCSVMap: (csvText, fileName) => setCsvMapperState({ csvText, fileName }),
     setLayers: (layers) => {
       if (Array.isArray(layers)) {
         const refreshed = layers.map(layer => 
@@ -1651,6 +1654,25 @@ export default function Planning() {
       {importClassifyLayers && <ImportClassifyModal layers={importClassifyLayers} onConfirm={handleClassifyConfirm} onClose={() => setImportClassifyLayers(null)} />}
       {showNewZoneDialog && <NewZoneDialog onClose={() => setShowNewZoneDialog(false)} onCreate={({ name, color }) => { const l = createLayer({ name, type: 'polygon', color }); setLayers((prev) => [...prev, l]); }} />}
       {showDataTables && <DataTablesPanel onClose={() => setShowDataTables(false)} />}
+
+      {csvMapperState && (
+        <CSVColumnMapper
+          csvText={csvMapperState.csvText}
+          fileName={csvMapperState.fileName}
+          onConfirm={(layer) => {
+            setCsvMapperState(null);
+            startTransition(() => {
+              setLayers(prev => [...prev, layer]);
+              if (typeof window !== 'undefined') {
+                window.__importCount__ = (window.__importCount__ || 0) + 1;
+                window.__trainingEvent__ = { type: 'import_completed', payload: {}, ts: Date.now() };
+              }
+            });
+            setTimeout(() => handleBatchFetchWind(), 500);
+          }}
+          onCancel={() => setCsvMapperState(null)}
+        />
+      )}
 
 
       </div>);

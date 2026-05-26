@@ -293,7 +293,7 @@ export function partitionImportedLayers(importedLayers) {
 }
 
 // ── Main import entry point ──────────────────────────────────────────────────
-export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoading, onLog, onClassify, onClassifyMode, onCableTopology, defaultTurbineType, defaultCableTypeId }) {
+export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoading, onLog, onClassify, onClassifyMode, onCableTopology, onCSVMap, defaultTurbineType, defaultCableTypeId }) {
   const log = (msg, level = 'info') => { console.log('[import]', msg); if (onLog) onLog(msg, level); };
   const input = document.createElement('input');
   input.type = 'file';
@@ -558,71 +558,47 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
         } else if (fname.endsWith('.csv')) {
           log(`Parsing CSV: ${file.name}`);
           const text = await file.text();
-          const lines = text.split('\n').filter(l => l.trim());
-
-          // Robust CSV row parser that handles quoted fields
+          if (onLoading) onLoading(false);
+          // Hand off raw CSV text to the column mapper UI — it will call back with a ready layer
+          if (onCSVMap) {
+            onCSVMap(text, file.name);
+            return;
+          }
+          // Fallback: auto-detect lat/lng (legacy behaviour)
           const parseCSVRow = (line) => {
-            const result = [];
-            let cur = '', inQuote = false;
+            const result = []; let cur = '', inQuote = false;
             for (let i = 0; i < line.length; i++) {
               const ch = line[i];
-              if (ch === '"') {
-                if (inQuote && line[i + 1] === '"') { cur += '"'; i++; }
-                else { inQuote = !inQuote; }
-              } else if (ch === ',' && !inQuote) {
-                result.push(cur.trim()); cur = '';
-              } else {
-                cur += ch;
-              }
+              if (ch === '"') { if (inQuote && line[i+1]==='"'){cur+='"';i++;}else{inQuote=!inQuote;} }
+              else if (ch===',' && !inQuote){result.push(cur.trim());cur='';}
+              else{cur+=ch;}
             }
-            result.push(cur.trim());
-            return result;
+            result.push(cur.trim()); return result;
           };
-
-          const headers = parseCSVRow(lines[0]);
-
-          // Find lat/lng columns case-insensitively
+          const csvLines = text.split('\n').filter(l => l.trim());
+          const headers = parseCSVRow(csvLines[0]);
           const latCol = headers.find(h => /^(lat|latitude|y)$/i.test(h));
           const lngCol = headers.find(h => /^(lng|lon|long|longitude|x)$/i.test(h));
-
           if (!latCol || !lngCol) {
-            log(`CSV: could not find lat/lng columns. Found: ${headers.join(', ')}`, 'warn');
-            if (onLoading) onLoading(false);
-            alert(`CSV import failed: could not find lat/lng columns.\nFound columns: ${headers.join(', ')}\nExpected: lat, lng (or latitude/longitude)`);
+            log(`CSV: no lat/lng columns. Found: ${headers.join(', ')}`, 'warn');
+            alert(`CSV import failed: could not find lat/lng columns.\nFound: ${headers.join(', ')}`);
           } else {
             const csvFeatures = [];
-            for (let i = 1; i < lines.length; i++) {
-              const vals = parseCSVRow(lines[i]);
-              const row = Object.fromEntries(headers.map((h, j) => [h, vals[j] ?? '']));
+            for (let i = 1; i < csvLines.length; i++) {
+              const vals = parseCSVRow(csvLines[i]);
+              const row = Object.fromEntries(headers.map((h,j)=>[h,vals[j]??'']));
               const lat = parseFloat(row[latCol]), lng = parseFloat(row[lngCol]);
-              if (isNaN(lat) || isNaN(lng)) continue;
-              const props = { name: row.name || row.Name || row.NAME || row.id || row.ID || `Feature ${i}` };
-              for (const h of headers) {
-                if (h === latCol || h === lngCol) continue;
-                props[h] = row[h];
-              }
-              csvFeatures.push({
-                id: `csv_${i}`,
-                geometry: { type: 'Point', coordinates: [lng, lat] },
-                properties: props,
-              });
+              if (isNaN(lat)||isNaN(lng)) continue;
+              const props = { name: row.name||row.Name||row.NAME||row.id||row.ID||`Feature ${i}` };
+              for (const h of headers) { if(h===latCol||h===lngCol) continue; props[h]=row[h]; }
+              csvFeatures.push({ id:`csv_${i}`, geometry:{type:'Point',coordinates:[lng,lat]}, properties:props });
             }
             if (csvFeatures.length > 0) {
-              log(`CSV → GeoJSON: ${csvFeatures.length} point features`, 'success');
-              const rawLayer = {
-                id: `lyr_csv_${Date.now()}`, name: baseName, type: 'point',
-                visible: true, color: '#8b5cf6', fillOpacity: 1,
-                strokeOpacity: 0.9, strokeWeight: 2, no_turbines: false, features: csvFeatures,
-              };
-              if (onLoading) onLoading(false);
-              // Always go through classify modal so user can assign type (turbine, etc.)
-              // useImportClassify fires import_completed event when confirmed
+              const rawLayer = { id:`lyr_csv_${Date.now()}`, name:baseName, type:'point', visible:true, color:'#8b5cf6', fillOpacity:1, strokeOpacity:0.9, strokeWeight:2, no_turbines:false, features:csvFeatures };
               if (onClassifyMode) { onClassifyMode([rawLayer]); return; }
               allImported.push(rawLayer);
             } else {
-              if (onLoading) onLoading(false);
-              log('CSV: no valid lat/lng rows found', 'warn');
-              alert('CSV import: no valid rows found. Check that lat/lng values are numbers.');
+              alert('CSV import: no valid rows found.');
             }
           }
         }

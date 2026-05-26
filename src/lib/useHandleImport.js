@@ -143,12 +143,14 @@ export function useHandleImport({
   setLayers,
   onCableTopology,
   onImportComplete,
+  onCSVMap,
 }) {
   return function handleImport() {
     openImportFilePicker({
       onLoading: (loading) => setImportLoading(loading),
       defaultTurbineType: selectedTurbineType,
       defaultCableTypeId: selectedCableTypeId,
+      onCSVMap,
       onClassify: (rawLayers) => {
         setImportLoading(false);
         setImportClassifyLayers(rawLayers);
