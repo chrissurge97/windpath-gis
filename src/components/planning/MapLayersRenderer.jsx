@@ -105,7 +105,18 @@ function NativePointLayer({ layers, mode, setPointMenuFeature, setPointMenuLayer
         let dragStarted = false;
         let mouseDownLatLng = null;
 
-        marker.on('mousedown', (e) => {
+        // Tooltip on hover
+      const tooltipContent = [f.properties?.name, f.properties?.notes].filter(Boolean).join('\n');
+      if (tooltipContent) {
+        marker.bindTooltip(tooltipContent, {
+          permanent: false,
+          direction: 'top',
+          offset: [0, -8],
+          className: 'leaflet-point-tooltip',
+        });
+      }
+
+      marker.on('mousedown', (e) => {
           mouseDownLatLng = e.latlng;
           dragStarted = false;
           L.DomEvent.stopPropagation(e);
