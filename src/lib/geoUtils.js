@@ -48,13 +48,21 @@ export function checkExclusionZones(lat, lng, layers) {
     if (!['turbine', 'cable', 'substation', 'wind_resource'].includes(layer.type)) {
       for (const feature of layer.features) {
         if (feature.geometry.type !== 'Point') continue;
-        if (!feature.properties?.no_turbines) continue;
-        const setbackM = parseFloat(feature.properties?.setback_m) || 0;
-        if (setbackM <= 0) continue;
         const [fLng, fLat] = feature.geometry.coordinates;
         const dist = haversineM(lat, lng, fLat, fLng);
-        if (dist <= setbackM) {
-          return { layer, feature };
+        // Multi-radii (new): check each blocking radius
+        const radii = feature.properties?.radii;
+        if (radii && radii.length > 0) {
+          for (const r of radii) {
+            if (!r.blockPlacement || r.radiusM <= 0) continue;
+            if (dist <= r.radiusM) return { layer, feature };
+          }
+        } else {
+          // Legacy single setback
+          if (!feature.properties?.no_turbines) continue;
+          const setbackM = parseFloat(feature.properties?.setback_m) || 0;
+          if (setbackM <= 0) continue;
+          if (dist <= setbackM) return { layer, feature };
         }
       }
     }

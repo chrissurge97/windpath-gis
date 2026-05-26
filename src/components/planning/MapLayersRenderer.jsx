@@ -219,7 +219,9 @@ const TurbineFeature = memo(function TurbineFeature({ f, layer, mode, turbineTyp
 const PointFeature = memo(function PointFeature({ f, layer, mode, setPointMenuFeature, setPointMenuLayerId, setTurbineMenuFeature, setPolygonMenuFeature, setCableMenuFeature, setSubstationMenuFeature, updateLayer }) {
   const [lng, lat] = f.geometry.coordinates;
   const icon = getPointIcon(layer.color || '#8b5cf6');
-  const setbackM = f.properties?.setback_m;
+  // Support multi-radii (new) or fallback to single setback_m (legacy)
+  const radii = f.properties?.radii;
+  const legacySetback = f.properties?.setback_m;
   return (
     <React.Fragment>
       <Marker position={[lat, lng]} icon={icon} draggable={mode === 'select'}
@@ -237,10 +239,16 @@ const PointFeature = memo(function PointFeature({ f, layer, mode, setPointMenuFe
             updateLayer(layer.id, { features: layer.features.map(ft => ft.id === f.id ? { ...ft, geometry: { ...ft.geometry, coordinates: [newLng, newLat] } } : ft) });
           },
         }} />
-      {setbackM > 0 && (
-        <Circle center={[lat, lng]} radius={setbackM}
-          pathOptions={{ color: layer.color || '#8b5cf6', fillColor: layer.color || '#8b5cf6', fillOpacity: 0.06, weight: 1, dashArray: '4 4', opacity: 0.5 }} />
-      )}
+      {radii && radii.length > 0
+        ? radii.map(r => r.radiusM > 0 && (
+            <Circle key={r.id} center={[lat, lng]} radius={r.radiusM}
+              pathOptions={{ color: r.color || layer.color, fillOpacity: 0, weight: 3, dashArray: r.blockPlacement ? '8 4' : '6 8', opacity: 0.9 }} />
+          ))
+        : legacySetback > 0 && (
+            <Circle center={[lat, lng]} radius={legacySetback}
+              pathOptions={{ color: layer.color || '#8b5cf6', fillOpacity: 0, weight: 3, dashArray: '6 8', opacity: 0.9 }} />
+          )
+      }
     </React.Fragment>
   );
 });
