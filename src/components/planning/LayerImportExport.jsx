@@ -3,9 +3,9 @@ import { Upload, Download } from 'lucide-react';
 import { geoJSONToLayer } from '@/lib/gisUtils';
 import LayerExportModal from '@/components/planning/LayerExportModal';
 
-export default function LayerImportExport({ layers, onAddLayer, projectName = 'project' }) {
-  const fileRef = useRef(null);
-  const [showExport, setShowExport] = useState(false);
+export default function LayerImportExport({ layers, onAddLayer, projectName = 'project', mapRef }) {
+   const fileRef = useRef(null);
+   const [showExport, setShowExport] = useState(false);
 
   const handleImport = (e) => {
     const file = e.target.files[0]; if (!file) return;
@@ -62,6 +62,7 @@ export default function LayerImportExport({ layers, onAddLayer, projectName = 'p
         <LayerExportModal
           layers={layers}
           projectName={projectName}
+          mapRef={mapRef}
           onClose={() => setShowExport(false)}
         />
       )}

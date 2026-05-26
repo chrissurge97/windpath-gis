@@ -43,11 +43,12 @@ function layersToCSV(layers, crs) {
   return rows.join('\n');
 }
 
-export default function LayerExportModal({ layers, projectName = 'project', onClose }) {
-  const [selectedLayers, setSelectedLayers] = useState(() => new Set(layers.map(l => l.id)));
-  const [format, setFormat] = useState('geojson');
-  const [crs, setCrs] = useState('WGS84');
-  const overlayRef = useRef(null);
+export default function LayerExportModal({ layers, projectName = 'project', mapRef, onClose }) {
+   const [selectedLayers, setSelectedLayers] = useState(() => new Set(layers.map(l => l.id)));
+   const [format, setFormat] = useState('geojson');
+   const [crs, setCrs] = useState('WGS84');
+   const [scope, setScope] = useState('whole'); // 'whole' or 'view'
+   const overlayRef = useRef(null);
 
   // Close on outside click
   useEffect(() => {
@@ -72,9 +73,31 @@ export default function LayerExportModal({ layers, projectName = 'project', onCl
   const kmlUnsupported = crs !== 'WGS84' && format === 'kml';
 
   const doExport = async () => {
-    const exportLayers = layers.filter(l => selectedLayers.has(l.id));
+    let exportLayers = layers.filter(l => selectedLayers.has(l.id));
     if (exportLayers.length === 0) return;
     const name = projectName;
+
+    // Filter features by map bounds if viewing current view
+    if (scope === 'view' && mapRef?.current) {
+      const bounds = mapRef.current.getBounds();
+      exportLayers = exportLayers.map(layer => ({
+        ...layer,
+        features: layer.features.filter(f => {
+          const geom = f.geometry;
+          if (!geom) return false;
+          if (geom.type === 'Point') {
+            const [lng, lat] = geom.coordinates;
+            return bounds.contains([lat, lng]);
+          } else if (geom.type === 'LineString') {
+            return geom.coordinates.some(([lng, lat]) => bounds.contains([lat, lng]));
+          } else if (geom.type === 'Polygon' || geom.type === 'MultiPolygon') {
+            const coords = geom.type === 'Polygon' ? geom.coordinates : geom.coordinates.flat();
+            return coords.some(ring => ring.some(([lng, lat]) => bounds.contains([lat, lng])));
+          }
+          return false;
+        })
+      }));
+    }
 
     if (format === 'kml') {
       const kml = await exportProjectKMZ({ name, layers: exportLayers });
@@ -211,14 +234,45 @@ export default function LayerExportModal({ layers, projectName = 'project', onCl
             )}
           </div>
 
-          {/* Layer selection */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Layers</span>
-              <button onClick={toggleAll} className="text-[10px] text-slate-500 hover:text-emerald-400 transition-colors">
-                {selectedLayers.size === layers.length ? 'Deselect all' : 'Select all'}
-              </button>
-            </div>
+          {/* Export scope */}
+           <div>
+             <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block mb-2">Export Scope</span>
+             <div className="flex gap-2">
+               <button
+                 onClick={() => setScope('whole')}
+                 className={cn(
+                   "flex-1 px-3 py-2 rounded-lg border text-xs font-medium transition-colors text-left",
+                   scope === 'whole'
+                     ? "bg-blue-500/20 border-blue-500/40 text-blue-300"
+                     : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
+                 )}
+               >
+                 Whole Layer
+               </button>
+               <button
+                 onClick={() => setScope('view')}
+                 disabled={!mapRef?.current}
+                 className={cn(
+                   "flex-1 px-3 py-2 rounded-lg border text-xs font-medium transition-colors text-left",
+                   scope === 'view'
+                     ? "bg-blue-500/20 border-blue-500/40 text-blue-300"
+                     : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500",
+                   !mapRef?.current && "opacity-50 cursor-not-allowed"
+                 )}
+               >
+                 Current View
+               </button>
+             </div>
+           </div>
+
+           {/* Layer selection */}
+           <div>
+             <div className="flex items-center justify-between mb-2">
+               <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Layers</span>
+               <button onClick={toggleAll} className="text-[10px] text-slate-500 hover:text-emerald-400 transition-colors">
+                 {selectedLayers.size === layers.length ? 'Deselect all' : 'Select all'}
+               </button>
+             </div>
             <div className="space-y-1">
               {layers.map(l => (
                 <button
