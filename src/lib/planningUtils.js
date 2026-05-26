@@ -19,8 +19,9 @@ export async function fetchElevation(lat, lng) {
 const _windCache = new Map();
 
 function windCacheKey(lat, lng) {
-  // Round to ~1km grid (2 decimal places ≈ 1.1 km)
-  return `${lat.toFixed(2)}_${lng.toFixed(2)}`;
+  // Round to ~500m grid (snap to nearest 0.005°)
+  const snap = (v) => (Math.round(v * 200) / 200).toFixed(3);
+  return `${snap(lat)}_${snap(lng)}`;
 }
 
 /**

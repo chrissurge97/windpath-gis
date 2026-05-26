@@ -207,7 +207,7 @@ export default function Planning() {
   const [mode, setMode] = useState('select');
   const [drawingPoints, setDrawingPoints] = useState([]);
   const [selectedFeatureId, setSelectedFeatureId] = useState(null);
-  const [rightTab, setRightTab] = useState('turbines');
+  const [rightTab, setRightTab] = useState('analysis');
   const [loadingWind, setLoadingWind] = useState(false);
   const [batchFetchingWind, setBatchFetchingWind] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
@@ -277,9 +277,9 @@ export default function Planning() {
   const [features, setFeatures] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('app_features') || '{}');
-      return { windAnalysis: true, irelandMapLock: true, importClassifier: true, ...saved };
+      return { windAnalysis: true, irelandMapLock: false, importClassifier: true, ...saved };
     } catch {
-      return { windAnalysis: true, irelandMapLock: true, importClassifier: true };
+      return { windAnalysis: true, irelandMapLock: false, importClassifier: true };
     }
   });
   const mapRef = useRef(null);

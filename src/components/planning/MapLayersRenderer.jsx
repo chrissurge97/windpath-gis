@@ -273,7 +273,9 @@ const PolygonFeature = memo(function PolygonFeature({ f, layer, mode, editingPol
     opacity: layer.strokeOpacity || 0.9,
     dashArray: isEditing ? '6 4' : undefined,
   };
-  const nonSelectMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation'].includes(mode);
+  // In draw/place modes: always bubble so map click handler fires through polygons
+  const drawMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation', 'place_point', 'place_text', 'place_substation'].includes(mode);
+  const nonSelectMode = drawMode;
 
   const vIconCache = React.useRef({});
   const getVIcon = (color) => {
@@ -288,10 +290,10 @@ const PolygonFeature = memo(function PolygonFeature({ f, layer, mode, editingPol
 
   return (
     <React.Fragment>
-      <Polygon positions={positions} pathOptions={polyOpts} bubblingMouseEvents={nonSelectMode}
+      <Polygon positions={positions} pathOptions={polyOpts} bubblingMouseEvents={drawMode}
         eventHandlers={{
           click: (e) => {
-            if (nonSelectMode) return;
+            if (drawMode) return; // let map click handler take over
             L.DomEvent.stopPropagation(e);
             if (isEditing) insertPolygonVertex(f.id, layer.id, e.latlng.lat, e.latlng.lng);
             else if (mode === 'select' || mode === 'pan') openPolygonMenu(f, layer.id);
@@ -322,15 +324,15 @@ const PolygonFeature = memo(function PolygonFeature({ f, layer, mode, editingPol
 const MultiPolygonFeature = memo(function MultiPolygonFeature({ f, layer, mode, setLayerTooltip, openPolygonMenu }) {
   const polyColor = layer.color || '#06b6d4';
   const po = { color: polyColor, fillColor: polyColor, fillOpacity: layer.fillOpacity, weight: layer.strokeWeight || 2, opacity: layer.strokeOpacity || 0.9 };
-  const nonSel = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation'].includes(mode);
+  const drawMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation', 'place_point', 'place_text'].includes(mode);
   return (
     <React.Fragment>
       {f.geometry.coordinates.map((poly, pi) => {
         const pos = poly.map(ring => ring.slice(0, -1).map(([x, y]) => [y, x]));
-        return <Polygon key={`${f.id}-${pi}`} positions={pos} pathOptions={po} bubblingMouseEvents={nonSel}
+        return <Polygon key={`${f.id}-${pi}`} positions={pos} pathOptions={po} bubblingMouseEvents={drawMode}
           eventHandlers={{
-            click: (e) => { if (nonSel) return; L.DomEvent.stopPropagation(e); if (mode === 'select' || mode === 'pan') openPolygonMenu(f, layer.id); },
-            mousemove: (e) => { if (nonSel) return; const c = e.target._map?.getContainer(); const r = c?.getBoundingClientRect(); if (!r) return; setLayerTooltip({ x: e.originalEvent.clientX - r.left, y: e.originalEvent.clientY - r.top, layerName: layer.name, featureName: f.properties?.name || '', description: f.properties?.designation || f.properties?.reason || '' }); },
+            click: (e) => { if (drawMode) return; L.DomEvent.stopPropagation(e); if (mode === 'select' || mode === 'pan') openPolygonMenu(f, layer.id); },
+            mousemove: (e) => { if (drawMode) return; const c = e.target._map?.getContainer(); const r = c?.getBoundingClientRect(); if (!r) return; setLayerTooltip({ x: e.originalEvent.clientX - r.left, y: e.originalEvent.clientY - r.top, layerName: layer.name, featureName: f.properties?.name || '', description: f.properties?.designation || f.properties?.reason || '' }); },
             mouseout: () => setLayerTooltip(null),
           }} />;
       })}
