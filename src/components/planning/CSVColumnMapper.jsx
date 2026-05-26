@@ -117,12 +117,14 @@ export default function CSVColumnMapper({ csvText, fileName, onConfirm, onCancel
       }
       const name = nameCol ? (row[nameCol] || `Feature ${i}`) : `Feature ${i}`;
       const props = { name };
+      const notesParts = [];
       for (const h of headers) {
         const role = roles[h];
         if (role === 'ignore' || role === 'lat' || role === 'lng' || role === 'name') continue;
-        if (role === 'notes') { props.notes = row[h]; continue; }
+        if (role === 'notes') { if (row[h]) notesParts.push(row[h]); continue; }
         if (role === 'custom') props[h] = row[h];
       }
+      if (notesParts.length > 0) props.notes = notesParts.join('\n');
       features.push({
         id: `csv_${i}`,
         geometry: { type: 'Point', coordinates: [lng, lat] },

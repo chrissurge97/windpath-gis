@@ -32,6 +32,24 @@ function NativePointLayer({ layers, mode, setPointMenuFeature, setPointMenuLayer
   const map = useMap();
   const groupRef = useRef(null);
 
+  // Keep callbacks in refs so the Leaflet event handlers always call the latest version
+  const setPointMenuFeatureRef = useRef(setPointMenuFeature);
+  const setPointMenuLayerIdRef = useRef(setPointMenuLayerId);
+  const setTurbineMenuFeatureRef = useRef(setTurbineMenuFeature);
+  const setPolygonMenuFeatureRef = useRef(setPolygonMenuFeature);
+  const setCableMenuFeatureRef = useRef(setCableMenuFeature);
+  const setSubstationMenuFeatureRef = useRef(setSubstationMenuFeature);
+  const updateLayerRef = useRef(updateLayer);
+  useEffect(() => {
+    setPointMenuFeatureRef.current = setPointMenuFeature;
+    setPointMenuLayerIdRef.current = setPointMenuLayerId;
+    setTurbineMenuFeatureRef.current = setTurbineMenuFeature;
+    setPolygonMenuFeatureRef.current = setPolygonMenuFeature;
+    setCableMenuFeatureRef.current = setCableMenuFeature;
+    setSubstationMenuFeatureRef.current = setSubstationMenuFeature;
+    updateLayerRef.current = updateLayer;
+  });
+
   // Flatten all point features with their layer
   const pointFeatures = useMemo(() => {
     const result = [];
@@ -71,19 +89,18 @@ function NativePointLayer({ layers, mode, setPointMenuFeature, setPointMenuLayer
       marker.on('click', (e) => {
         L.DomEvent.stopPropagation(e);
         if (mode === 'select' || mode === 'pan') {
-          setPointMenuFeature(f);
-          setPointMenuLayerId(layer.id);
-          setTurbineMenuFeature(null);
-          setPolygonMenuFeature(null);
-          setCableMenuFeature(null);
-          setSubstationMenuFeature(null);
+          setPointMenuFeatureRef.current(f);
+          setPointMenuLayerIdRef.current(layer.id);
+          setTurbineMenuFeatureRef.current(null);
+          setPolygonMenuFeatureRef.current(null);
+          setCableMenuFeatureRef.current(null);
+          setSubstationMenuFeatureRef.current(null);
         }
       });
 
       // Make draggable in select mode
       if (mode === 'select') {
         marker.options.draggable = true;
-        // Use mousedown → mousemove → mouseup for drag
         let dragging = false;
         marker.on('mousedown', (e) => {
           dragging = true;
@@ -103,7 +120,8 @@ function NativePointLayer({ layers, mode, setPointMenuFeature, setPointMenuLayer
           map.off('mousemove', onDrag);
           map.off('mouseup', onDragEnd);
           const { lat: newLat, lng: newLng } = marker.getLatLng();
-          updateLayer(layer.id, {
+          // Use a snapshot of the layer's features at drag-end time via the layer ref
+          updateLayerRef.current(layer.id, {
             features: layer.features.map(ft =>
               ft.id === f.id ? { ...ft, geometry: { ...ft.geometry, coordinates: [newLng, newLat] } } : ft
             )
