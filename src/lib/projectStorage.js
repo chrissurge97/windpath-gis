@@ -1,145 +1,143 @@
 /**
- * Server-side project storage using Base44 entities.
- * Large project blobs are uploaded as files; the entity stores only the URL.
+ * Project storage using localStorage only.
+ * Keeps the same public API as the previous server-backed version.
  */
-import { base44 } from '@/api/base44Client';
 
-const ENTITY = base44.entities.WindFarmProject;
+const INDEX_KEY = 'planning_projects_index';
+const PROJECT_PREFIX = 'planning_project_';
 
-// ── Serialize / deserialize ──────────────────────────────────────────────────
-
-function buildBlob(projectData) {
-  return JSON.stringify({
-    layers: projectData.layers || [],
-    turbineTypes: projectData.turbineTypes || [],
-    cableTypes: projectData.cableTypes || [],
-    windParams: projectData.windParams || { k: 2.0, lambda: 7.0 },
-    globalRadii: projectData.globalRadii || null,
-  });
+function getIndex() {
+  try { return JSON.parse(localStorage.getItem(INDEX_KEY) || '[]'); } catch { return []; }
 }
 
-async function uploadBlob(jsonString) {
-  const file = new File([jsonString], 'project.json', { type: 'application/json' });
-  const { file_url } = await base44.integrations.Core.UploadFile({ file });
-  return file_url;
+function saveIndex(index) {
+  localStorage.setItem(INDEX_KEY, JSON.stringify(index));
 }
 
-async function fetchBlob(url) {
-  const res = await fetch(url);
-  return res.json();
+function projectKey(id) {
+  return `${PROJECT_PREFIX}${id}`;
 }
 
-function deserialize(record, extra) {
-  return {
-    id: record.id,
-    name: record.name,
-    folder: record.folder || '',
-    is_training: record.is_training || false,
-    layers: extra.layers || [],
-    turbineTypes: extra.turbineTypes || [],
-    cableTypes: extra.cableTypes || [],
-    windParams: extra.windParams || { k: 2.0, lambda: 7.0 },
-    globalRadii: extra.globalRadii || null,
-    _serverId: record.id,
-    _updatedAt: record.updated_date,
-    _createdAt: record.created_date,
-  };
+function makeId() {
+  return `proj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export async function listProjects() {
-  const records = await ENTITY.list('-updated_date', 200);
-  return records.map(r => ({
+  return getIndex().map(r => ({
     id: r.id,
     name: r.name,
     folder: r.folder || '',
     is_training: r.is_training || false,
-    updatedAt: r.updated_date,
-    createdAt: r.created_date,
+    updatedAt: r.updatedAt || r.createdAt,
+    createdAt: r.createdAt,
   }));
 }
 
 export async function loadProject(id) {
   if (!id || id === '__demo__') return null;
-
-  // Check localStorage first (used by academy checkpoints)
-  const localRaw = localStorage.getItem(`planning_project_${id}`);
-  if (localRaw) {
-    try {
-      const local = JSON.parse(localRaw);
-      return { ...local, id };
-    } catch {}
-  }
-
-  const records = await ENTITY.filter({ id });
-  if (!records || records.length === 0) return null;
-  const record = records[0];
-
-  let extra = {};
-  if (record.description) {
-    if (record.description.startsWith('http')) {
-      extra = await fetchBlob(record.description);
-    } else {
-      try { extra = JSON.parse(record.description); } catch {}
-    }
-  }
-  return deserialize(record, extra);
+  const raw = localStorage.getItem(projectKey(id));
+  if (!raw) return null;
+  try {
+    const data = JSON.parse(raw);
+    return { ...data, id };
+  } catch { return null; }
 }
 
 export async function saveProject(id, projectData) {
-  const jsonString = buildBlob(projectData);
-  const fileUrl = await uploadBlob(jsonString);
-  const payload = {
+  const now = Date.now();
+  const resolvedId = (id && id !== '__new__') ? id : makeId();
+  const blob = {
+    id: resolvedId,
     name: projectData.name || 'Unnamed Project',
-    description: fileUrl,
     folder: projectData.folder || '',
     is_training: projectData.is_training || false,
+    layers: projectData.layers || [],
+    turbineTypes: projectData.turbineTypes || [],
+    cableTypes: projectData.cableTypes || [],
+    windParams: projectData.windParams || { k: 2.0, lambda: 7.0 },
+    globalRadii: projectData.globalRadii || null,
   };
+  localStorage.setItem(projectKey(resolvedId), JSON.stringify(blob));
 
-  if (id && id !== '__new__') {
-    try {
-      await ENTITY.update(id, payload);
-      return id;
-    } catch {
-      // Record may not exist yet — fall through to create
-    }
+  const index = getIndex();
+  const existing = index.find(r => r.id === resolvedId);
+  if (existing) {
+    existing.name = blob.name;
+    existing.folder = blob.folder;
+    existing.is_training = blob.is_training;
+    existing.updatedAt = now;
+  } else {
+    index.push({ id: resolvedId, name: blob.name, folder: blob.folder, is_training: blob.is_training, createdAt: now, updatedAt: now });
   }
-  const created = await ENTITY.create(payload);
-  return created.id;
+  saveIndex(index);
+  return resolvedId;
 }
 
 export async function moveProject(id, newFolder) {
-  await ENTITY.update(id, { folder: newFolder });
+  const raw = localStorage.getItem(projectKey(id));
+  if (raw) {
+    const data = JSON.parse(raw);
+    data.folder = newFolder;
+    localStorage.setItem(projectKey(id), JSON.stringify(data));
+  }
+  const index = getIndex();
+  const entry = index.find(r => r.id === id);
+  if (entry) { entry.folder = newFolder; saveIndex(index); }
 }
 
 export async function renameProject(id, newName) {
-  await ENTITY.update(id, { name: newName });
+  const raw = localStorage.getItem(projectKey(id));
+  if (raw) {
+    const data = JSON.parse(raw);
+    data.name = newName;
+    localStorage.setItem(projectKey(id), JSON.stringify(data));
+  }
+  const index = getIndex();
+  const entry = index.find(r => r.id === id);
+  if (entry) { entry.name = newName; saveIndex(index); }
 }
 
 export async function deleteProject(id) {
-  await ENTITY.delete(id);
+  localStorage.removeItem(projectKey(id));
+  const index = getIndex().filter(r => r.id !== id);
+  saveIndex(index);
 }
 
-/** Delete all non-training, non-demo projects */
 export async function deleteAllUserProjects() {
-  const records = await ENTITY.list('-updated_date', 200);
-  const toDelete = records.filter(r => !r.is_training);
-  await Promise.all(toDelete.map(r => ENTITY.delete(r.id)));
+  const index = getIndex();
+  const toDelete = index.filter(r => !r.is_training);
+  toDelete.forEach(r => localStorage.removeItem(projectKey(r.id)));
+  saveIndex(index.filter(r => r.is_training));
   return toDelete.length;
 }
 
-/** Delete all projects flagged as training */
 export async function deleteAllTrainingProjects() {
-  const records = await ENTITY.list('-updated_date', 200);
-  const toDelete = records.filter(r => r.is_training);
-  await Promise.all(toDelete.map(r => ENTITY.delete(r.id)));
+  const index = getIndex();
+  const toDelete = index.filter(r => r.is_training);
+  toDelete.forEach(r => localStorage.removeItem(projectKey(r.id)));
+  saveIndex(index.filter(r => !r.is_training));
   return toDelete.length;
 }
 
 export async function createNewProject(name) {
-  const jsonString = buildBlob({ layers: [], turbineTypes: [], cableTypes: [], windParams: { k: 2.0, lambda: 7.0 } });
-  const fileUrl = await uploadBlob(jsonString);
-  const created = await ENTITY.create({ name: name || 'New Wind Farm Project', description: fileUrl, folder: '', is_training: false });
-  return created.id;
+  const id = makeId();
+  const now = Date.now();
+  const blob = {
+    id,
+    name: name || 'New Wind Farm Project',
+    folder: '',
+    is_training: false,
+    layers: [],
+    turbineTypes: [],
+    cableTypes: [],
+    windParams: { k: 2.0, lambda: 7.0 },
+    globalRadii: null,
+  };
+  localStorage.setItem(projectKey(id), JSON.stringify(blob));
+  const index = getIndex();
+  index.push({ id, name: blob.name, folder: '', is_training: false, createdAt: now, updatedAt: now });
+  saveIndex(index);
+  return id;
 }
