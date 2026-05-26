@@ -532,33 +532,61 @@ async function inflateRaw(compressedBuffer) {
 async function readZip(arrayBuffer) {
   const buf = new Uint8Array(arrayBuffer);
   const dv  = new DataView(arrayBuffer);
+
+  // ── Step 1: Read central directory to get authoritative sizes/offsets ──────
+  // The EOCD record is within the last 65KB of the file
+  let eocdOffset = -1;
+  const searchStart = Math.max(0, buf.length - 65536 - 22);
+  for (let i = buf.length - 22; i >= searchStart; i--) {
+    if (dv.getUint32(i, true) === 0x06054B50) { eocdOffset = i; break; }
+  }
+  if (eocdOffset === -1) throw new Error('Not a valid ZIP file (no EOCD record found)');
+
+  const cdOffset = dv.getUint32(eocdOffset + 16, true);
+  const cdCount  = dv.getUint16(eocdOffset + 8,  true);
+
+  // Parse central directory entries to get the true compSize, uncompSize, and localHeaderOffset
+  const cdEntries = []; // { name, compression, compSize, localHeaderOffset }
+  let cdOff = cdOffset;
+  for (let e = 0; e < cdCount; e++) {
+    if (cdOff + 46 > buf.length) break;
+    if (dv.getUint32(cdOff, true) !== 0x02014B50) break;
+    const compression       = dv.getUint16(cdOff + 10, true);
+    const compSize          = dv.getUint32(cdOff + 20, true);
+    const nameLen           = dv.getUint16(cdOff + 28, true);
+    const extraLen          = dv.getUint16(cdOff + 30, true);
+    const commentLen        = dv.getUint16(cdOff + 32, true);
+    const localHeaderOffset = dv.getUint32(cdOff + 42, true);
+    const name = new TextDecoder().decode(buf.slice(cdOff + 46, cdOff + 46 + nameLen));
+    cdEntries.push({ name, compression, compSize, localHeaderOffset });
+    cdOff += 46 + nameLen + extraLen + commentLen;
+  }
+
+  // ── Step 2: For each CD entry, seek to its local header data and extract ──
   const files = {};
-  let i = 0;
-  while (i < buf.length - 4) {
-    if (dv.getUint32(i, true) === 0x04034B50) {
-      const compression = dv.getUint16(i + 8,  true); // 0 = stored, 8 = deflated
-      const compSize    = dv.getUint32(i + 18, true);
-      const nameLen     = dv.getUint16(i + 26, true);
-      const extraLen    = dv.getUint16(i + 28, true);
-      const name = new TextDecoder().decode(buf.slice(i + 30, i + 30 + nameLen));
-      const dataStart = i + 30 + nameLen + extraLen;
-      const compressedSlice = arrayBuffer.slice(dataStart, dataStart + compSize);
+  for (const entry of cdEntries) {
+    const lhOff = entry.localHeaderOffset;
+    if (lhOff + 30 > buf.length) continue;
+    if (dv.getUint32(lhOff, true) !== 0x04034B50) continue;
+    const localNameLen  = dv.getUint16(lhOff + 26, true);
+    const localExtraLen = dv.getUint16(lhOff + 28, true);
+    const dataStart = lhOff + 30 + localNameLen + localExtraLen;
+    const compSize  = entry.compSize; // use CD value — authoritative even with data descriptors
 
-      if (compression === 0) {
-        // Stored — use as-is
-        files[name.toLowerCase()] = compressedSlice;
-        console.log(`[zip] stored: "${name}" — ${compSize}B`);
-      } else if (compression === 8) {
-        // Deflated — decompress using browser DecompressionStream
-        const decompressed = await inflateRaw(compressedSlice);
-        files[name.toLowerCase()] = decompressed;
-        console.log(`[zip] deflated: "${name}" — ${compSize}B compressed → ${decompressed.byteLength}B`);
-      } else {
-        console.log(`[zip] unsupported compression ${compression}: "${name}" — skipped`);
-      }
+    if (dataStart + compSize > buf.length) continue;
+    const compressedSlice = arrayBuffer.slice(dataStart, dataStart + compSize);
 
-      i = dataStart + compSize;
-    } else { i++; }
+    const lname = entry.name.toLowerCase();
+    if (entry.compression === 0) {
+      files[lname] = compressedSlice;
+      console.log(`[zip] stored: "${entry.name}" — ${compSize}B`);
+    } else if (entry.compression === 8) {
+      const decompressed = await inflateRaw(compressedSlice);
+      files[lname] = decompressed;
+      console.log(`[zip] deflated: "${entry.name}" — ${compSize}B → ${decompressed.byteLength}B`);
+    } else {
+      console.log(`[zip] unsupported compression ${entry.compression}: "${entry.name}" — skipped`);
+    }
   }
   return files;
 }
