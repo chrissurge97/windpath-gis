@@ -1634,24 +1634,24 @@ export default function Planning() {
 
         {/* Right panel */}
         <RightPanel
-          rightTab={rightTab} setRightTab={setRightTab} features={features} rightPanelOpen={rightPanelOpen}
-          turbines={turbines} turbineTypes={turbineTypes} selectedTurbineTypeId={selectedTurbineTypeId}
-          setSelectedTurbineTypeId={setSelectedTurbineTypeId} turbineLayer={turbineLayer}
-          deleteFeature={deleteFeature} updateTurbineProps={updateTurbineProps} flyToFeature={flyToFeature}
-          cables={cables} cableTypes={cableTypes} selectedCableTypeId={selectedCableTypeId}
-          setSelectedCableTypeId={setSelectedCableTypeId} cableLayer={cableLayer}
-          setCableTypes={setCableTypes} updateLayer={updateLayer} calcCableLoad={calcCableLoad}
-          substations={substations} windParams={windParams} setWindParams={setWindParams}
-          windFetched={windFetched} totalAEP_live={totalAEP_live} liveCapFactor={liveCapFactor}
-          avgWindSpeed={avgWindSpeed} totalCableLength={totalCableLength} totalCableCost={totalCableCost}
-          monthlyData={monthlyData} weibullData={weibullData} layers={layers}
-          selectedLayerId={selectedLayerId} setSelectedLayerId={setSelectedLayerId}
-          setLayers={setLayers} mapRef={mapRef} setShowNewZoneDialog={setShowNewZoneDialog}
-          projectName={projectName} setTurbineTypes={setTurbineTypes}
-          globalRadii={globalRadii} onRadiiChange={setGlobalRadii}
-          showRadii={showRadii} onToggleRadii={() => setShowRadii((v) => { if (!v) window.__trainingEvent__ = { type: 'setback_toggled', payload: {}, ts: Date.now() }; return !v; })}
-          onDataTables={() => setShowDataTables(true)}
-          showDevelopableArea={showDevelopableArea} onToggleDevelopableArea={() => setShowDevelopableArea(v => !v)} />
+           rightTab={rightTab} setRightTab={setRightTab} features={features} rightPanelOpen={rightPanelOpen}
+           turbines={turbines} turbineTypes={turbineTypes} selectedTurbineTypeId={selectedTurbineTypeId}
+           setSelectedTurbineTypeId={setSelectedTurbineTypeId} turbineLayer={turbineLayer}
+           deleteFeature={deleteFeature} updateTurbineProps={updateTurbineProps} flyToFeature={flyToFeature}
+           cables={cables} cableTypes={cableTypes} selectedCableTypeId={selectedCableTypeId}
+           setSelectedCableTypeId={setSelectedCableTypeId} cableLayer={cableLayer}
+           setCableTypes={setCableTypes} updateLayer={updateLayer} calcCableLoad={calcCableLoad}
+           substations={substations} windParams={windParams} setWindParams={setWindParams}
+           windFetched={windFetched} totalAEP_live={totalAEP_live} liveCapFactor={liveCapFactor}
+           avgWindSpeed={avgWindSpeed} totalCableLength={totalCableLength} totalCableCost={totalCableCost}
+           monthlyData={monthlyData} weibullData={weibullData} layers={layers}
+           selectedLayerId={selectedLayerId} setSelectedLayerId={setSelectedLayerId}
+           setLayers={setLayers} mapRef={mapRef} setShowNewZoneDialog={setShowNewZoneDialog}
+           projectName={projectName} setTurbineTypes={setTurbineTypes}
+           globalRadii={globalRadii} onRadiiChange={setGlobalRadii}
+           showRadii={showRadii} onToggleRadii={() => setShowRadii((v) => { if (!v) window.__trainingEvent__ = { type: 'setback_toggled', payload: {}, ts: Date.now() }; return !v; })}
+           onDataTables={() => setShowDataTables(true)}
+           showDevelopableArea={features.developableArea && showDevelopableArea} onToggleDevelopableArea={() => setShowDevelopableArea(v => !v)} />
         
       </div>
       <ConfigMenuWrapper isOpen={showConfigMenu} onClose={() => setShowConfigMenu(false)} features={features} onFeatureToggle={handleFeatureToggle} onTurbineAdded={(t) => setTurbineTypes((prev) => [...prev, t])} onCableAdded={(c) => setCableTypes((prev) => [...prev, c])} />

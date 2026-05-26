@@ -186,7 +186,7 @@ export default function PlanningRightPanel({
   monthlyData, weibullData, layers, selectedLayerId, setSelectedLayerId,
   setLayers, mapRef, setShowNewZoneDialog, setTurbineTypes,
   globalRadii, onRadiiChange, showRadii, onToggleRadii,
-  onDataTables,
+  onDataTables, showDevelopableArea, onToggleDevelopableArea,
 }) {
   return (
     <div className={cn('shrink-0 flex flex-col bg-slate-900 border-l border-slate-800 overflow-hidden transition-all duration-200', rightPanelOpen ? 'w-80' : 'w-0 border-l-0')}>
@@ -245,7 +245,9 @@ export default function PlanningRightPanel({
             </button>
             <LayerImportExport layers={layers} onAddLayer={(layer) => setLayers(prev => [...prev, layer])} projectName="project" mapRef={mapRef} />
             {/* Bake Developable Area to an exportable layer */}
-            <BakeDevelopableArea layers={layers} turbineTypes={turbineTypes} globalRadii={globalRadii} setLayers={setLayers} />
+            {features.developableArea && (
+              <BakeDevelopableArea layers={layers} turbineTypes={turbineTypes} globalRadii={globalRadii} setLayers={setLayers} />
+            )}
             <LayerList layers={layers} selectedLayerId={selectedLayerId} setSelectedLayerId={setSelectedLayerId} updateLayer={updateLayer} setLayers={setLayers} mapRef={mapRef} />
           </div>
         )}
