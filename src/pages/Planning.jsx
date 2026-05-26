@@ -45,6 +45,7 @@ import LayerImportExport from '@/components/planning/LayerImportExport';
 import LayerList from '@/components/planning/LayerList';
 import NewZoneDialog from '@/components/planning/NewZoneDialog';
 import MapLayersRenderer from '@/components/planning/MapLayersRenderer';
+import DevelopableAreaLayer from '@/components/planning/DevelopableAreaLayer';
 import ProjectFileButtons, { saveProject, loadProject, OpenProjectModal, setupProjectImport } from '@/components/planning/ProjectManager';
 import { useHandleImport } from '@/lib/useHandleImport';
 import ConfigMenuWrapper from '@/components/planning/ConfigMenuWrapper';
@@ -226,6 +227,7 @@ export default function Planning() {
   const satelliteView = baseMap === 'satellite';
   const roadsView = baseMap === 'roads';
   const [showSubstations, setShowSubstations] = useState(true);
+  const [showDevelopableArea, setShowDevelopableArea] = useState(false);
   const [drawToolsOpen, setDrawToolsOpen] = useState(false);
   const drawToolsRef = useRef(null);
 
@@ -1135,6 +1137,14 @@ export default function Planning() {
               onPolygonDragEnd={() => {polygonDragRef.current = { id: null, lastLatlng: null };}} />
             
 
+            {showDevelopableArea && (
+              <DevelopableAreaLayer
+                layers={layers}
+                turbineTypes={turbineTypes}
+                globalRadii={globalRadii}
+              />
+            )}
+
             <MapLayersRenderer
               layers={layers} mode={mode} editingPolygonId={editingPolygonId}
               selectedFeatureId={selectedFeatureId} cableMenuFeature={cableMenuFeature}
@@ -1195,6 +1205,14 @@ export default function Planning() {
             )}>
               <Zap className="w-3 h-3" />
               {`Substations${substations.length > 0 ? ` (${substations.length})` : ''}`}
+            </button>
+
+            <button onClick={() => setShowDevelopableArea((v) => !v)}
+            className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
+            showDevelopableArea ? "bg-cyan-500 text-slate-900 border-cyan-400 font-semibold" : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
+            )}>
+              <Layers className="w-3 h-3" />
+              Developable Area
             </button>
           </div>
 
@@ -1630,7 +1648,8 @@ export default function Planning() {
           projectName={projectName} setTurbineTypes={setTurbineTypes}
           globalRadii={globalRadii} onRadiiChange={setGlobalRadii}
           showRadii={showRadii} onToggleRadii={() => setShowRadii((v) => { if (!v) window.__trainingEvent__ = { type: 'setback_toggled', payload: {}, ts: Date.now() }; return !v; })}
-          onDataTables={() => setShowDataTables(true)} />
+          onDataTables={() => setShowDataTables(true)}
+          showDevelopableArea={showDevelopableArea} onToggleDevelopableArea={() => setShowDevelopableArea(v => !v)} />
         
       </div>
       <ConfigMenuWrapper isOpen={showConfigMenu} onClose={() => setShowConfigMenu(false)} features={features} onFeatureToggle={handleFeatureToggle} onTurbineAdded={(t) => setTurbineTypes((prev) => [...prev, t])} onCableAdded={(c) => setCableTypes((prev) => [...prev, c])} />

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Plus, Target } from 'lucide-react';
+import { Plus, Target, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { computeDevelopableArea } from '@/lib/developableArea.js';
+import { createLayer, createFeature } from '@/lib/gisUtils';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import RightPanelTabs from '@/components/planning/RightPanelTabs';
 import TurbineDataTable from '@/components/planning/TurbineDataTable';
@@ -131,6 +133,46 @@ function AnalysisTab({
   );
 }
 
+// ── Bake Developable Area to a real layer ────────────────────────────────────
+function BakeDevelopableArea({ layers, turbineTypes, globalRadii, setLayers }) {
+  const [baking, setBaking] = useState(false);
+
+  const handleBake = () => {
+    setBaking(true);
+    setTimeout(() => {
+      const geometry = computeDevelopableArea(layers, turbineTypes, globalRadii);
+      if (!geometry) { setBaking(false); return; }
+      // Remove any existing baked developable area layer
+      const existingId = layers.find(l => l._isDevelopableArea)?.id;
+      const newLayer = {
+        ...createLayer({ name: 'Developable Area', type: 'polygon', color: '#22d3ee', fillOpacity: 0.12 }),
+        _isDevelopableArea: true,
+        strokeWeight: 1.5,
+        strokeOpacity: 0.6,
+      };
+      const feature = createFeature(newLayer.id, geometry, { name: 'Developable Area (computed)' });
+      newLayer.features = [feature];
+      setLayers(prev => {
+        const filtered = existingId ? prev.filter(l => l.id !== existingId) : prev;
+        return [...filtered, newLayer];
+      });
+      setBaking(false);
+    }, 50);
+  };
+
+  return (
+    <button
+      onClick={handleBake}
+      disabled={baking}
+      className="w-full py-2 px-2 bg-cyan-900/40 hover:bg-cyan-800/50 border border-cyan-700/40 text-cyan-300 hover:text-cyan-200 text-[10px] font-medium rounded-lg flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+      title="Compute and save the developable area as an exportable layer"
+    >
+      <Layers className="w-3.5 h-3.5" />
+      {baking ? 'Computing…' : 'Bake Developable Area → Layer'}
+    </button>
+  );
+}
+
 // ── Main right panel ──────────────────────────────────────────────────────────
 export default function PlanningRightPanel({
   rightTab, setRightTab, features, rightPanelOpen,
@@ -201,6 +243,8 @@ export default function PlanningRightPanel({
               <Plus className="w-3.5 h-3.5" /> Add Zone
             </button>
             <LayerImportExport layers={layers} onAddLayer={(layer) => setLayers(prev => [...prev, layer])} projectName="project" />
+            {/* Bake Developable Area to an exportable layer */}
+            <BakeDevelopableArea layers={layers} turbineTypes={turbineTypes} globalRadii={globalRadii} setLayers={setLayers} />
             <LayerList layers={layers} selectedLayerId={selectedLayerId} setSelectedLayerId={setSelectedLayerId} updateLayer={updateLayer} setLayers={setLayers} mapRef={mapRef} />
           </div>
         )}
