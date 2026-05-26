@@ -477,7 +477,7 @@ export default function Learn() {
   const navigate = useNavigate();
   const [progress, setProgress] = useState(loadProgress());
   const [view, setView] = useState('hub');
-  const [showDownloads, setShowDownloads] = useState(false);
+  const [showDownloads, setShowDownloads] = useState(true);
   const [cleaningServer, setCleaningServer] = useState(false);
   const [showDevConfig, setShowDevConfig] = useState(false);
   const [autoCompleting, setAutoCompleting] = useState(false);
