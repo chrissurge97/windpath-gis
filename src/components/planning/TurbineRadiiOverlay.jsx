@@ -3,8 +3,8 @@
  * Each radius is a multiple of the rotor diameter (D).
  * Radii with `blockPlacement` set will prevent turbines/substations being placed inside them.
  */
-import React, { useEffect } from 'react';
-import { Circle, useMap } from 'react-leaflet';
+import React from 'react';
+import { Circle } from 'react-leaflet';
 
 // Default radius presets (D multiples)
 export const DEFAULT_TURBINE_RADII = [
@@ -55,40 +55,11 @@ function haversineM(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Creates one Leaflet pane per radius type (r3d, r5d, r7d) so all circles
-// of the same type share a single SVG — this means their fills overlap cleanly
-// within the pane but never stack additively across panes.
-function RadiusPaneCreator({ paneId }) {
-  const map = useMap();
-  useEffect(() => {
-    if (!map.getPane(paneId)) {
-      map.createPane(paneId);
-      // Place between overlayPane (400) and shadowPane (500)
-      map.getPane(paneId).style.zIndex = 420;
-      // isolation:isolate on the pane SVG prevents inter-pane fill stacking
-      map.getPane(paneId).style.isolation = 'isolate';
-    }
-  }, [map, paneId]);
-  return null;
-}
-
 export default function TurbineRadiiOverlay({ turbines, turbineTypes, globalRadii, visible = true }) {
   if (!visible || !turbines || turbines.length === 0) return null;
 
-  // Collect which radius IDs are actually enabled
-  const enabledRadiusIds = new Set();
-  for (const turbine of turbines) {
-    const radii = turbine.properties.radii || globalRadii || [];
-    for (const r of radii) { if (r.enabled) enabledRadiusIds.add(r.id); }
-  }
-
   return (
     <>
-      {/* Create one isolated pane per radius type */}
-      {[...enabledRadiusIds].map(rid => (
-        <RadiusPaneCreator key={rid} paneId={`radii-pane-${rid}`} />
-      ))}
-
       {turbines.map(turbine => {
         const [lng, lat] = turbine.geometry.coordinates;
         const tt = turbineTypes.find(t => t.id === turbine.properties.turbine_type_id) || turbineTypes[0];
@@ -104,14 +75,13 @@ export default function TurbineRadiiOverlay({ turbines, turbineTypes, globalRadi
                 key={`${turbine.id}-${r.id}`}
                 center={[lat, lng]}
                 radius={radiusM}
-                pane={`radii-pane-${r.id}`}
                 pathOptions={{
                   color: r.color,
                   fillColor: r.color,
-                  fillOpacity: 0.07,
-                  weight: 1.5,
+                  fillOpacity: 0,
+                  weight: 2,
                   dashArray: r.blockPlacement ? '6 3' : '4 6',
-                  opacity: 0.7,
+                  opacity: 0.8,
                 }}
               />
             );
