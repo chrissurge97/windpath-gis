@@ -297,7 +297,7 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
   const log = (msg, level = 'info') => { console.log('[import]', msg); if (onLog) onLog(msg, level); };
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.json,.geojson,.shp,.zip,.csv,.kml,.kmz';
+  input.accept = '.json,.geojson,.shp,.zip,.csv,.xlsx,.xls,.kml,.kmz';
   input.multiple = true;
 
   input.onchange = async (e) => {
@@ -553,6 +553,20 @@ export function openImportFilePicker({ onLayers, onProject, onTypesUpdate, onLoa
               return;
             }
             allImported.push(rawLayer);
+          }
+
+        } else if (fname.endsWith('.xlsx') || fname.endsWith('.xls')) {
+          log(`Parsing Excel: ${file.name}`);
+          const buf = await file.arrayBuffer();
+          const XLSX = await import('xlsx');
+          const wb = XLSX.read(buf, { type: 'array' });
+          const sheetName = wb.SheetNames[0];
+          const csv = XLSX.utils.sheet_to_csv(wb.Sheets[sheetName]);
+          log(`Excel → CSV: ${csv.split('\n').length - 1} rows`, 'success');
+          if (onLoading) onLoading(false);
+          if (onCSVMap) {
+            onCSVMap(csv, file.name);
+            return;
           }
 
         } else if (fname.endsWith('.csv')) {
