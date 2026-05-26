@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Target, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { computeDevelopableArea } from '@/lib/developableArea.js';
+import { computeDevelopableArea } from '@/lib/developableArea';
 import { createLayer, createFeature } from '@/lib/gisUtils';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import RightPanelTabs from '@/components/planning/RightPanelTabs';

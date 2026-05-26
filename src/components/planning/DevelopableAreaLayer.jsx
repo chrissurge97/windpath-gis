@@ -6,7 +6,7 @@
  */
 import React, { useMemo } from 'react';
 import { Polygon } from 'react-leaflet';
-import { computeDevelopableArea } from '@/lib/developableArea.js';
+import { computeDevelopableArea } from '@/lib/developableArea';
 
 export default function DevelopableAreaLayer({ layers, turbineTypes, globalRadii, color = '#22d3ee', fillOpacity = 0.12 }) {
   // Build a lightweight fingerprint so we only recompute when relevant things change
