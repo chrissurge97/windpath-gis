@@ -1228,6 +1228,15 @@ export default function Planning() {
 
                 }
 
+                if (f.geometry.type === 'MultiPolygon') {
+                  const nonSel = ['place_turbine','draw_cable','draw_polygon','place_substation'].includes(mode);
+                  const pc = layer.type==='polygon' ? layer.color||'#06b6d4' : layer.color;
+                  const po = {color:pc,fillColor:pc,fillOpacity:layer.fillOpacity,weight:layer.strokeWeight||2,opacity:layer.strokeOpacity||0.9};
+                  return (<React.Fragment key={f.id}>{f.geometry.coordinates.map((poly,pi)=>{
+                    const pos=poly.map(ring=>ring.slice(0,-1).map(([x,y])=>[y,x]));
+                    return <Polygon key={`${f.id}-${pi}`} positions={pos} pathOptions={po} bubblingMouseEvents={nonSel} eventHandlers={{click:(e)=>{if(nonSel)return;L.DomEvent.stopPropagation(e);if(mode==='select'||mode==='pan')openPolygonMenu(f,layer.id);},mousemove:(e)=>{if(nonSel)return;const c=e.target._map?.getContainer();const r=c?.getBoundingClientRect();if(!r)return;setLayerTooltip({x:e.originalEvent.clientX-r.left,y:e.originalEvent.clientY-r.top,layerName:layer.name,featureName:f.properties?.name||'',description:f.properties?.designation||f.properties?.reason||''});},mouseout:()=>setLayerTooltip(null)}} />;
+                  })}</React.Fragment>);
+                }
                 if (f.geometry.type === 'LineString') {
                   const ct = cableTypes.find((t) => t.id === f.properties.cable_type_id) || cableTypes[0];
                   const positions = f.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
@@ -1287,15 +1296,10 @@ export default function Planning() {
                   const tt = turbineTypes.find((t) => t.id === f.properties.turbine_type_id) || selectedTurbineType;
                   const icon = turbineIcon(tt?.color || layer.color, isSelected);
                   return (
-                    <Marker key={f.id} position={[lat, lng]} icon={icon}
-                    draggable={mode === 'select'}
+                    <Marker key={f.id} position={[lat, lng]} icon={icon} draggable={mode === 'select'}
                     eventHandlers={{
                       click: (e) => {
-                        if (mode === 'select') {
-                          L.DomEvent.stopPropagation(e);
-                          setSelectedFeatureId(f.id);
-                          openTurbineMenu(f);
-                        }
+                        if (mode === 'select') { L.DomEvent.stopPropagation(e); setSelectedFeatureId(f.id); openTurbineMenu(f); }
                       },
                       dragend: (e) => {
                         window.__trainingEvent__ = { type: 'turbine_moved', payload: { id: f.id }, ts: Date.now() };
