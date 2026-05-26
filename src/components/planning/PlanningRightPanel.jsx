@@ -142,13 +142,14 @@ function BakeDevelopableArea({ layers, turbineTypes, globalRadii, setLayers }) {
     setTimeout(() => {
       const geometry = computeDevelopableArea(layers, turbineTypes, globalRadii);
       if (!geometry) { setBaking(false); return; }
-      // Remove any existing baked developable area layer
-      const existingId = layers.find(l => l._isDevelopableArea)?.id;
+      // Find existing baked developable area layer to preserve its color
+      const existingLayer = layers.find(l => l._isDevelopableArea);
+      const existingId = existingLayer?.id;
       const newLayer = {
-        ...createLayer({ name: 'Developable Area', type: 'polygon', color: '#22d3ee', fillOpacity: 0.12 }),
+        ...createLayer({ name: 'Developable Area', type: 'polygon', color: existingLayer?.color || '#22d3ee', fillOpacity: existingLayer?.fillOpacity ?? 0.12 }),
         _isDevelopableArea: true,
-        strokeWeight: 1.5,
-        strokeOpacity: 0.6,
+        strokeWeight: existingLayer?.strokeWeight ?? 1.5,
+        strokeOpacity: existingLayer?.strokeOpacity ?? 0.6,
       };
       const feature = createFeature(newLayer.id, geometry, { name: 'Developable Area (computed)' });
       newLayer.features = [feature];
