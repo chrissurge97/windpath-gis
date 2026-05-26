@@ -103,11 +103,18 @@ export default function LayerBulkMenu({ layer, updateLayer }) {
           </div>
 
           <div className="p-3 space-y-3">
-            {/* Layer info */}
-            <div className="flex items-center gap-2 text-[10px] text-slate-500">
-              <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: layer.color }} />
-              <span>{layer.features.length} feature{layer.features.length !== 1 ? 's' : ''} · {layer.type || 'polygon'}</span>
-              {hasActive && <span className="ml-auto text-cyan-400 font-medium">Radii active</span>}
+            {/* Layer colour */}
+            <div className="flex items-center gap-2">
+              <label className="text-[10px] text-slate-400 shrink-0">Layer colour</label>
+              <input
+                type="color"
+                value={layer.color || '#8b5cf6'}
+                onChange={e => updateLayer(layer.id, { color: e.target.value })}
+                className="w-6 h-6 rounded cursor-pointer bg-transparent border border-slate-600 p-0 shrink-0"
+                title="Change layer colour"
+              />
+              <span className="text-[10px] text-slate-500 flex-1">{layer.features.length} feature{layer.features.length !== 1 ? 's' : ''}</span>
+              {hasActive && <span className="text-[10px] text-cyan-400 font-medium shrink-0">Radii active</span>}
             </div>
 
             {/* No-turbines toggle */}
