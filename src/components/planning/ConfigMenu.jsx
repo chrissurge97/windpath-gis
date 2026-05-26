@@ -21,6 +21,7 @@ export default function ConfigMenu({
   const FEATURE_LIST = [
     { id: 'windAnalysis', label: 'Wind Analysis', description: 'Enable wind speed distribution and Weibull parameters' },
     { id: 'irelandMapLock', label: 'Ireland Map Lock', description: 'Restrict map boundaries to Ireland' },
+    { id: 'developableArea', label: 'Developable Area', description: 'Calculate and visualize available land area after applying exclusion zones and turbine radii' },
     { id: 'manualImportReview', label: 'Manual Import Review', description: 'Review and manually label each imported layer as turbine, cable, or substation before adding to project' },
   ];
 

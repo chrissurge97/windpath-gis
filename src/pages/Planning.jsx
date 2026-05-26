@@ -281,9 +281,9 @@ export default function Planning() {
   const [features, setFeatures] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('app_features') || '{}');
-      return { windAnalysis: true, irelandMapLock: false, importClassifier: true, developableArea: true, ...saved };
+      return { windAnalysis: true, irelandMapLock: false, importClassifier: true, developableArea: true, manualImportReview: true, ...saved };
     } catch {
-      return { windAnalysis: true, irelandMapLock: false, importClassifier: true, developableArea: true };
+      return { windAnalysis: true, irelandMapLock: false, importClassifier: true, developableArea: true, manualImportReview: true };
     }
   });
   const mapRef = useRef(null);
