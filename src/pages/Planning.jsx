@@ -890,7 +890,7 @@ export default function Planning() {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-slate-950 gap-6">
         <div className="text-center mb-2">
-          <Wind className="w-10 h-10 text-emerald-400 mx-auto mb-3 opacity-80" />
+          <img src="https://media.base44.com/images/public/69e640f4781807594008e037/cccee274d_IconGreen.png" alt="EagleView" className="w-16 h-16 object-contain mx-auto mb-3" />
           <h1 className="text-2xl font-bold text-white mb-1">EagleView</h1>
           <p className="text-slate-500 text-sm">Open an existing project or create a new one to begin.</p>
         </div>
