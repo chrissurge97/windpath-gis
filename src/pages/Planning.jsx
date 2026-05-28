@@ -890,7 +890,7 @@ export default function Planning() {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-slate-950 gap-6">
         <div className="text-center mb-2">
-          <img src="https://media.base44.com/images/public/69e640f4781807594008e037/cccee274d_IconGreen.png" alt="EagleView" className="w-64 h-64 object-contain mx-auto mb-3 rounded" />
+          <img src="https://media.base44.com/images/public/69e640f4781807594008e037/e5dc05889_IMG_1428.PNG" alt="EagleView" className="w-64 h-64 object-contain mx-auto mb-3 rounded" />
           <p className="text-slate-500 text-sm">Open an existing project or create a new one to begin.</p>
         </div>
         <div className="flex flex-col gap-3 w-64">
