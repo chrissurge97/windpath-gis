@@ -77,43 +77,82 @@ export default function LayerExportModal({ layers, projectName = 'project', mapR
     if (exportLayers.length === 0) return;
     const name = projectName;
 
-    // Filter features by map bounds if viewing current view
+    // Filter/clip features by map bounds if viewing current view
     if (scope === 'view' && mapRef?.current) {
       const bounds = mapRef.current.getBounds();
       const sw = bounds.getSouthWest();
       const ne = bounds.getNorthEast();
+      const minLng = sw.lng, minLat = sw.lat, maxLng = ne.lng, maxLat = ne.lat;
 
-      // Check if a bounding box [minLng, minLat, maxLng, maxLat] intersects the map view
-      const bboxIntersects = (minLng, minLat, maxLng, maxLat) =>
-        minLng <= ne.lng && maxLng >= sw.lng && minLat <= ne.lat && maxLat >= sw.lat;
+      // Sutherland-Hodgman polygon clipping against a bbox edge
+      function clipRingByBbox(ring) {
+        // ring: array of [lng, lat], NOT closed (or closed — we handle both)
+        const edges = [
+          { clip: p => p[0] >= minLng, intersect: (a, b) => { const t = (minLng - a[0]) / (b[0] - a[0]); return [minLng, a[1] + t * (b[1] - a[1])]; } },
+          { clip: p => p[0] <= maxLng, intersect: (a, b) => { const t = (maxLng - a[0]) / (b[0] - a[0]); return [maxLng, a[1] + t * (b[1] - a[1])]; } },
+          { clip: p => p[1] >= minLat, intersect: (a, b) => { const t = (minLat - a[1]) / (b[1] - a[1]); return [a[0] + t * (b[0] - a[0]), minLat]; } },
+          { clip: p => p[1] <= maxLat, intersect: (a, b) => { const t = (maxLat - a[1]) / (b[1] - a[1]); return [a[0] + t * (b[0] - a[0]), maxLat]; } },
+        ];
+        // Remove closing duplicate if present
+        let pts = ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
+          ? ring.slice(0, -1) : [...ring];
+        for (const edge of edges) {
+          if (pts.length === 0) return null;
+          const out = [];
+          for (let i = 0; i < pts.length; i++) {
+            const cur = pts[i], prev = pts[(i + pts.length - 1) % pts.length];
+            const curIn = edge.clip(cur), prevIn = edge.clip(prev);
+            if (prevIn && curIn) { out.push(cur); }
+            else if (prevIn && !curIn) { out.push(edge.intersect(prev, cur)); }
+            else if (!prevIn && curIn) { out.push(edge.intersect(prev, cur)); out.push(cur); }
+          }
+          pts = out;
+        }
+        if (pts.length < 3) return null;
+        return [...pts, pts[0]]; // close ring
+      }
+
+      const bboxIntersects = (lngs, lats) =>
+        Math.min(...lngs) <= maxLng && Math.max(...lngs) >= minLng &&
+        Math.min(...lats) <= maxLat && Math.max(...lats) >= minLat;
 
       exportLayers = exportLayers.map(layer => ({
         ...layer,
-        features: layer.features.filter(f => {
+        features: layer.features.map(f => {
           const geom = f.geometry;
-          if (!geom) return false;
+          if (!geom) return null;
+
           if (geom.type === 'Point') {
             const [lng, lat] = geom.coordinates;
-            return bounds.contains([lat, lng]);
-          } else if (geom.type === 'LineString') {
+            return bounds.contains([lat, lng]) ? f : null;
+          }
+
+          if (geom.type === 'LineString') {
             const lngs = geom.coordinates.map(c => c[0]);
             const lats = geom.coordinates.map(c => c[1]);
-            return bboxIntersects(Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats));
-          } else if (geom.type === 'Polygon') {
-            const ring = geom.coordinates[0];
-            const lngs = ring.map(c => c[0]);
-            const lats = ring.map(c => c[1]);
-            return bboxIntersects(Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats));
-          } else if (geom.type === 'MultiPolygon') {
-            return geom.coordinates.some(poly => {
-              const ring = poly[0];
-              const lngs = ring.map(c => c[0]);
-              const lats = ring.map(c => c[1]);
-              return bboxIntersects(Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats));
-            });
+            return bboxIntersects(lngs, lats) ? f : null;
           }
-          return false;
-        })
+
+          if (geom.type === 'Polygon') {
+            const clipped = clipRingByBbox(geom.coordinates[0]);
+            if (!clipped) return null;
+            return { ...f, geometry: { type: 'Polygon', coordinates: [clipped] } };
+          }
+
+          if (geom.type === 'MultiPolygon') {
+            const clippedPolys = geom.coordinates
+              .map(poly => {
+                const clipped = clipRingByBbox(poly[0]);
+                return clipped ? [clipped] : null;
+              })
+              .filter(Boolean);
+            if (clippedPolys.length === 0) return null;
+            if (clippedPolys.length === 1) return { ...f, geometry: { type: 'Polygon', coordinates: clippedPolys[0] } };
+            return { ...f, geometry: { type: 'MultiPolygon', coordinates: clippedPolys } };
+          }
+
+          return f;
+        }).filter(Boolean)
       }));
     }
 
