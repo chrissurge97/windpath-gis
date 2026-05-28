@@ -680,11 +680,6 @@ export default function Learn() {
               <Download className="w-3 h-3" /> Training Files
             </button>
 
-            <button onClick={() => setShowDevConfig(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-500 hover:text-purple-400 transition-colors"
-              title="Dev: override module progress">
-              <Settings className="w-3 h-3" /> Dev Config
-            </button>
             <button onClick={handleReset}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-500 hover:text-red-400 transition-colors">
               <RotateCcw className="w-3 h-3" /> Reset
