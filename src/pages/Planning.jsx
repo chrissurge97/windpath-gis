@@ -1473,9 +1473,9 @@ export default function Planning() {
             feature={pointMenuFeature}
             layer={layers.find((l) => l.id === pointMenuLayerId)}
             layers={layers}
-            onApply={({ name, notes, setback_m, no_turbines, layerId: newLayerId, custom_fields }) => {
+            onApply={({ name, notes, setback_m, no_turbines, radii, layerId: newLayerId, custom_fields }) => {
               const oldLayer = layers.find((l) => l.id === pointMenuLayerId);
-              const updatedFeature = { ...pointMenuFeature, properties: { ...pointMenuFeature.properties, name, notes, setback_m, no_turbines, ...custom_fields } };
+              const updatedFeature = { ...pointMenuFeature, properties: { ...pointMenuFeature.properties, name, notes, setback_m, no_turbines, radii, ...custom_fields } };
               if (newLayerId && newLayerId !== pointMenuLayerId) {
                 const newLayer = layers.find((l) => l.id === newLayerId);
                 if (oldLayer && newLayer) {
