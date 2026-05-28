@@ -43,7 +43,7 @@ export default function AppLayout() {
           sidebarCollapsed ? "flex-col gap-2 px-2 py-3" : "flex-row gap-3 px-3 py-4"
         )}>
           <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden">
-            <img src="https://media.base44.com/images/public/69e640f4781807594008e037/554fa4fd3_IMG_1428.png" alt="EagleView" className="w-7 h-7 object-contain" />
+            <img src="https://media.base44.com/images/public/69e640f4781807594008e037/e5dc05889_IMG_1428.PNG" alt="EagleView" className="w-7 h-7 object-contain" />
           </div>
           {!sidebarCollapsed &&
           <div className="flex-1 min-w-0">
