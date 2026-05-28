@@ -6,6 +6,7 @@ import { reprojectGeoJSON } from '@/lib/crsUtils';
 import { exportShapefile } from '@/lib/shapefileUtils';
 import { exportProjectKMZ, downloadFile } from '@/lib/projectExport';
 import { wgs84ToITM, wgs84ToIG } from '@/lib/crsUtils';
+import polygonClipping from 'polygon-clipping';
 
 const FORMATS = [
   { id: 'geojson', label: 'GeoJSON', ext: 'geojson', mime: 'application/json' },
@@ -77,44 +78,47 @@ export default function LayerExportModal({ layers, projectName = 'project', mapR
     if (exportLayers.length === 0) return;
     const name = projectName;
 
-    // Filter/clip features by map bounds if viewing current view
+    // Clip features to map bounds if "Current View" selected
     if (scope === 'view' && mapRef?.current) {
       const bounds = mapRef.current.getBounds();
       const sw = bounds.getSouthWest();
       const ne = bounds.getNorthEast();
       const minLng = sw.lng, minLat = sw.lat, maxLng = ne.lng, maxLat = ne.lat;
 
-      // Sutherland-Hodgman polygon clipping against a bbox edge
-      function clipRingByBbox(ring) {
-        // ring: array of [lng, lat], NOT closed (or closed — we handle both)
-        const edges = [
-          { clip: p => p[0] >= minLng, intersect: (a, b) => { const t = (minLng - a[0]) / (b[0] - a[0]); return [minLng, a[1] + t * (b[1] - a[1])]; } },
-          { clip: p => p[0] <= maxLng, intersect: (a, b) => { const t = (maxLng - a[0]) / (b[0] - a[0]); return [maxLng, a[1] + t * (b[1] - a[1])]; } },
-          { clip: p => p[1] >= minLat, intersect: (a, b) => { const t = (minLat - a[1]) / (b[1] - a[1]); return [a[0] + t * (b[0] - a[0]), minLat]; } },
-          { clip: p => p[1] <= maxLat, intersect: (a, b) => { const t = (maxLat - a[1]) / (b[1] - a[1]); return [a[0] + t * (b[0] - a[0]), maxLat]; } },
-        ];
-        // Remove closing duplicate if present
-        let pts = ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
-          ? ring.slice(0, -1) : [...ring];
-        for (const edge of edges) {
-          if (pts.length === 0) return null;
-          const out = [];
-          for (let i = 0; i < pts.length; i++) {
-            const cur = pts[i], prev = pts[(i + pts.length - 1) % pts.length];
-            const curIn = edge.clip(cur), prevIn = edge.clip(prev);
-            if (prevIn && curIn) { out.push(cur); }
-            else if (prevIn && !curIn) { out.push(edge.intersect(prev, cur)); }
-            else if (!prevIn && curIn) { out.push(edge.intersect(prev, cur)); out.push(cur); }
-          }
-          pts = out;
-        }
-        if (pts.length < 3) return null;
-        return [...pts, pts[0]]; // close ring
-      }
+      // The bbox as a polygon-clipping polygon (array of rings, each ring closed)
+      const bboxPoly = [[[minLng, minLat], [maxLng, minLat], [maxLng, maxLat], [minLng, maxLat], [minLng, minLat]]];
 
-      const bboxIntersects = (lngs, lats) =>
-        Math.min(...lngs) <= maxLng && Math.max(...lngs) >= minLng &&
-        Math.min(...lats) <= maxLat && Math.max(...lats) >= minLat;
+      // Ensure a ring is closed (first === last point)
+      const closeRing = ring => {
+        const last = ring[ring.length - 1];
+        if (last[0] === ring[0][0] && last[1] === ring[0][1]) return ring;
+        return [...ring, ring[0]];
+      };
+
+      // Clip a GeoJSON Polygon or MultiPolygon geometry to the bbox, returns clipped geometry or null
+      function clipGeomToBbox(geom) {
+        let inputPolygons; // array of polygons in polygon-clipping format: [outerRing, ...holeRings]
+        if (geom.type === 'Polygon') {
+          inputPolygons = [geom.coordinates.map(closeRing)];
+        } else if (geom.type === 'MultiPolygon') {
+          inputPolygons = geom.coordinates.map(poly => poly.map(closeRing));
+        } else {
+          return geom; // non-polygon types passed through
+        }
+
+        let result;
+        try {
+          result = polygonClipping.intersection(inputPolygons, [bboxPoly]);
+        } catch {
+          return null;
+        }
+        if (!result || result.length === 0) return null;
+
+        if (result.length === 1) {
+          return { type: 'Polygon', coordinates: result[0] };
+        }
+        return { type: 'MultiPolygon', coordinates: result };
+      }
 
       exportLayers = exportLayers.map(layer => ({
         ...layer,
@@ -128,27 +132,17 @@ export default function LayerExportModal({ layers, projectName = 'project', mapR
           }
 
           if (geom.type === 'LineString') {
-            const lngs = geom.coordinates.map(c => c[0]);
-            const lats = geom.coordinates.map(c => c[1]);
-            return bboxIntersects(lngs, lats) ? f : null;
+            // Keep if any segment intersects the bbox
+            const hasPoint = geom.coordinates.some(([lng, lat]) =>
+              lng >= minLng && lng <= maxLng && lat >= minLat && lat <= maxLat
+            );
+            return hasPoint ? f : null;
           }
 
-          if (geom.type === 'Polygon') {
-            const clipped = clipRingByBbox(geom.coordinates[0]);
+          if (geom.type === 'Polygon' || geom.type === 'MultiPolygon') {
+            const clipped = clipGeomToBbox(geom);
             if (!clipped) return null;
-            return { ...f, geometry: { type: 'Polygon', coordinates: [clipped] } };
-          }
-
-          if (geom.type === 'MultiPolygon') {
-            const clippedPolys = geom.coordinates
-              .map(poly => {
-                const clipped = clipRingByBbox(poly[0]);
-                return clipped ? [clipped] : null;
-              })
-              .filter(Boolean);
-            if (clippedPolys.length === 0) return null;
-            if (clippedPolys.length === 1) return { ...f, geometry: { type: 'Polygon', coordinates: clippedPolys[0] } };
-            return { ...f, geometry: { type: 'MultiPolygon', coordinates: clippedPolys } };
+            return { ...f, geometry: clipped };
           }
 
           return f;
