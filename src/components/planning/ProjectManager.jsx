@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FolderOpen, Plus, Save, FileText, ChevronDown, Upload, Loader2 } from 'lucide-react';
+import { FolderOpen, Plus, Save, FileText, ChevronDown, Upload, Loader2, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createLayer } from '@/lib/gisUtils';
 import { DEFAULT_TURBINE_TYPES, DEFAULT_CABLE_TYPES } from '@/lib/turbineTypes';
@@ -127,6 +127,7 @@ export default function ProjectFileButtons({
   onNewProject,
   onSwitchProject,
   onSaved,
+  onOpenConfig,
 }) {
   const [modal, setModal] = useState(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -179,6 +180,7 @@ export default function ProjectFileButtons({
     { label: 'Save Project', icon: Save, action: () => { setDropdownOpen(false); setModal('save'); } },
     { label: 'Open Project', icon: FolderOpen, action: () => { setDropdownOpen(false); setModal('open'); } },
     { label: 'Import Project', icon: Upload, action: handleImportProject },
+    { label: 'Config', icon: Settings, action: () => { setDropdownOpen(false); onOpenConfig?.(); } },
   ];
 
   return (

@@ -946,7 +946,8 @@ export default function Planning() {
             currentData={{ id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams }}
             onSwitchProject={handleSwitchProject}
             onNewProject={handleNewProject}
-            onSaved={(name, newId) => {setProjectName(name);if (newId && newId !== currentProjectId) switchProject(newId, { ...currentProject, id: newId, name });}} />
+            onSaved={(name, newId) => {setProjectName(name);if (newId && newId !== currentProjectId) switchProject(newId, { ...currentProject, id: newId, name });}}
+            onOpenConfig={() => setShowConfigMenu(true)} />
         </div>
         <input
           value={projectName}
@@ -1042,9 +1043,6 @@ export default function Planning() {
         }
 
         <div className="ml-auto flex items-center gap-1 shrink-0">
-          <button onClick={() => setShowConfigMenu(!showConfigMenu)} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-purple-400 hover:border-purple-500/40 shrink-0">
-            <Settings className="w-3 h-3" /> Config
-          </button>
           <button onClick={() => {if (!window.confirm('Clear all features from this project?')) return;setLayers([createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }), createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }), createLayer({ name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8 }), createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 })]);setWindParams({ k: 2.0, lambda: 7.0 });}} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500/40 shrink-0">
             <Trash2 className="w-3 h-3" /> Clear
           </button>
@@ -1196,23 +1194,7 @@ export default function Planning() {
               }
             </div>
 
-            <button onClick={() => setShowSubstations((v) => !v)}
-            className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
-            showSubstations ? "bg-yellow-500 text-slate-900 border-yellow-400 font-semibold" : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
-            )}>
-              <Zap className="w-3 h-3" />
-              {`Substations${substations.length > 0 ? ` (${substations.length})` : ''}`}
-            </button>
 
-            {features.developableArea &&
-            <button onClick={() => setShowDevelopableArea((v) => !v)}
-            className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
-            showDevelopableArea ? "bg-cyan-500 text-slate-900 border-cyan-400 font-semibold" : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
-            )}>
-                <Layers className="w-3 h-3" />
-                Developable Area
-              </button>
-            }
           </div>
 
 
