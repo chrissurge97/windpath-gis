@@ -80,6 +80,13 @@ export default function LayerExportModal({ layers, projectName = 'project', mapR
     // Filter features by map bounds if viewing current view
     if (scope === 'view' && mapRef?.current) {
       const bounds = mapRef.current.getBounds();
+      const sw = bounds.getSouthWest();
+      const ne = bounds.getNorthEast();
+
+      // Check if a bounding box [minLng, minLat, maxLng, maxLat] intersects the map view
+      const bboxIntersects = (minLng, minLat, maxLng, maxLat) =>
+        minLng <= ne.lng && maxLng >= sw.lng && minLat <= ne.lat && maxLat >= sw.lat;
+
       exportLayers = exportLayers.map(layer => ({
         ...layer,
         features: layer.features.filter(f => {
@@ -89,10 +96,21 @@ export default function LayerExportModal({ layers, projectName = 'project', mapR
             const [lng, lat] = geom.coordinates;
             return bounds.contains([lat, lng]);
           } else if (geom.type === 'LineString') {
-            return geom.coordinates.some(([lng, lat]) => bounds.contains([lat, lng]));
-          } else if (geom.type === 'Polygon' || geom.type === 'MultiPolygon') {
-            const coords = geom.type === 'Polygon' ? geom.coordinates : geom.coordinates.flat();
-            return coords.some(ring => ring.some(([lng, lat]) => bounds.contains([lat, lng])));
+            const lngs = geom.coordinates.map(c => c[0]);
+            const lats = geom.coordinates.map(c => c[1]);
+            return bboxIntersects(Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats));
+          } else if (geom.type === 'Polygon') {
+            const ring = geom.coordinates[0];
+            const lngs = ring.map(c => c[0]);
+            const lats = ring.map(c => c[1]);
+            return bboxIntersects(Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats));
+          } else if (geom.type === 'MultiPolygon') {
+            return geom.coordinates.some(poly => {
+              const ring = poly[0];
+              const lngs = ring.map(c => c[0]);
+              const lats = ring.map(c => c[1]);
+              return bboxIntersects(Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats));
+            });
           }
           return false;
         })
