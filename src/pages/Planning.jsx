@@ -89,11 +89,11 @@ function findSnapNode(latlng, turbines, substations, map, cables = []) {
     const d = Math.hypot(pt.x - clickPt.x, pt.y - clickPt.y);
     if (d < bestDist) {bestDist = d;best = { type: 'substation', id: s.id, lat, lng };}
   }
-  cables.forEach(c => {
+  cables.forEach((c) => {
     if (c.geometry?.type === 'LineString' && c.geometry.coordinates?.length >= 2) {
-      const [sL, sLa] = c.geometry.coordinates[0], [eL, eLa] = c.geometry.coordinates[c.geometry.coordinates.length - 1];
-      const sp = map.latLngToContainerPoint([sLa, sL]), ep = map.latLngToContainerPoint([eLa, eL]);
-      const ds = Math.hypot(sp.x - clickPt.x, sp.y - clickPt.y), de = Math.hypot(ep.x - clickPt.x, ep.y - clickPt.y);
+      const [sL, sLa] = c.geometry.coordinates[0],[eL, eLa] = c.geometry.coordinates[c.geometry.coordinates.length - 1];
+      const sp = map.latLngToContainerPoint([sLa, sL]),ep = map.latLngToContainerPoint([eLa, eL]);
+      const ds = Math.hypot(sp.x - clickPt.x, sp.y - clickPt.y),de = Math.hypot(ep.x - clickPt.x, ep.y - clickPt.y);
       if (ds < bestDist) {bestDist = ds;best = { type: 'cable_point', id: c.id, lat: sLa, lng: sL };}
       if (de < bestDist) {bestDist = de;best = { type: 'cable_point', id: c.id, lat: eLa, lng: eL };}
     }
@@ -282,7 +282,7 @@ export default function Planning() {
     windAnalysis: true,
     importClassifier: true,
     developableArea: true,
-    manualImportReview: true,
+    manualImportReview: true
   }));
   const mapRef = useRef(null);
   const [panesReady, setPanesReady] = useState(false);
@@ -321,9 +321,9 @@ export default function Planning() {
 
   // ── Notify lesson guide of current mode/tab/counts for task tracking ──────
   useEffect(() => {
-    const polyLayers = layers.filter(l => !['turbine','cable','wind_resource','substation'].includes(l.type));
-    const polygonCount = polyLayers.reduce((s, l) => s + l.features.filter(f => f.geometry?.type === 'Polygon').length, 0);
-    const noTurbineZoneCount = polyLayers.reduce((s, l) => s + (l.no_turbines ? l.features.filter(f => f.geometry?.type === 'Polygon').length : l.features.filter(f => f.properties?.no_turbines).length), 0) + polyLayers.filter(l => l.no_turbines).length;
+    const polyLayers = layers.filter((l) => !['turbine', 'cable', 'wind_resource', 'substation'].includes(l.type));
+    const polygonCount = polyLayers.reduce((s, l) => s + l.features.filter((f) => f.geometry?.type === 'Polygon').length, 0);
+    const noTurbineZoneCount = polyLayers.reduce((s, l) => s + (l.no_turbines ? l.features.filter((f) => f.geometry?.type === 'Polygon').length : l.features.filter((f) => f.properties?.no_turbines).length), 0) + polyLayers.filter((l) => l.no_turbines).length;
     window.__lessonGuideState__ = {
       mode,
       tab: rightTab,
@@ -337,8 +337,8 @@ export default function Planning() {
       noTurbineZoneCount,
       importCount: window.__importCount__ || 0,
       turbineRenameCount: window.__turbineRenameCount__ || 0,
-      layerNames: layers.map(l => l.name.trim().toLowerCase()),
-      ts: Date.now(),
+      layerNames: layers.map((l) => l.name.trim().toLowerCase()),
+      ts: Date.now()
     };
   }, [mode, rightTab, baseMap, turbines.length, cables.length, substations.length, layers]);
 
@@ -352,7 +352,7 @@ export default function Planning() {
   // ── Auto-load lesson project from navigation state ────────────────────────
   useEffect(() => {
     if (!lessonProjectId) return;
-    loadProject(lessonProjectId).then(proj => {
+    loadProject(lessonProjectId).then((proj) => {
       if (proj) {
         switchProject(lessonProjectId, proj);
         handleSwitchProject(lessonProjectId, proj);
@@ -369,9 +369,9 @@ export default function Planning() {
     const data = { id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams, globalRadii };
     saveTimer.current = setTimeout(() => {
       updateProjectState(data);
-      saveProject(currentProjectId, data)
-        .then(() => { window.__trainingEvent__ = { type: 'project_saved', payload: { id: currentProjectId }, ts: Date.now() }; })
-        .catch(err => console.warn('Auto-save error:', err));
+      saveProject(currentProjectId, data).
+      then(() => {window.__trainingEvent__ = { type: 'project_saved', payload: { id: currentProjectId }, ts: Date.now() };}).
+      catch((err) => console.warn('Auto-save error:', err));
     }, 1500);
     return () => clearTimeout(saveTimer.current);
   }, [layers, turbineTypes, cableTypes, projectName, currentProjectId, windParams]);
@@ -461,25 +461,25 @@ export default function Planning() {
 
     if (mode === 'place_point') {
       // Place a point into the selected layer (any non-system layer), or create a point layer if none
-      const assignableLayers = layers.filter(l => !['turbine', 'cable', 'substation', 'wind_resource'].includes(l.type));
-      let targetLayer = assignableLayers.find(l => l.id === selectedLayerId) || assignableLayers[0];
+      const assignableLayers = layers.filter((l) => !['turbine', 'cable', 'substation', 'wind_resource'].includes(l.type));
+      let targetLayer = assignableLayers.find((l) => l.id === selectedLayerId) || assignableLayers[0];
       if (!targetLayer) {
         // Auto-create a point layer
         const newLayer = createLayer({ name: 'Points', type: 'point', color: '#8b5cf6', fillOpacity: 1 });
-        setLayers(prev => [...prev, newLayer]);
+        setLayers((prev) => [...prev, newLayer]);
         const f = createFeature(newLayer.id,
-          { type: 'Point', coordinates: [latlng.lng, latlng.lat] },
-          { name: `Point 1`, notes: '' }
+        { type: 'Point', coordinates: [latlng.lng, latlng.lat] },
+        { name: `Point 1`, notes: '' }
         );
-        setLayers(prev => prev.map(l => l.id === newLayer.id ? { ...l, features: [...l.features, f] } : l));
+        setLayers((prev) => prev.map((l) => l.id === newLayer.id ? { ...l, features: [...l.features, f] } : l));
         setPointMenuFeature(f);
         setPointMenuLayerId(newLayer.id);
         setMode('select');
         return;
       }
       const f = createFeature(targetLayer.id,
-        { type: 'Point', coordinates: [latlng.lng, latlng.lat] },
-        { name: `Point ${targetLayer.features.length + 1}`, notes: '' }
+      { type: 'Point', coordinates: [latlng.lng, latlng.lat] },
+      { name: `Point ${targetLayer.features.length + 1}`, notes: '' }
       );
       updateLayer(targetLayer.id, { features: [...targetLayer.features, f] });
       setPointMenuFeature(f);
@@ -779,10 +779,10 @@ export default function Planning() {
     onCSVMap: (csvText, fileName) => setCsvMapperState({ csvText, fileName }),
     setLayers: (layers) => {
       if (Array.isArray(layers)) {
-        const refreshed = layers.map(layer => 
-          layer.type === 'cable' 
-            ? { ...layer, features: [...layer.features] } 
-            : layer
+        const refreshed = layers.map((layer) =>
+        layer.type === 'cable' ?
+        { ...layer, features: [...layer.features] } :
+        layer
         );
         setLayers(refreshed);
       } else {
@@ -793,10 +793,10 @@ export default function Planning() {
       setPendingCableTopology({ cables, turbines, substations, project });
     },
     onImportComplete: () => {
-    window.__importCount__ = (window.__importCount__ || 0) + 1;
-    window.__trainingEvent__ = { type: 'import_completed', payload: {}, ts: Date.now() };
-    setTimeout(() => handleBatchFetchWind(), 500);
-    },
+      window.__importCount__ = (window.__importCount__ || 0) + 1;
+      window.__trainingEvent__ = { type: 'import_completed', payload: {}, ts: Date.now() };
+      setTimeout(() => handleBatchFetchWind(), 500);
+    }
   });
 
   const handleBatchFetchWind = async () => {
@@ -812,17 +812,17 @@ export default function Planning() {
           let elevation = t.properties.elevation_m;
           let wind_speed_ms = t.properties.wind_speed_ms;
           if (!wind_speed_ms) {
-            try { const wd = await fetchWindData(lat, lng); wind_speed_ms = wd?.mean_speed; } catch {}
+            try {const wd = await fetchWindData(lat, lng);wind_speed_ms = wd?.mean_speed;} catch {}
           }
           if (!elevation) {
-            try { elevation = await fetchElevation(lat, lng); } catch {}
+            try {elevation = await fetchElevation(lat, lng);} catch {}
           }
           const hubHeight = t.properties.hub_height || 90;
           const hubSpeed = wind_speed_ms ? windAtHubHeight(wind_speed_ms, 10, hubHeight) : null;
           const aep = hubSpeed ? calcTurbineAEP(hubSpeed, DEFAULT_POWER_CURVE) : null;
           return { ...t, properties: { ...t.properties, elevation_m: elevation, wind_speed_ms, hub_wind_speed: hubSpeed, ...(aep && { aep_mwh: aep.aep_mwh }) } };
         }));
-        batchResults.forEach((t, j) => { results[i + j] = t; });
+        batchResults.forEach((t, j) => {results[i + j] = t;});
         updateLayer(turbineLayer.id, { features: [...results] });
       }
     } finally {
@@ -890,7 +890,7 @@ export default function Planning() {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-slate-950 gap-6">
         <div className="text-center mb-2">
-          <img src="https://media.base44.com/images/public/69e640f4781807594008e037/cccee274d_IconGreen.png" alt="EagleView" className="w-64 h-64 object-contain mx-auto mb-3" />
+          <img src="https://media.base44.com/images/public/69e640f4781807594008e037/cccee274d_IconGreen.png" alt="EagleView" className="w-64 h-64 object-contain mx-auto mb-3 rounded" />
           <p className="text-slate-500 text-sm">Open an existing project or create a new one to begin.</p>
         </div>
         <div className="flex flex-col gap-3 w-64">
@@ -901,14 +901,14 @@ export default function Planning() {
               const defaultData = {
                 name: name.trim(),
                 layers: [
-                  createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }),
-                  createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }),
-                  createLayer({ name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8 }),
-                  createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 }),
-                ],
+                createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }),
+                createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }),
+                createLayer({ name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8 }),
+                createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 })],
+
                 turbineTypes: DEFAULT_TURBINE_TYPES,
                 cableTypes: DEFAULT_CABLE_TYPES,
-                windParams: { k: 2.0, lambda: 7.0 },
+                windParams: { k: 2.0, lambda: 7.0 }
               };
               const id = await saveProject(null, defaultData);
               handleNewProject(id, { ...defaultData, id });
@@ -946,7 +946,7 @@ export default function Planning() {
             currentData={{ id: currentProjectId, name: projectName, layers, turbineTypes, cableTypes, windParams }}
             onSwitchProject={handleSwitchProject}
             onNewProject={handleNewProject}
-            onSaved={(name, newId) => { setProjectName(name); if (newId && newId !== currentProjectId) switchProject(newId, { ...currentProject, id: newId, name }); }} />
+            onSaved={(name, newId) => {setProjectName(name);if (newId && newId !== currentProjectId) switchProject(newId, { ...currentProject, id: newId, name });}} />
         </div>
         <input
           value={projectName}
@@ -1045,7 +1045,7 @@ export default function Planning() {
           <button onClick={() => setShowConfigMenu(!showConfigMenu)} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-purple-400 hover:border-purple-500/40 shrink-0">
             <Settings className="w-3 h-3" /> Config
           </button>
-          <button onClick={() => { if (!window.confirm('Clear all features from this project?')) return; setLayers([createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }),createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }),createLayer({ name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8 }),createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 })]); setWindParams({ k: 2.0, lambda: 7.0 }); }} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500/40 shrink-0">
+          <button onClick={() => {if (!window.confirm('Clear all features from this project?')) return;setLayers([createLayer({ name: 'Site Boundary', type: 'polygon', color: '#06b6d4', fillOpacity: 0.1 }), createLayer({ name: 'Turbines', type: 'turbine', color: '#10b981', fillOpacity: 0.8 }), createLayer({ name: 'Cables', type: 'cable', color: '#f97316', fillOpacity: 0.8 }), createLayer({ name: 'Substations', type: 'substation', color: '#facc15', fillOpacity: 1 })]);setWindParams({ k: 2.0, lambda: 7.0 });}} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500/40 shrink-0">
             <Trash2 className="w-3 h-3" /> Clear
           </button>
           <button onClick={() => setShowDataTables(true)} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-slate-800 border border-slate-700 text-slate-400 hover:text-cyan-400 hover:border-cyan-500/40 shrink-0">
@@ -1057,11 +1057,11 @@ export default function Planning() {
 
           <div data-lesson-id="btn-export">
             <ExportMenu
-              onExportProject={(crs) => { const geojson = exportProjectGeoJSON({ name: projectName, description: '', layers, turbineTypes, cableTypes, windParams, globalRadii }); const projected = reprojectGeoJSON(geojson, crs); downloadFile(JSON.stringify(projected, null, 2), `${projectName}-project.geojson`, 'application/json'); }}
-              onExportGeoJSON={(crs) => { const geojson = layersToGeoJSON(layers); const projected = reprojectGeoJSON(geojson, crs); downloadFile(JSON.stringify(projected, null, 2), `${projectName}.geojson`, 'application/json'); }}
-              onExportShapefile={(crs) => { const geojson = layersToGeoJSON(layers); const projected = reprojectGeoJSON(geojson, crs); projected._crsName = crs; const zipBytes = exportShapefile(projected, projectName); downloadFile(zipBytes, `${projectName}-shapefile.zip`, 'application/zip'); }}
-              onExportKML={() => { exportProjectKMZ({ name: projectName, layers, turbineTypes, cableTypes, windParams, globalRadii }).then((kml) => downloadFile(kml, `${projectName}.kml`, 'application/vnd.google-earth.kml+xml')); }}
-              onExportCSV={(crs) => { const geojson = layersToGeoJSON(layers); const projected = reprojectGeoJSON(geojson, crs); const rows = [['layer','feature_id','name','geometry_type','x','y','notes'].join(',')]; const esc=(v)=>`"${String(v??'').replace(/"/g,'""')}"`; for(const f of projected.features){const g=f.geometry;let x='',y='';if(g.type==='Point'){[x,y]=g.coordinates;}else if(g.type==='Polygon'){[x,y]=g.coordinates[0][0];}else if(g.type==='LineString'){[x,y]=g.coordinates[0];}rows.push([esc(f.properties?._layerName||''),esc(f.id),esc(f.properties?.name||''),esc(g.type),esc(x),esc(y),esc(f.properties?.notes||'')].join(','));} const blob=new Blob([rows.join('\n')],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`${projectName}.csv`;a.click();URL.revokeObjectURL(url); }}
+              onExportProject={(crs) => {const geojson = exportProjectGeoJSON({ name: projectName, description: '', layers, turbineTypes, cableTypes, windParams, globalRadii });const projected = reprojectGeoJSON(geojson, crs);downloadFile(JSON.stringify(projected, null, 2), `${projectName}-project.geojson`, 'application/json');}}
+              onExportGeoJSON={(crs) => {const geojson = layersToGeoJSON(layers);const projected = reprojectGeoJSON(geojson, crs);downloadFile(JSON.stringify(projected, null, 2), `${projectName}.geojson`, 'application/json');}}
+              onExportShapefile={(crs) => {const geojson = layersToGeoJSON(layers);const projected = reprojectGeoJSON(geojson, crs);projected._crsName = crs;const zipBytes = exportShapefile(projected, projectName);downloadFile(zipBytes, `${projectName}-shapefile.zip`, 'application/zip');}}
+              onExportKML={() => {exportProjectKMZ({ name: projectName, layers, turbineTypes, cableTypes, windParams, globalRadii }).then((kml) => downloadFile(kml, `${projectName}.kml`, 'application/vnd.google-earth.kml+xml'));}}
+              onExportCSV={(crs) => {const geojson = layersToGeoJSON(layers);const projected = reprojectGeoJSON(geojson, crs);const rows = [['layer', 'feature_id', 'name', 'geometry_type', 'x', 'y', 'notes'].join(',')];const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;for (const f of projected.features) {const g = f.geometry;let x = '',y = '';if (g.type === 'Point') {[x, y] = g.coordinates;} else if (g.type === 'Polygon') {[x, y] = g.coordinates[0][0];} else if (g.type === 'LineString') {[x, y] = g.coordinates[0];}rows.push([esc(f.properties?._layerName || ''), esc(f.id), esc(f.properties?.name || ''), esc(g.type), esc(x), esc(y), esc(f.properties?.notes || '')].join(','));}const blob = new Blob([rows.join('\n')], { type: 'text/csv' });const url = URL.createObjectURL(blob);const a = document.createElement('a');a.href = url;a.download = `${projectName}.csv`;a.click();URL.revokeObjectURL(url);}}
               onExportPDF={() => exportProjectPDF({ projectName, turbines, turbineTypes, cables, cableTypes, substations, totalCapacity_mw, totalAEP, avgCapFactor, avgWindSpeed, totalCableLength, totalCableCost, windParams, monthlyData, layers, mapRef })} />
           </div>
         </div>
@@ -1134,13 +1134,13 @@ export default function Planning() {
               onPolygonDragEnd={() => {polygonDragRef.current = { id: null, lastLatlng: null };}} />
             
 
-            {showDevelopableArea && (
-              <DevelopableAreaLayer
-                layers={layers}
-                turbineTypes={turbineTypes}
-                globalRadii={globalRadii}
-              />
-            )}
+            {showDevelopableArea &&
+            <DevelopableAreaLayer
+              layers={layers}
+              turbineTypes={turbineTypes}
+              globalRadii={globalRadii} />
+
+            }
 
             <MapLayersRenderer
               layers={layers} mode={mode} editingPolygonId={editingPolygonId}
@@ -1161,8 +1161,8 @@ export default function Planning() {
               setPointMenuFeature={setPointMenuFeature} setPointMenuLayerId={setPointMenuLayerId}
               setTextAnnotationMenu={setTextAnnotationMenu}
               haversineM={haversineM} checkExclusionZones={checkExclusionZones}
-              checkTurbineRadii={checkTurbineRadii}
-            />
+              checkTurbineRadii={checkTurbineRadii} />
+            
           </MapContainer>
 
           {/* Map layer toggles */}
@@ -1204,15 +1204,15 @@ export default function Planning() {
               {`Substations${substations.length > 0 ? ` (${substations.length})` : ''}`}
             </button>
 
-            {features.developableArea && (
-              <button onClick={() => setShowDevelopableArea((v) => !v)}
-              className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
-              showDevelopableArea ? "bg-cyan-500 text-slate-900 border-cyan-400 font-semibold" : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
-              )}>
+            {features.developableArea &&
+            <button onClick={() => setShowDevelopableArea((v) => !v)}
+            className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all shadow-lg",
+            showDevelopableArea ? "bg-cyan-500 text-slate-900 border-cyan-400 font-semibold" : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
+            )}>
                 <Layers className="w-3 h-3" />
                 Developable Area
               </button>
-            )}
+            }
           </div>
 
 
@@ -1468,52 +1468,52 @@ export default function Planning() {
           })()}
 
           {/* Substation popup menu */}
-          {substationMenuFeature && (
-            <SubstationMenu
-              feature={substationMenuFeature}
-              layers={layers}
-              cables={cables}
-              turbines={turbines}
-              calcSubstationLoad={calcSubstationLoad}
-              updateLayer={updateLayer}
-              onClose={() => setSubstationMenuFeature(null)}
-              onDelete={() => {
-                const subLayer = layers.find(l => l.type === 'substation');
-                if (subLayer) updateLayer(subLayer.id, { features: subLayer.features.filter(f => f.id !== substationMenuFeature.id) });
-                setSubstationMenuFeature(null);
-              }}
-            />
-          )}
+          {substationMenuFeature &&
+          <SubstationMenu
+            feature={substationMenuFeature}
+            layers={layers}
+            cables={cables}
+            turbines={turbines}
+            calcSubstationLoad={calcSubstationLoad}
+            updateLayer={updateLayer}
+            onClose={() => setSubstationMenuFeature(null)}
+            onDelete={() => {
+              const subLayer = layers.find((l) => l.type === 'substation');
+              if (subLayer) updateLayer(subLayer.id, { features: subLayer.features.filter((f) => f.id !== substationMenuFeature.id) });
+              setSubstationMenuFeature(null);
+            }} />
+
+          }
 
           {/* Point layer menu */}
-          {pointMenuFeature && (
-            <PointMenu
-              feature={pointMenuFeature}
-              layer={layers.find(l => l.id === pointMenuLayerId)}
-              layers={layers}
-              onApply={({ name, notes, setback_m, no_turbines, layerId: newLayerId, custom_fields }) => {
-                const oldLayer = layers.find(l => l.id === pointMenuLayerId);
-                const updatedFeature = { ...pointMenuFeature, properties: { ...pointMenuFeature.properties, name, notes, setback_m, no_turbines, ...custom_fields } };
-                if (newLayerId && newLayerId !== pointMenuLayerId) {
-                  const newLayer = layers.find(l => l.id === newLayerId);
-                  if (oldLayer && newLayer) {
-                    updateLayer(pointMenuLayerId, { features: oldLayer.features.filter(f => f.id !== pointMenuFeature.id) });
-                    updateLayer(newLayerId, { features: [...newLayer.features, updatedFeature] });
-                  }
-                } else if (oldLayer) {
-                  updateLayer(pointMenuLayerId, { features: oldLayer.features.map(f => f.id === pointMenuFeature.id ? updatedFeature : f) });
+          {pointMenuFeature &&
+          <PointMenu
+            feature={pointMenuFeature}
+            layer={layers.find((l) => l.id === pointMenuLayerId)}
+            layers={layers}
+            onApply={({ name, notes, setback_m, no_turbines, layerId: newLayerId, custom_fields }) => {
+              const oldLayer = layers.find((l) => l.id === pointMenuLayerId);
+              const updatedFeature = { ...pointMenuFeature, properties: { ...pointMenuFeature.properties, name, notes, setback_m, no_turbines, ...custom_fields } };
+              if (newLayerId && newLayerId !== pointMenuLayerId) {
+                const newLayer = layers.find((l) => l.id === newLayerId);
+                if (oldLayer && newLayer) {
+                  updateLayer(pointMenuLayerId, { features: oldLayer.features.filter((f) => f.id !== pointMenuFeature.id) });
+                  updateLayer(newLayerId, { features: [...newLayer.features, updatedFeature] });
                 }
-                setPointMenuFeature(null);
-                setPointMenuLayerId(null);
-              }}
-              onDelete={() => {
-                deleteFeature(pointMenuLayerId, pointMenuFeature.id);
-                setPointMenuFeature(null);
-                setPointMenuLayerId(null);
-              }}
-              onClose={() => { setPointMenuFeature(null); setPointMenuLayerId(null); }}
-            />
-          )}
+              } else if (oldLayer) {
+                updateLayer(pointMenuLayerId, { features: oldLayer.features.map((f) => f.id === pointMenuFeature.id ? updatedFeature : f) });
+              }
+              setPointMenuFeature(null);
+              setPointMenuLayerId(null);
+            }}
+            onDelete={() => {
+              deleteFeature(pointMenuLayerId, pointMenuFeature.id);
+              setPointMenuFeature(null);
+              setPointMenuLayerId(null);
+            }}
+            onClose={() => {setPointMenuFeature(null);setPointMenuLayerId(null);}} />
+
+          }
 
           {/* Text Annotation Menu */}
           {textAnnotationMenu &&
@@ -1631,24 +1631,24 @@ export default function Planning() {
 
         {/* Right panel */}
         <RightPanel
-           rightTab={rightTab} setRightTab={setRightTab} features={features} rightPanelOpen={rightPanelOpen}
-           turbines={turbines} turbineTypes={turbineTypes} selectedTurbineTypeId={selectedTurbineTypeId}
-           setSelectedTurbineTypeId={setSelectedTurbineTypeId} turbineLayer={turbineLayer}
-           deleteFeature={deleteFeature} updateTurbineProps={updateTurbineProps} flyToFeature={flyToFeature}
-           cables={cables} cableTypes={cableTypes} selectedCableTypeId={selectedCableTypeId}
-           setSelectedCableTypeId={setSelectedCableTypeId} cableLayer={cableLayer}
-           setCableTypes={setCableTypes} updateLayer={updateLayer} calcCableLoad={calcCableLoad}
-           substations={substations} windParams={windParams} setWindParams={setWindParams}
-           windFetched={windFetched} totalAEP_live={totalAEP_live} liveCapFactor={liveCapFactor}
-           avgWindSpeed={avgWindSpeed} totalCableLength={totalCableLength} totalCableCost={totalCableCost}
-           monthlyData={monthlyData} weibullData={weibullData} layers={layers}
-           selectedLayerId={selectedLayerId} setSelectedLayerId={setSelectedLayerId}
-           setLayers={setLayers} mapRef={mapRef} setShowNewZoneDialog={setShowNewZoneDialog}
-           projectName={projectName} setTurbineTypes={setTurbineTypes}
-           globalRadii={globalRadii} onRadiiChange={setGlobalRadii}
-           showRadii={showRadii} onToggleRadii={() => setShowRadii((v) => { if (!v) window.__trainingEvent__ = { type: 'setback_toggled', payload: {}, ts: Date.now() }; return !v; })}
-           onDataTables={() => setShowDataTables(true)}
-           showDevelopableArea={features.developableArea && showDevelopableArea} onToggleDevelopableArea={() => setShowDevelopableArea(v => !v)} />
+          rightTab={rightTab} setRightTab={setRightTab} features={features} rightPanelOpen={rightPanelOpen}
+          turbines={turbines} turbineTypes={turbineTypes} selectedTurbineTypeId={selectedTurbineTypeId}
+          setSelectedTurbineTypeId={setSelectedTurbineTypeId} turbineLayer={turbineLayer}
+          deleteFeature={deleteFeature} updateTurbineProps={updateTurbineProps} flyToFeature={flyToFeature}
+          cables={cables} cableTypes={cableTypes} selectedCableTypeId={selectedCableTypeId}
+          setSelectedCableTypeId={setSelectedCableTypeId} cableLayer={cableLayer}
+          setCableTypes={setCableTypes} updateLayer={updateLayer} calcCableLoad={calcCableLoad}
+          substations={substations} windParams={windParams} setWindParams={setWindParams}
+          windFetched={windFetched} totalAEP_live={totalAEP_live} liveCapFactor={liveCapFactor}
+          avgWindSpeed={avgWindSpeed} totalCableLength={totalCableLength} totalCableCost={totalCableCost}
+          monthlyData={monthlyData} weibullData={weibullData} layers={layers}
+          selectedLayerId={selectedLayerId} setSelectedLayerId={setSelectedLayerId}
+          setLayers={setLayers} mapRef={mapRef} setShowNewZoneDialog={setShowNewZoneDialog}
+          projectName={projectName} setTurbineTypes={setTurbineTypes}
+          globalRadii={globalRadii} onRadiiChange={setGlobalRadii}
+          showRadii={showRadii} onToggleRadii={() => setShowRadii((v) => {if (!v) window.__trainingEvent__ = { type: 'setback_toggled', payload: {}, ts: Date.now() };return !v;})}
+          onDataTables={() => setShowDataTables(true)}
+          showDevelopableArea={features.developableArea && showDevelopableArea} onToggleDevelopableArea={() => setShowDevelopableArea((v) => !v)} />
         
       </div>
       <ConfigMenuWrapper isOpen={showConfigMenu} onClose={() => setShowConfigMenu(false)} features={features} onFeatureToggle={handleFeatureToggle} onTurbineAdded={(t) => setTurbineTypes((prev) => [...prev, t])} onCableAdded={(c) => setCableTypes((prev) => [...prev, c])} />
@@ -1661,36 +1661,36 @@ export default function Planning() {
         substations={pendingCableTopology.substations}
         onConfirm={(updatedCables) => {
           const project = { ...pendingCableTopology.project };
-          const cableLayer = project.layers.find(l => l.type === 'cable');
+          const cableLayer = project.layers.find((l) => l.type === 'cable');
           if (cableLayer) cableLayer.features = updatedCables;
           const tempId = '__imported_' + Date.now() + '__';
           handleSwitchProject(tempId, { ...project, id: tempId });
           setPendingCableTopology(null);
         }}
-        onCancel={() => setPendingCableTopology(null)}
-      />}
+        onCancel={() => setPendingCableTopology(null)} />
+      }
       {importClassifyLayers && <ImportClassifyModal layers={importClassifyLayers} onConfirm={handleClassifyConfirm} onClose={() => setImportClassifyLayers(null)} />}
-      {showNewZoneDialog && <NewZoneDialog onClose={() => setShowNewZoneDialog(false)} onCreate={({ name, color }) => { const l = createLayer({ name, type: 'polygon', color }); setLayers((prev) => [...prev, l]); }} />}
+      {showNewZoneDialog && <NewZoneDialog onClose={() => setShowNewZoneDialog(false)} onCreate={({ name, color }) => {const l = createLayer({ name, type: 'polygon', color });setLayers((prev) => [...prev, l]);}} />}
       {showDataTables && <DataTablesPanel onClose={() => setShowDataTables(false)} />}
 
-      {csvMapperState && (
-        <CSVColumnMapper
-          csvText={csvMapperState.csvText}
-          fileName={csvMapperState.fileName}
-          onConfirm={(layer) => {
-            setCsvMapperState(null);
-            startTransition(() => {
-              setLayers(prev => [...prev, layer]);
-              if (typeof window !== 'undefined') {
-                window.__importCount__ = (window.__importCount__ || 0) + 1;
-                window.__trainingEvent__ = { type: 'import_completed', payload: {}, ts: Date.now() };
-              }
-            });
-            setTimeout(() => handleBatchFetchWind(), 500);
-          }}
-          onCancel={() => setCsvMapperState(null)}
-        />
-      )}
+      {csvMapperState &&
+      <CSVColumnMapper
+        csvText={csvMapperState.csvText}
+        fileName={csvMapperState.fileName}
+        onConfirm={(layer) => {
+          setCsvMapperState(null);
+          startTransition(() => {
+            setLayers((prev) => [...prev, layer]);
+            if (typeof window !== 'undefined') {
+              window.__importCount__ = (window.__importCount__ || 0) + 1;
+              window.__trainingEvent__ = { type: 'import_completed', payload: {}, ts: Date.now() };
+            }
+          });
+          setTimeout(() => handleBatchFetchWind(), 500);
+        }}
+        onCancel={() => setCsvMapperState(null)} />
+
+      }
 
 
       </div>);
