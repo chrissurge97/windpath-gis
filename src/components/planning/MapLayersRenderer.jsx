@@ -319,6 +319,8 @@ const PolygonFeature = memo(function PolygonFeature({ f, layer, mode, editingPol
   const isEditing = editingPolygonId === f.id;
   const polyColor = layer.color || '#06b6d4';
   const drawMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation', 'place_point', 'place_text'].includes(mode);
+  // Developable area / display-only layers should never intercept clicks
+  const isDisplayOnly = !!layer._isDevelopableArea;
   const polyOpts = {
     color: polyColor, fillColor: polyColor,
     // In draw mode: keep polygon interactive so dblclick can fire, but use fillOpacity 0 so fill doesn't block clicks visually
@@ -326,7 +328,7 @@ const PolygonFeature = memo(function PolygonFeature({ f, layer, mode, editingPol
     weight: isEditing ? 2.5 : (layer.strokeWeight || 2),
     opacity: drawMode ? 0 : (layer.strokeOpacity || 0.9),
     dashArray: isEditing ? '6 4' : undefined,
-    interactive: true,
+    interactive: !isDisplayOnly,
   };
   const nonSelectMode = drawMode;
 
@@ -388,7 +390,8 @@ const PolygonFeature = memo(function PolygonFeature({ f, layer, mode, editingPol
 const MultiPolygonFeature = memo(function MultiPolygonFeature({ f, layer, mode, setLayerTooltip, openPolygonMenu }) {
   const polyColor = layer.color || '#06b6d4';
   const drawMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation', 'place_point', 'place_text'].includes(mode);
-  const po = { color: polyColor, fillColor: polyColor, fillOpacity: drawMode ? 0 : layer.fillOpacity, weight: layer.strokeWeight || 2, opacity: drawMode ? 0 : (layer.strokeOpacity || 0.9), interactive: true };
+  const isDisplayOnly = !!layer._isDevelopableArea;
+  const po = { color: polyColor, fillColor: polyColor, fillOpacity: drawMode ? 0 : layer.fillOpacity, weight: layer.strokeWeight || 2, opacity: drawMode ? 0 : (layer.strokeOpacity || 0.9), interactive: !isDisplayOnly };
   return (
     <React.Fragment>
       {f.geometry.coordinates.map((poly, pi) => {

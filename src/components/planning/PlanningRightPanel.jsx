@@ -140,8 +140,15 @@ function BakeDevelopableArea({ layers, turbineTypes, globalRadii, setLayers }) {
   const handleBake = () => {
     setBaking(true);
     setTimeout(() => {
-      const geometry = computeDevelopableArea(layers, turbineTypes, globalRadii);
-      if (!geometry) { setBaking(false); return; }
+      let geometry;
+      try {
+        geometry = computeDevelopableArea(layers, turbineTypes, globalRadii);
+      } catch (e) {
+        console.error('BakeDevelopableArea error:', e);
+        setBaking(false);
+        return;
+      }
+      if (!geometry) { console.warn('BakeDevelopableArea: computeDevelopableArea returned null'); setBaking(false); return; }
       // Find existing baked developable area layer to preserve its color
       const existingLayer = layers.find(l => l._isDevelopableArea);
       const existingId = existingLayer?.id;
