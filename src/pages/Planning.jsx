@@ -372,7 +372,13 @@ export default function Planning() {
       updateProjectState(data);
       saveProject(currentProjectId, data).
       then(() => {window.__trainingEvent__ = { type: 'project_saved', payload: { id: currentProjectId }, ts: Date.now() };}).
-      catch((err) => console.warn('Auto-save error:', err));
+      catch((err) => {
+        console.warn('Auto-save error:', err.message);
+        if (err.message?.includes('too large')) {
+          // Show a non-intrusive warning — don't crash the app
+          console.error('Project too large to save locally. Consider exporting your work.');
+        }
+      });
     }, 1500);
     return () => clearTimeout(saveTimer.current);
   }, [layers, turbineTypes, cableTypes, projectName, currentProjectId, windParams]);
