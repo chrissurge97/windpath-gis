@@ -318,14 +318,14 @@ const PolygonFeature = memo(function PolygonFeature({ f, layer, mode, editingPol
   const positions = ring.slice(0, -1).map(([lng, lat]) => [lat, lng]);
   const isEditing = editingPolygonId === f.id;
   const polyColor = layer.color || '#06b6d4';
+  const drawMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation', 'place_point', 'place_text'].includes(mode);
   const polyOpts = {
     color: polyColor, fillColor: polyColor, fillOpacity: layer.fillOpacity,
     weight: isEditing ? 2.5 : (layer.strokeWeight || 2),
     opacity: layer.strokeOpacity || 0.9,
     dashArray: isEditing ? '6 4' : undefined,
+    interactive: !drawMode,
   };
-  // In draw/place modes: always bubble so map click handler fires through polygons
-  const drawMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation', 'place_point', 'place_text', 'place_substation'].includes(mode);
   const nonSelectMode = drawMode;
 
   const vIconCache = React.useRef({});
@@ -374,8 +374,8 @@ const PolygonFeature = memo(function PolygonFeature({ f, layer, mode, editingPol
 
 const MultiPolygonFeature = memo(function MultiPolygonFeature({ f, layer, mode, setLayerTooltip, openPolygonMenu }) {
   const polyColor = layer.color || '#06b6d4';
-  const po = { color: polyColor, fillColor: polyColor, fillOpacity: layer.fillOpacity, weight: layer.strokeWeight || 2, opacity: layer.strokeOpacity || 0.9 };
   const drawMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation', 'place_point', 'place_text'].includes(mode);
+  const po = { color: polyColor, fillColor: polyColor, fillOpacity: layer.fillOpacity, weight: layer.strokeWeight || 2, opacity: layer.strokeOpacity || 0.9, interactive: !drawMode };
   return (
     <React.Fragment>
       {f.geometry.coordinates.map((poly, pi) => {
