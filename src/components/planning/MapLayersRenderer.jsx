@@ -320,11 +320,13 @@ const PolygonFeature = memo(function PolygonFeature({ f, layer, mode, editingPol
   const polyColor = layer.color || '#06b6d4';
   const drawMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation', 'place_point', 'place_text'].includes(mode);
   const polyOpts = {
-    color: polyColor, fillColor: polyColor, fillOpacity: layer.fillOpacity,
+    color: polyColor, fillColor: polyColor,
+    // In draw mode: keep polygon interactive so dblclick can fire, but use fillOpacity 0 so fill doesn't block clicks visually
+    fillOpacity: drawMode ? 0 : layer.fillOpacity,
     weight: isEditing ? 2.5 : (layer.strokeWeight || 2),
-    opacity: layer.strokeOpacity || 0.9,
+    opacity: drawMode ? 0 : (layer.strokeOpacity || 0.9),
     dashArray: isEditing ? '6 4' : undefined,
-    interactive: !drawMode,
+    interactive: true,
   };
   const nonSelectMode = drawMode;
 
@@ -341,16 +343,24 @@ const PolygonFeature = memo(function PolygonFeature({ f, layer, mode, editingPol
 
   return (
     <React.Fragment>
-      <Polygon positions={positions} pathOptions={polyOpts} bubblingMouseEvents={drawMode}
+      <Polygon positions={positions} pathOptions={polyOpts} bubblingMouseEvents={true}
         eventHandlers={{
           click: (e) => {
-            if (drawMode) return;
+            if (drawMode) {
+              // Let the click bubble up to the map's click handler
+              return;
+            }
             L.DomEvent.stopPropagation(e);
             if (isEditing) insertPolygonVertex(f.id, layer.id, e.latlng.lat, e.latlng.lng);
             else if (mode === 'select' || mode === 'pan') openPolygonMenu(f, layer.id);
           },
           dblclick: (e) => {
-            if (drawMode) { L.DomEvent.stopPropagation(e); e.originalEvent.preventDefault(); if (mode === 'draw_polygon') onFinishPolygon && onFinishPolygon(); if (mode === 'draw_cable') onFinishCable && onFinishCable(); }
+            if (drawMode) {
+              L.DomEvent.stopPropagation(e);
+              L.DomEvent.preventDefault(e);
+              if (mode === 'draw_polygon') onFinishPolygon && onFinishPolygon();
+              else if (mode === 'draw_cable') onFinishCable && onFinishCable();
+            }
           },
           mousedown: (e) => {
             if (mode === 'select' && !isEditing) {
@@ -378,12 +388,12 @@ const PolygonFeature = memo(function PolygonFeature({ f, layer, mode, editingPol
 const MultiPolygonFeature = memo(function MultiPolygonFeature({ f, layer, mode, setLayerTooltip, openPolygonMenu }) {
   const polyColor = layer.color || '#06b6d4';
   const drawMode = ['place_turbine', 'draw_cable', 'draw_polygon', 'place_substation', 'place_point', 'place_text'].includes(mode);
-  const po = { color: polyColor, fillColor: polyColor, fillOpacity: layer.fillOpacity, weight: layer.strokeWeight || 2, opacity: layer.strokeOpacity || 0.9, interactive: !drawMode };
+  const po = { color: polyColor, fillColor: polyColor, fillOpacity: drawMode ? 0 : layer.fillOpacity, weight: layer.strokeWeight || 2, opacity: drawMode ? 0 : (layer.strokeOpacity || 0.9), interactive: true };
   return (
     <React.Fragment>
       {f.geometry.coordinates.map((poly, pi) => {
         const pos = poly.map(ring => ring.slice(0, -1).map(([x, y]) => [y, x]));
-        return <Polygon key={`${f.id}-${pi}`} positions={pos} pathOptions={po} bubblingMouseEvents={drawMode}
+        return <Polygon key={`${f.id}-${pi}`} positions={pos} pathOptions={po} bubblingMouseEvents={true}
           eventHandlers={{
             click: (e) => { if (drawMode) return; L.DomEvent.stopPropagation(e); if (mode === 'select' || mode === 'pan') openPolygonMenu(f, layer.id); },
             mousemove: (e) => { if (drawMode) return; const c = e.target._map?.getContainer(); const r = c?.getBoundingClientRect(); if (!r) return; setLayerTooltip({ x: e.originalEvent.clientX - r.left, y: e.originalEvent.clientY - r.top, layerName: layer.name, featureName: f.properties?.name || '', description: f.properties?.designation || f.properties?.reason || '' }); },
