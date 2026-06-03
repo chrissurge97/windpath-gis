@@ -51,12 +51,15 @@ export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
 
   for (const layer of layers) {
     if (['turbine', 'cable', 'wind_resource'].includes(layer.type)) continue;
+    // Skip baked developable area layers — they are display-only outputs, not inputs
+    if (layer._isDevelopableArea) continue;
 
     const isLayerBlocking = !!layer.no_turbines;
 
     for (const f of layer.features) {
       const geom = f.geometry;
       if (!geom) continue;
+
 
       // ── Polygon exclusion zones (with holes) ────────────────────────────────
       if (geom.type === 'Polygon') {
