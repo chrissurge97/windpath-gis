@@ -87,13 +87,15 @@ export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
       if (geom.type === 'Point') {
         const [lng, lat] = geom.coordinates;
         const radii = f.properties?.radii;
+        console.log('[DevArea] Point:', f.id, 'radii:', JSON.stringify(radii), 'no_turbines:', f.properties?.no_turbines, 'setback_m:', f.properties?.setback_m);
         if (radii && radii.length > 0) {
           for (const r of radii) {
+            console.log('[DevArea]   radius:', r.label, 'blockPlacement:', r.blockPlacement, 'radiusM:', r.radiusM);
             if (!r.blockPlacement || !(r.radiusM > 0)) continue;
             clippers.push([circlePolygon(lng, lat, r.radiusM)]);
           }
         }
-        // Legacy single setback — also subtract if no_turbines even without radii array
+        // Legacy single setback
         if (f.properties?.no_turbines && f.properties?.setback_m > 0) {
           clippers.push([circlePolygon(lng, lat, f.properties.setback_m)]);
         }
