@@ -11,23 +11,22 @@
 
 import polygonClipping from 'polygon-clipping';
 
-// Simple bounding box for Ireland
-// Counter-clockwise winding order required by polygon-clipping for outer rings
+// Ireland bounding box — counter-clockwise outer ring (polygon-clipping convention)
 export const IRELAND_BBOX_RING = [
-  [-10.7, 51.2],[-5.3, 51.2],[-5.3, 55.5],[-10.7, 55.5],[-10.7, 51.2]
+  [-10.7, 51.2], [-5.3, 51.2], [-5.3, 55.5], [-10.7, 55.5], [-10.7, 51.2]
 ];
 
 /**
  * Create a circle polygon approximation (in [lng,lat] order)
  * around a given center, radius in metres, with N segments.
+ * Counter-clockwise so polygon-clipping treats it as a solid shape to subtract.
  */
 function circlePolygon(centerLng, centerLat, radiusM, segments = 32) {
   const coords = [];
   const R = 6371000;
   const dLat = (radiusM / R) * (180 / Math.PI);
   const dLng = dLat / Math.cos(centerLat * Math.PI / 180);
-  // Clockwise winding so polygon-clipping treats this as a solid clipper polygon
-  for (let i = segments; i >= 0; i--) {
+  for (let i = 0; i <= segments; i++) {
     const angle = (2 * Math.PI * i) / segments;
     coords.push([
       centerLng + dLng * Math.cos(angle),
@@ -46,8 +45,8 @@ function circlePolygon(centerLng, centerLat, radiusM, segments = 32) {
  * @returns {Object|null} GeoJSON MultiPolygon geometry or null on error
  */
 export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
-  // Start with Ireland bounding box as subject
-  let subject = [[IRELAND_BBOX_RING]];
+  // Subject: Ireland bounding box as a MultiPolygon input
+  const subject = [[IRELAND_BBOX_RING]];
 
   const clippers = [];
 
@@ -62,19 +61,17 @@ export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
       const geom = f.geometry;
       if (!geom) continue;
 
-
-      // ── Polygon exclusion zones (with holes) ────────────────────────────────
+      // ── Polygon exclusion zones ──────────────────────────────────────────────
       if (geom.type === 'Polygon') {
         const featureBlocking = isLayerBlocking || !!f.properties?.no_turbines;
         if (!featureBlocking) continue;
-        // polygon-clipping wants [ [outer ring], [hole1], [hole2], ... ]
         const coords = geom.coordinates;
         if (coords && coords[0] && coords[0].length >= 4) {
           clippers.push(coords);
         }
       }
 
-      // ── MultiPolygon exclusion zones (with holes) ────────────────────────
+      // ── MultiPolygon exclusion zones ─────────────────────────────────────────
       if (geom.type === 'MultiPolygon') {
         const featureBlocking = isLayerBlocking || !!f.properties?.no_turbines;
         if (!featureBlocking) continue;
@@ -85,7 +82,7 @@ export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
         }
       }
 
-      // ── Point buffer exclusion zones ─────────────────────────────────────
+      // ── Point buffer exclusion zones ─────────────────────────────────────────
       if (geom.type === 'Point') {
         const [lng, lat] = geom.coordinates;
         const radii = f.properties?.radii;
@@ -103,7 +100,7 @@ export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
     }
   }
 
-  // ── Turbine radii (blocking) ─────────────────────────────────────────────
+  // ── Turbine radii (blocking) ──────────────────────────────────────────────
   const turbineLayer = layers.find(l => l.type === 'turbine');
   if (turbineLayer) {
     for (const t of turbineLayer.features) {
@@ -123,19 +120,17 @@ export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
   }
 
   if (clippers.length === 0) {
-    // Nothing to subtract — return bounding box as a single polygon
+    // Nothing to subtract — return as MultiPolygon
     return {
-      type: 'Polygon',
-      coordinates: [IRELAND_BBOX_RING],
+      type: 'MultiPolygon',
+      coordinates: [[IRELAND_BBOX_RING]],
     };
   }
 
   try {
     const result = polygonClipping.difference(subject, ...clippers);
     if (!result || result.length === 0) return null;
-    if (result.length === 1 && result[0].length === 1) {
-      return { type: 'Polygon', coordinates: result[0] };
-    }
+    // Always return MultiPolygon for consistent rendering
     return {
       type: 'MultiPolygon',
       coordinates: result,
