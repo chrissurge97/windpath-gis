@@ -86,14 +86,13 @@ export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
         const radii = f.properties?.radii;
         if (radii && radii.length > 0) {
           for (const r of radii) {
-            if (!r.blockPlacement || r.radiusM <= 0) continue;
+            if (!r.blockPlacement || !(r.radiusM > 0)) continue;
             clippers.push([circlePolygon(lng, lat, r.radiusM)]);
           }
-        } else {
-          // Legacy single setback
-          if (f.properties?.no_turbines && f.properties?.setback_m > 0) {
-            clippers.push([circlePolygon(lng, lat, f.properties.setback_m)]);
-          }
+        }
+        // Legacy single setback — also subtract if no_turbines even without radii array
+        if (f.properties?.no_turbines && f.properties?.setback_m > 0) {
+          clippers.push([circlePolygon(lng, lat, f.properties.setback_m)]);
         }
       }
     }
