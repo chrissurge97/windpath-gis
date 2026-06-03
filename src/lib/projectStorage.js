@@ -48,12 +48,15 @@ export async function loadProject(id) {
 export async function saveProject(id, projectData) {
   const now = Date.now();
   const resolvedId = (id && id !== '__new__') ? id : makeId();
+  // Strip display-only layers (e.g. baked developable area) before saving — they can be huge
+  const layersToSave = (projectData.layers || []).filter(l => !l._isDevelopableArea);
+
   const blob = {
     id: resolvedId,
     name: projectData.name || 'Unnamed Project',
     folder: projectData.folder || '',
     is_training: projectData.is_training || false,
-    layers: projectData.layers || [],
+    layers: layersToSave,
     turbineTypes: projectData.turbineTypes || [],
     cableTypes: projectData.cableTypes || [],
     windParams: projectData.windParams || { k: 2.0, lambda: 7.0 },
