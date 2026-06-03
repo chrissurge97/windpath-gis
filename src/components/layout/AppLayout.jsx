@@ -9,7 +9,7 @@ import {
 'lucide-react';
 
 const NAV_ITEMS = [
-{ path: '/', label: 'Learn', icon: BookOpen },
+{ path: '/learn', label: 'Learn', icon: BookOpen },
 { path: '/planning', label: 'Planning Tool', icon: Map },
 ];
 
