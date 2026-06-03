@@ -151,8 +151,13 @@ function BakeDevelopableArea({ layers, turbineTypes, globalRadii, setLayers }) {
         strokeWeight: existingLayer?.strokeWeight ?? 1.5,
         strokeOpacity: existingLayer?.strokeOpacity ?? 0.6,
       };
-      const feature = createFeature(newLayer.id, geometry, { name: 'Developable Area (computed)' });
-      newLayer.features = [feature];
+      // Split MultiPolygon into individual Polygon features for easier editing in ArcGIS/QGIS
+      const polygonList = geometry.type === 'MultiPolygon'
+        ? geometry.coordinates.map(coords => ({ type: 'Polygon', coordinates: coords }))
+        : [geometry];
+      newLayer.features = polygonList.map((poly, i) =>
+        createFeature(newLayer.id, poly, { name: `Developable Area ${i + 1}` })
+      );
       setLayers(prev => {
         const filtered = existingId ? prev.filter(l => l.id !== existingId) : prev;
         return [...filtered, newLayer];
