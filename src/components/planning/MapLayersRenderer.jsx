@@ -313,7 +313,7 @@ function ZoomTracker({ onZooming, onZoomed }) {
 }
 
 // ── Memoized polygon renderers (unchanged, these are fine) ────────────────────
-const PolygonFeature = memo(function PolygonFeature({ f, layer, mode, editingPolygonId, setLayerTooltip, openPolygonMenu, insertPolygonVertex, updatePolygonVertices, polygonDragRef }) {
+const PolygonFeature = memo(function PolygonFeature({ f, layer, mode, editingPolygonId, setLayerTooltip, openPolygonMenu, insertPolygonVertex, updatePolygonVertices, polygonDragRef, onFinishPolygon, onFinishCable }) {
   const ring = f.geometry.coordinates[0];
   const positions = ring.slice(0, -1).map(([lng, lat]) => [lat, lng]);
   const isEditing = editingPolygonId === f.id;
@@ -344,10 +344,13 @@ const PolygonFeature = memo(function PolygonFeature({ f, layer, mode, editingPol
       <Polygon positions={positions} pathOptions={polyOpts} bubblingMouseEvents={drawMode}
         eventHandlers={{
           click: (e) => {
-            if (drawMode) return; // let map click handler take over
+            if (drawMode) return;
             L.DomEvent.stopPropagation(e);
             if (isEditing) insertPolygonVertex(f.id, layer.id, e.latlng.lat, e.latlng.lng);
             else if (mode === 'select' || mode === 'pan') openPolygonMenu(f, layer.id);
+          },
+          dblclick: (e) => {
+            if (drawMode) { L.DomEvent.stopPropagation(e); e.originalEvent.preventDefault(); if (mode === 'draw_polygon') onFinishPolygon && onFinishPolygon(); if (mode === 'draw_cable') onFinishCable && onFinishCable(); }
           },
           mousedown: (e) => {
             if (mode === 'select' && !isEditing) {
@@ -432,6 +435,7 @@ export default function MapLayersRenderer({
   setRightTab, openTurbineMenu, setSelectedFeatureId, updateLayer, setExclusionWarning,
   setPointMenuFeature, setPointMenuLayerId, setTextAnnotationMenu,
   haversineM, checkExclusionZones, checkTurbineRadii,
+  onFinishPolygon, onFinishCable,
 }) {
   const [isZooming, setIsZooming] = useState(false);
 
@@ -468,7 +472,8 @@ export default function MapLayersRenderer({
               <PolygonFeature key={f.id} f={f} layer={layer} mode={mode}
                 editingPolygonId={editingPolygonId} setLayerTooltip={setLayerTooltip}
                 openPolygonMenu={openPolygonMenu} insertPolygonVertex={insertPolygonVertex}
-                updatePolygonVertices={updatePolygonVertices} polygonDragRef={polygonDragRef} />
+                updatePolygonVertices={updatePolygonVertices} polygonDragRef={polygonDragRef}
+                onFinishPolygon={onFinishPolygon} onFinishCable={onFinishCable} />
             );
           }
           if (f.geometry.type === 'MultiPolygon') {

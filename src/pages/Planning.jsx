@@ -1160,7 +1160,8 @@ export default function Planning() {
               setPointMenuFeature={setPointMenuFeature} setPointMenuLayerId={setPointMenuLayerId}
               setTextAnnotationMenu={setTextAnnotationMenu}
               haversineM={haversineM} checkExclusionZones={checkExclusionZones}
-              checkTurbineRadii={checkTurbineRadii} />
+              checkTurbineRadii={checkTurbineRadii}
+              onFinishPolygon={finishPolygon} onFinishCable={finishCable} />
             
           </MapContainer>
 
