@@ -26,7 +26,8 @@ function circlePolygon(centerLng, centerLat, radiusM, segments = 32) {
   const R = 6371000;
   const dLat = (radiusM / R) * (180 / Math.PI);
   const dLng = dLat / Math.cos(centerLat * Math.PI / 180);
-  for (let i = 0; i <= segments; i++) {
+  // Clockwise winding so polygon-clipping treats this as a solid clipper polygon
+  for (let i = segments; i >= 0; i--) {
     const angle = (2 * Math.PI * i) / segments;
     coords.push([
       centerLng + dLng * Math.cos(angle),
