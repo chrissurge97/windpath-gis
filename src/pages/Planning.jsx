@@ -55,7 +55,6 @@ import { loadCustomCables } from '@/components/planning/CableWizard';
 import { calcCableLoad, calcSubstationLoad } from '@/lib/cableLoadUtils';
 
 
-
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -372,13 +371,7 @@ export default function Planning() {
       updateProjectState(data);
       saveProject(currentProjectId, data).
       then(() => {window.__trainingEvent__ = { type: 'project_saved', payload: { id: currentProjectId }, ts: Date.now() };}).
-      catch((err) => {
-        console.warn('Auto-save error:', err.message);
-        if (err.message?.includes('too large')) {
-          // Show a non-intrusive warning — don't crash the app
-          console.error('Project too large to save locally. Consider exporting your work.');
-        }
-      });
+      catch((err) => console.warn('Auto-save error:', err));
     }, 1500);
     return () => clearTimeout(saveTimer.current);
   }, [layers, turbineTypes, cableTypes, projectName, currentProjectId, windParams]);
@@ -897,7 +890,7 @@ export default function Planning() {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-slate-950 gap-6">
         <div className="text-center mb-2">
-          <div className="w-24 h-24 rounded-2xl bg-emerald-700 flex items-center justify-center text-white font-bold text-4xl mx-auto mb-3">E</div>
+          <img src="https://media.base44.com/images/public/69e640f4781807594008e037/e5dc05889_IMG_1428.PNG" alt="EagleView" className="w-64 h-64 object-contain mx-auto mb-3 rounded" />
           <p className="text-slate-500 text-sm">Open an existing project or create a new one to begin.</p>
         </div>
         <div className="flex flex-col gap-3 w-64">
@@ -1166,8 +1159,7 @@ export default function Planning() {
               setPointMenuFeature={setPointMenuFeature} setPointMenuLayerId={setPointMenuLayerId}
               setTextAnnotationMenu={setTextAnnotationMenu}
               haversineM={haversineM} checkExclusionZones={checkExclusionZones}
-              checkTurbineRadii={checkTurbineRadii}
-              onFinishPolygon={finishPolygon} onFinishCable={finishCable} />
+              checkTurbineRadii={checkTurbineRadii} />
             
           </MapContainer>
 

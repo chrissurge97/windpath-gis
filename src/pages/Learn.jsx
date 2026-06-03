@@ -639,7 +639,7 @@ export default function Learn() {
             <Wind className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-white">EagleView Academy</h1>
+            <h1 className="text-lg font-bold text-white">WindPath Academy</h1>
             <p className="text-xs text-slate-400">Glenhaven Wind Farm — Guided Design Scenario</p>
           </div>
 

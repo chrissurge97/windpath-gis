@@ -11,15 +11,14 @@
 
 import polygonClipping from 'polygon-clipping';
 
-// Ireland bounding box — counter-clockwise outer ring (polygon-clipping convention)
+// Simple bounding box for Ireland
 export const IRELAND_BBOX_RING = [
-  [-10.7, 51.2], [-5.3, 51.2], [-5.3, 55.5], [-10.7, 55.5], [-10.7, 51.2]
+  [-10.7, 51.2],[-10.7, 55.5],[-5.3, 55.5],[-5.3, 51.2],[-10.7, 51.2]
 ];
 
 /**
  * Create a circle polygon approximation (in [lng,lat] order)
  * around a given center, radius in metres, with N segments.
- * Counter-clockwise so polygon-clipping treats it as a solid shape to subtract.
  */
 function circlePolygon(centerLng, centerLat, radiusM, segments = 32) {
   const coords = [];
@@ -45,15 +44,13 @@ function circlePolygon(centerLng, centerLat, radiusM, segments = 32) {
  * @returns {Object|null} GeoJSON MultiPolygon geometry or null on error
  */
 export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
-  // Subject: Ireland bounding box as a MultiPolygon input
-  const subject = [[IRELAND_BBOX_RING]];
+  // Start with Ireland bounding box as subject
+  let subject = [[IRELAND_BBOX_RING]];
 
   const clippers = [];
 
   for (const layer of layers) {
     if (['turbine', 'cable', 'wind_resource'].includes(layer.type)) continue;
-    // Skip baked developable area layers — they are display-only outputs, not inputs
-    if (layer._isDevelopableArea) continue;
 
     const isLayerBlocking = !!layer.no_turbines;
 
@@ -61,17 +58,18 @@ export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
       const geom = f.geometry;
       if (!geom) continue;
 
-      // ── Polygon exclusion zones ──────────────────────────────────────────────
+      // ── Polygon exclusion zones (with holes) ────────────────────────────────
       if (geom.type === 'Polygon') {
         const featureBlocking = isLayerBlocking || !!f.properties?.no_turbines;
         if (!featureBlocking) continue;
+        // polygon-clipping wants [ [outer ring], [hole1], [hole2], ... ]
         const coords = geom.coordinates;
         if (coords && coords[0] && coords[0].length >= 4) {
           clippers.push(coords);
         }
       }
 
-      // ── MultiPolygon exclusion zones ─────────────────────────────────────────
+      // ── MultiPolygon exclusion zones (with holes) ────────────────────────
       if (geom.type === 'MultiPolygon') {
         const featureBlocking = isLayerBlocking || !!f.properties?.no_turbines;
         if (!featureBlocking) continue;
@@ -82,25 +80,26 @@ export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
         }
       }
 
-      // ── Point buffer exclusion zones ─────────────────────────────────────────
+      // ── Point buffer exclusion zones ─────────────────────────────────────
       if (geom.type === 'Point') {
         const [lng, lat] = geom.coordinates;
         const radii = f.properties?.radii;
         if (radii && radii.length > 0) {
           for (const r of radii) {
-            if (!r.blockPlacement || !(r.radiusM > 0)) continue;
+            if (!r.blockPlacement || r.radiusM <= 0) continue;
             clippers.push([circlePolygon(lng, lat, r.radiusM)]);
           }
-        }
-        // Legacy single setback
-        if (f.properties?.no_turbines && f.properties?.setback_m > 0) {
-          clippers.push([circlePolygon(lng, lat, f.properties.setback_m)]);
+        } else {
+          // Legacy single setback
+          if (f.properties?.no_turbines && f.properties?.setback_m > 0) {
+            clippers.push([circlePolygon(lng, lat, f.properties.setback_m)]);
+          }
         }
       }
     }
   }
 
-  // ── Turbine radii (blocking) ──────────────────────────────────────────────
+  // ── Turbine radii (blocking) ─────────────────────────────────────────────
   const turbineLayer = layers.find(l => l.type === 'turbine');
   if (turbineLayer) {
     for (const t of turbineLayer.features) {
@@ -120,17 +119,19 @@ export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
   }
 
   if (clippers.length === 0) {
-    // Nothing to subtract — return as MultiPolygon
+    // Nothing to subtract — return bounding box as a single polygon
     return {
-      type: 'MultiPolygon',
-      coordinates: [[IRELAND_BBOX_RING]],
+      type: 'Polygon',
+      coordinates: [IRELAND_BBOX_RING],
     };
   }
 
   try {
     const result = polygonClipping.difference(subject, ...clippers);
     if (!result || result.length === 0) return null;
-    // Always return MultiPolygon for consistent rendering
+    if (result.length === 1 && result[0].length === 1) {
+      return { type: 'Polygon', coordinates: result[0] };
+    }
     return {
       type: 'MultiPolygon',
       coordinates: result,

@@ -48,70 +48,18 @@ export async function loadProject(id) {
 export async function saveProject(id, projectData) {
   const now = Date.now();
   const resolvedId = (id && id !== '__new__') ? id : makeId();
-  // Strip display-only layers (e.g. baked developable area) before saving — they can be huge
-  const layersToSave = (projectData.layers || [])
-    .filter(l => !l._isDevelopableArea)
-    .map(l => ({
-      ...l,
-      features: l.features.map(f => {
-        // Reduce coordinate precision to 6 decimal places to shrink polygon data
-        if (!f.geometry) return f;
-        const trimCoord = c => +c.toFixed(6);
-        const trimRing = ring => ring.map(([a, b]) => [trimCoord(a), trimCoord(b)]);
-        let geometry = f.geometry;
-        if (geometry.type === 'Polygon') {
-          geometry = { ...geometry, coordinates: geometry.coordinates.map(trimRing) };
-        } else if (geometry.type === 'MultiPolygon') {
-          geometry = { ...geometry, coordinates: geometry.coordinates.map(p => p.map(trimRing)) };
-        } else if (geometry.type === 'LineString') {
-          geometry = { ...geometry, coordinates: geometry.coordinates.map(([a, b]) => [trimCoord(a), trimCoord(b)]) };
-        }
-        return { ...f, geometry };
-      })
-    }));
-
   const blob = {
     id: resolvedId,
     name: projectData.name || 'Unnamed Project',
     folder: projectData.folder || '',
     is_training: projectData.is_training || false,
-    layers: layersToSave,
+    layers: projectData.layers || [],
     turbineTypes: projectData.turbineTypes || [],
     cableTypes: projectData.cableTypes || [],
     windParams: projectData.windParams || { k: 2.0, lambda: 7.0 },
     globalRadii: projectData.globalRadii || null,
   };
-  const serialized = JSON.stringify(blob);
-  // Warn if project is large (>1MB)
-  if (serialized.length > 1_000_000) {
-    console.warn(`saveProject: project data is ${(serialized.length / 1024).toFixed(0)}KB — consider reducing layers`);
-  }
-  try {
-    localStorage.setItem(projectKey(resolvedId), serialized);
-  } catch (e) {
-    if (e.name === 'QuotaExceededError') {
-      // Try to free space by removing old project data, then retry
-      console.warn('saveProject: QuotaExceededError, attempting to free space...');
-      const allKeys = Object.keys(localStorage).filter(k => k.startsWith(PROJECT_PREFIX) && k !== projectKey(resolvedId));
-      // Remove oldest projects first (by updatedAt in index)
-      const index = getIndex().sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0));
-      for (const entry of index) {
-        if (entry.id === resolvedId) continue;
-        localStorage.removeItem(projectKey(entry.id));
-        try {
-          localStorage.setItem(projectKey(resolvedId), serialized);
-          console.warn('saveProject: freed space by removing old project', entry.id);
-          break;
-        } catch { continue; }
-      }
-      // If still failing, throw with a user-friendly message
-      try { localStorage.setItem(projectKey(resolvedId), serialized); } catch {
-        throw new Error('Project is too large to save locally. Try reducing the number of features or exporting and reimporting a subset of layers.');
-      }
-    } else {
-      throw e;
-    }
-  }
+  localStorage.setItem(projectKey(resolvedId), JSON.stringify(blob));
 
   const index = getIndex();
   const existing = index.find(r => r.id === resolvedId);

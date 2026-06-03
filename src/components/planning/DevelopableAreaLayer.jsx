@@ -12,10 +12,7 @@ export default function DevelopableAreaLayer({ layers, turbineTypes, globalRadii
   // Build a lightweight fingerprint so we only recompute when relevant things change
   const fingerprint = layers.map(l =>
     `${l.id}:${l.visible}:${l.no_turbines}:${l.features.length}:` +
-    l.features.map(f => {
-      const p = f.properties || {};
-      return `${f.id}:${f.geometry?.type}:${JSON.stringify(f.geometry?.coordinates)}:${p.no_turbines}:${p.setback_m}:${JSON.stringify(p.radii)}`;
-    }).join('|')
+    l.features.map(f => `${f.id}:${JSON.stringify(f.geometry?.coordinates)}:${f.properties?.no_turbines}:${JSON.stringify(f.properties?.radii)}:${f.properties?.setback_m}`).join('|')
   ).join(';;') + '::' + JSON.stringify(globalRadii);
 
   const geometry = useMemo(

@@ -8,9 +8,8 @@ import {
   Menu, X, ChevronRight, PanelLeftClose, PanelLeftOpen } from
 'lucide-react';
 
-
 const NAV_ITEMS = [
-{ path: '/learn', label: 'Learn', icon: BookOpen },
+{ path: '/', label: 'Learn', icon: BookOpen },
 { path: '/planning', label: 'Planning Tool', icon: Map },
 ];
 
@@ -43,8 +42,8 @@ export default function AppLayout() {
           "flex items-center border-b border-slate-800 overflow-hidden shrink-0",
           sidebarCollapsed ? "flex-col gap-2 px-2 py-3" : "flex-row gap-3 px-3 py-4"
         )}>
-          <div className="w-8 h-8 rounded-lg bg-emerald-700 flex items-center justify-center shrink-0 text-white font-bold text-sm">
-            E
+          <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden">
+            <img src="https://media.base44.com/images/public/69e640f4781807594008e037/e5dc05889_IMG_1428.PNG" alt="EagleView" className="w-7 h-7 object-contain" />
           </div>
           {!sidebarCollapsed &&
           <div className="flex-1 min-w-0">
@@ -124,7 +123,7 @@ export default function AppLayout() {
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-emerald-700 flex items-center justify-center text-white font-bold text-xs">E</div>
+            <img src="https://media.base44.com/images/public/69e640f4781807594008e037/66ccce61a_Icon.png" alt="EagleView" className="w-6 h-6 object-contain" />
             <span className="font-semibold text-sm">EagleView</span>
           </div>
         </header>
