@@ -53,6 +53,7 @@ import CSVColumnMapper from '@/components/planning/CSVColumnMapper';
 import { loadCustomTurbines } from '@/components/planning/TurbineWizard';
 import { loadCustomCables } from '@/components/planning/CableWizard';
 import { calcCableLoad, calcSubstationLoad } from '@/lib/cableLoadUtils';
+import logoMain from '@/assets/logo-main.png';
 
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -890,7 +891,7 @@ export default function Planning() {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-slate-950 gap-6">
         <div className="text-center mb-2">
-          <img src="/src/assets/logo-main.png" alt="EagleView" className="w-64 h-64 object-contain mx-auto mb-3 rounded" />
+          <img src={logoMain} alt="EagleView" className="w-64 h-64 object-contain mx-auto mb-3 rounded" />
           <p className="text-slate-500 text-sm">Open an existing project or create a new one to begin.</p>
         </div>
         <div className="flex flex-col gap-3 w-64">

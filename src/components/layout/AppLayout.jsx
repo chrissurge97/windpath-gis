@@ -7,6 +7,8 @@ import {
   BookOpen, Map,
   Menu, X, ChevronRight, PanelLeftClose, PanelLeftOpen } from
 'lucide-react';
+import logoMain from '@/assets/logo-main.png';
+import logoIcon from '@/assets/logo-icon.png';
 
 const NAV_ITEMS = [
 { path: '/learn', label: 'Learn', icon: BookOpen },
@@ -43,7 +45,7 @@ export default function AppLayout() {
           sidebarCollapsed ? "flex-col gap-2 px-2 py-3" : "flex-row gap-3 px-3 py-4"
         )}>
           <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden">
-            <img src="/src/assets/logo-main.png" alt="EagleView" className="w-7 h-7 object-contain" />
+            <img src={logoMain} alt="EagleView" className="w-7 h-7 object-contain" />
           </div>
           {!sidebarCollapsed &&
           <div className="flex-1 min-w-0">
@@ -123,7 +125,7 @@ export default function AppLayout() {
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
-            <img src="/src/assets/logo-icon.png" alt="EagleView" className="w-6 h-6 object-contain" />
+            <img src={logoIcon} alt="EagleView" className="w-6 h-6 object-contain" />
             <span className="font-semibold text-sm">EagleView</span>
           </div>
         </header>
