@@ -90,7 +90,7 @@ export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
         console.log('[DevArea] Point:', f.id, 'radii:', JSON.stringify(radii), 'no_turbines:', f.properties?.no_turbines, 'setback_m:', f.properties?.setback_m);
         if (radii && radii.length > 0) {
           for (const r of radii) {
-            console.log('[DevArea]   radius:', r.label, 'blockPlacement:', r.blockPlacement, 'radiusM:', r.radiusM);
+            console.log('[DevArea]   radius:', r.label, 'blockPlacement:', r.blockPlacement, 'radiusM:', r.radiusM, 'center:', lng, lat);
             if (!r.blockPlacement || !(r.radiusM > 0)) continue;
             clippers.push([circlePolygon(lng, lat, r.radiusM)]);
           }
@@ -130,8 +130,10 @@ export function computeDevelopableArea(layers, turbineTypes, globalRadii) {
     };
   }
 
+  console.log('[DevArea] Total clippers:', clippers.length, 'Subject:', JSON.stringify(subject).slice(0, 80));
   try {
     const result = polygonClipping.difference(subject, ...clippers);
+    console.log('[DevArea] Result polygons:', result?.length, 'clippers used:', clippers.length);
     if (!result || result.length === 0) return null;
     if (result.length === 1 && result[0].length === 1) {
       return { type: 'Polygon', coordinates: result[0] };
